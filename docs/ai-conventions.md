@@ -8,7 +8,7 @@ How we build Ecosystem consistently. Keep this doc the detailed reference. Keep 
 
 ## Stack
 
-- Next.js 15 (App Router), TypeScript.
+- Next.js 16 (App Router), TypeScript.
 - Supabase (Postgres, Auth, RLS, Storage).
 - Vercel hosting.
 - Tailwind plus shadcn/ui for primitives. Do not rebuild Button, Input, Modal from scratch.

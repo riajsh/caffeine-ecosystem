@@ -97,7 +97,7 @@ Lagging (months)
 
 ## Open questions
 
-None. All decisions closed. See `docs/decisions/` for ADRs 0001–0007 and `docs/pre-migration-gate.md` for the full pre-migration sign-off record (cleared 2026-06-20).
+None. All decisions closed. See `docs/decisions/` for ADRs 0001–0008 and `docs/pre-migration-gate.md` for the full pre-migration sign-off record (cleared 2026-06-20).
 
 ## Timeline and phasing
 

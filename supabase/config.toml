@@ -117,6 +117,12 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
+[storage.buckets.imports]
+public = false
+file_size_limit = "10MiB"
+allowed_mime_types = ["text/csv", "application/csv", "text/plain"]
+objects_path = "./storage/imports"
+
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
 # public = false

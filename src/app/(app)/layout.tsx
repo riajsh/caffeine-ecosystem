@@ -1,3 +1,4 @@
+import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import { requireUser } from "@/lib/auth/session";
 
 export default async function AppLayout({
@@ -5,9 +6,14 @@ export default async function AppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  await requireUser();
+  const user = await requireUser();
 
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-white">{children}</div>
+    <div className="flex h-dvh min-h-0 flex-1 overflow-hidden bg-background">
+      <AppSidebar user={user} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        {children}
+      </div>
+    </div>
   );
 }

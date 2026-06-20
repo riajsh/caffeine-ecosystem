@@ -1,0 +1,270 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { createManualActivity } from "@/lib/data/activities";
+import {
+  createManualConnection,
+  removeManualConnection,
+} from "@/lib/data/connections";
+import {
+  searchProfilesForPicker,
+  updateProfile,
+} from "@/lib/data/profiles";
+import {
+  assignRelationshipOwner,
+  updateRelationship,
+  updateRelationshipOwner,
+} from "@/lib/data/relationships";
+import { addTagToProfile, removeTagFromProfile } from "@/lib/data/tags";
+import { createManualActivitySchema } from "@/lib/validators/activities";
+import {
+  createManualConnectionSchema,
+  removeConnectionSchema,
+} from "@/lib/validators/connections";
+import { updateProfileSchema } from "@/lib/validators/profiles";
+import {
+  assignOwnerSchema,
+  updateOwnerSchema,
+  updateRelationshipSchema,
+} from "@/lib/validators/relationships";
+import { profileTagSchema } from "@/lib/validators/tags";
+
+function revalidateProfile(profileId: string) {
+  revalidatePath("/");
+  revalidatePath("/profiles");
+  revalidatePath(`/profiles/${profileId}`);
+}
+
+export async function assignOwnerAction(formData: FormData) {
+  const parsed = assignOwnerSchema.safeParse({
+    profileId: formData.get("profileId"),
+    userId: formData.get("userId"),
+    strength: formData.get("strength"),
+    isPrimary: formData.get("isPrimary") === "on",
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await assignRelationshipOwner(parsed.data);
+    revalidateProfile(parsed.data.profileId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to assign owner",
+    };
+  }
+}
+
+export async function updateOwnerAction(formData: FormData) {
+  const parsed = updateOwnerSchema.safeParse({
+    profileId: formData.get("profileId"),
+    ownerId: formData.get("ownerId"),
+    strength: formData.get("strength"),
+    isPrimary: formData.get("isPrimary") === "on",
+    notes: formData.get("notes") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await updateRelationshipOwner(parsed.data);
+    revalidateProfile(parsed.data.profileId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to update owner",
+    };
+  }
+}
+
+export async function updateRelationshipAction(formData: FormData) {
+  const parsed = updateRelationshipSchema.safeParse({
+    profileId: formData.get("profileId"),
+    relationshipId: formData.get("relationshipId"),
+    status: formData.get("status"),
+    relationshipType: formData.get("relationshipType"),
+    notes: formData.get("notes") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await updateRelationship(parsed.data);
+    revalidateProfile(parsed.data.profileId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Failed to update relationship",
+    };
+  }
+}
+
+export async function addProfileTagAction(formData: FormData) {
+  const parsed = profileTagSchema.safeParse({
+    profileId: formData.get("profileId"),
+    tagId: formData.get("tagId"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await addTagToProfile(parsed.data);
+    revalidateProfile(parsed.data.profileId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to add tag",
+    };
+  }
+}
+
+export async function removeProfileTagAction(formData: FormData) {
+  const parsed = profileTagSchema.safeParse({
+    profileId: formData.get("profileId"),
+    tagId: formData.get("tagId"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await removeTagFromProfile(parsed.data);
+    revalidateProfile(parsed.data.profileId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to remove tag",
+    };
+  }
+}
+
+export async function logActivityAction(formData: FormData) {
+  const parsed = createManualActivitySchema.safeParse({
+    profileId: formData.get("profileId"),
+    activityType: formData.get("activityType"),
+    title: formData.get("title"),
+    summary: formData.get("summary") ?? undefined,
+    activityDate: formData.get("activityDate"),
+    introducedBy: formData.get("introducedBy") ?? undefined,
+    introductionOutcome: formData.get("introductionOutcome") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await createManualActivity(parsed.data);
+    revalidateProfile(parsed.data.profileId);
+    revalidatePath("/search");
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to log activity",
+    };
+  }
+}
+
+export async function updateProfileAction(formData: FormData) {
+  const parsed = updateProfileSchema.safeParse({
+    profileId: formData.get("profileId"),
+    fullName: formData.get("fullName"),
+    email: formData.get("email") ?? undefined,
+    phone: formData.get("phone") ?? undefined,
+    linkedinUrl: formData.get("linkedinUrl") ?? undefined,
+    websiteUrl: formData.get("websiteUrl") ?? undefined,
+    organisationName: formData.get("organisationName") ?? undefined,
+    occupation: formData.get("occupation") ?? undefined,
+    locationCity: formData.get("locationCity") ?? undefined,
+    locationCountry: formData.get("locationCountry") ?? undefined,
+    bio: formData.get("bio") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await updateProfile(parsed.data);
+    revalidateProfile(parsed.data.profileId);
+    revalidatePath("/search");
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to update profile",
+    };
+  }
+}
+
+export async function addConnectionAction(formData: FormData) {
+  const parsed = createManualConnectionSchema.safeParse({
+    profileId: formData.get("profileId"),
+    otherProfileId: formData.get("otherProfileId"),
+    connectionType: formData.get("connectionType"),
+    strength: formData.get("strength"),
+    notes: formData.get("notes") ?? undefined,
+    introducedBy: formData.get("introducedBy") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await createManualConnection(parsed.data);
+    revalidateProfile(parsed.data.profileId);
+    revalidateProfile(parsed.data.otherProfileId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to add connection",
+    };
+  }
+}
+
+export async function removeConnectionAction(formData: FormData) {
+  const parsed = removeConnectionSchema.safeParse({
+    profileId: formData.get("profileId"),
+    connectionId: formData.get("connectionId"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await removeManualConnection(parsed.data.profileId, parsed.data.connectionId);
+    revalidateProfile(parsed.data.profileId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Failed to remove connection",
+    };
+  }
+}
+
+export async function searchProfilesForPickerAction(query: string) {
+  try {
+    const results = await searchProfilesForPicker(query);
+    return { results };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Failed to search profiles",
+      results: [],
+    };
+  }
+}

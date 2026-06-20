@@ -62,3 +62,13 @@ export async function getOrgId(): Promise<string> {
   const user = await requireUser();
   return user.org_id;
 }
+
+export async function requireAdmin(): Promise<AppUser> {
+  const user = await requireUser();
+
+  if (user.role !== "admin") {
+    redirect("/");
+  }
+
+  return user;
+}

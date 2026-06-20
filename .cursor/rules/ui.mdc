@@ -5,7 +5,7 @@ globs: ["src/app/**/*.tsx", "src/components/**/*.tsx", "src/app/**/*.ts"]
 
 # UI and component rules
 
-Stack: Next.js 15 App Router, TypeScript, Tailwind, shadcn/ui.
+Stack: Next.js 16 App Router, TypeScript, Tailwind, shadcn/ui.
 
 ## Token rules — read first
 

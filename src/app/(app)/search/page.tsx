@@ -1,0 +1,106 @@
+import { notFound } from "next/navigation";
+
+import { PageHeader } from "@/components/app-shell/page-header";
+import { SearchFilters } from "@/components/search/search-filters";
+import { SearchForm } from "@/components/search/search-form";
+import { SearchResults } from "@/components/search/search-results";
+import { SearchTagFilter } from "@/components/search/search-tag-filter";
+import { search } from "@/lib/data/search";
+import { listOrgTags } from "@/lib/data/tags";
+import { listOrgUsers } from "@/lib/data/users";
+import type { Database } from "@/types/database";
+
+type RelationshipStatus = Database["public"]["Enums"]["relationship_status"];
+
+const VALID_STATUSES: RelationshipStatus[] = [
+  "prospect",
+  "active",
+  "partner",
+  "advisor",
+  "community",
+  "dormant",
+  "inactive",
+];
+
+type SearchPageProps = {
+  searchParams: Promise<{
+    q?: string;
+    tag?: string;
+    owner?: string;
+    status?: string;
+  }>;
+};
+
+export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const {
+    q,
+    tag: tagId,
+    owner: ownerUserId,
+    status,
+  } = await searchParams;
+  const query = q?.trim() ?? "";
+
+  if (tagId && !/^[0-9a-f-]{36}$/i.test(tagId)) {
+    notFound();
+  }
+
+  if (ownerUserId && !/^[0-9a-f-]{36}$/i.test(ownerUserId)) {
+    notFound();
+  }
+
+  if (status && !VALID_STATUSES.includes(status as RelationshipStatus)) {
+    notFound();
+  }
+
+  const [results, orgTags, teamUsers] = await Promise.all([
+    query
+      ? search(query, {
+          tagId,
+          ownerUserId,
+          status: status as RelationshipStatus | undefined,
+        })
+      : Promise.resolve([]),
+    listOrgTags(),
+    listOrgUsers(),
+  ]);
+
+  const hasProfileFilters = Boolean(tagId || ownerUserId || status);
+
+  return (
+    <>
+      <PageHeader
+        title="Search"
+        description="Evidence-rich results across profiles, activity, events, and email."
+      />
+      <div className="space-y-8 px-8 py-6">
+        <SearchForm
+          defaultQuery={query}
+          preserveParams={{
+            tag: tagId,
+            owner: ownerUserId,
+            status,
+          }}
+        />
+        <SearchTagFilter
+          tags={orgTags}
+          query={query}
+          activeTagId={tagId}
+          activeOwnerId={ownerUserId}
+          activeStatus={status}
+        />
+        <SearchFilters
+          query={query}
+          teamUsers={teamUsers}
+          activeTagId={tagId}
+          activeOwnerId={ownerUserId}
+          activeStatus={status}
+        />
+        <SearchResults
+          query={query}
+          results={results}
+          hasProfileFilters={hasProfileFilters}
+        />
+      </div>
+    </>
+  );
+}

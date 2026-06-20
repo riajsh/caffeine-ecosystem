@@ -1,0 +1,201 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+
+import { updateRelationshipAction } from "@/app/(app)/profiles/[id]/actions";
+import { ProfileDetailField } from "@/components/profiles/profile-detail-field";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { ProfileDetail } from "@/lib/data/profiles";
+import { formatEnumLabel } from "@/lib/format/enum";
+
+const STATUS_OPTIONS = [
+  "prospect",
+  "active",
+  "partner",
+  "advisor",
+  "community",
+  "dormant",
+  "inactive",
+] as const;
+
+const TYPE_OPTIONS = [
+  "founder",
+  "investor",
+  "operator",
+  "advisor",
+  "partner",
+  "sponsor",
+  "media",
+  "other",
+] as const;
+
+type EditRelationshipFormProps = {
+  profile: ProfileDetail;
+};
+
+export function EditRelationshipForm({ profile }: EditRelationshipFormProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const relationship = profile.relationship;
+  const [isEditing, setIsEditing] = useState(false);
+
+  const [status, setStatus] = useState<string>(
+    relationship?.status ?? "prospect",
+  );
+  const [relationshipType, setRelationshipType] = useState<string>(
+    relationship?.relationshipType ?? "other",
+  );
+  const [notes, setNotes] = useState(relationship?.notes ?? "");
+
+  if (!relationship) {
+    return (
+      <p className="text-body text-muted-foreground">
+        Assign an owner to create the org relationship for this profile.
+      </p>
+    );
+  }
+
+  const activeRelationship = relationship;
+
+  function handleCancel() {
+    setStatus(activeRelationship.status);
+    setRelationshipType(activeRelationship.relationshipType);
+    setNotes(activeRelationship.notes ?? "");
+    setIsEditing(false);
+  }
+
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      {!isEditing ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setStatus(activeRelationship.status);
+              setRelationshipType(activeRelationship.relationshipType);
+              setNotes(activeRelationship.notes ?? "");
+              setIsEditing(true);
+            }}
+          >
+            Edit
+          </Button>
+        </div>
+      ) : null}
+
+      {!isEditing ? (
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <ProfileDetailField
+            label="Status"
+            value={formatEnumLabel(activeRelationship.status)}
+          />
+          <ProfileDetailField
+            label="Type"
+            value={formatEnumLabel(activeRelationship.relationshipType)}
+          />
+          <ProfileDetailField
+            label="Relationship notes"
+            value={activeRelationship.notes}
+            className="sm:col-span-2"
+            multiline
+          />
+        </dl>
+      ) : (
+        <form
+          action={(formData) => {
+            startTransition(async () => {
+              const result = await updateRelationshipAction(formData);
+              if (result.error) {
+                window.alert(result.error);
+                return;
+              }
+              setIsEditing(false);
+              router.refresh();
+            });
+          }}
+          className="space-y-4"
+        >
+          <input type="hidden" name="profileId" value={profile.id} />
+          <input type="hidden" name="relationshipId" value={activeRelationship.id} />
+          <input type="hidden" name="status" value={status} />
+          <input type="hidden" name="relationshipType" value={relationshipType} />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="relationship-status">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger id="relationship-status" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {formatEnumLabel(option)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="relationship-type">Type</Label>
+              <Select
+                value={relationshipType}
+                onValueChange={setRelationshipType}
+              >
+                <SelectTrigger id="relationship-type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {formatEnumLabel(option)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="relationship-notes">Relationship notes</Label>
+            <Textarea
+              id="relationship-notes"
+              name="notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              rows={3}
+              placeholder="Shared org-level notes about this relationship"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={isPending} size="sm">
+              {isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={handleCancel}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}

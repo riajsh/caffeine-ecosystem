@@ -34,10 +34,10 @@ Profiles are participants. Activities are evidence. Events are catalysts. Search
 
 ## 3. Core concept
 
-Two relationship axes, both required:
+Three relationship axes, all required:
 
 - **Org to person:** PU has a relationship with Aaron. This is the spine. One row per profile.
-- **User to person:** James, Henry and Simon each hold the Aaron relationship at different strengths. This is the asset that most CRMs miss.
+- **User to person:** James, Henry, Simon and Ria each hold the Aaron relationship at different strengths. This is the asset that most CRMs miss.
 - **Person to person:** Aaron knows Henry (both external). This is the graph that powers introductions and the outer structure of Orbit.
 
 If we only model org to person, we get a contact database. Modelling all three is what makes it a relationship intelligence platform.

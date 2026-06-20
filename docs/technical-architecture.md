@@ -14,7 +14,7 @@ This document answers **what lives where** before any SQL is written. Migrations
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Vercel                                   │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │              Next.js 15 (App Router)                       │  │
+│  │              Next.js 16 (App Router)                       │  │
 │  │  UI (React) │ Server Actions │ Route Handlers (API/cron)  │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └────────────────────────────┬────────────────────────────────────┘
@@ -113,6 +113,7 @@ Ecosystem/
 │   │   │       └── match.ts
 │   │   └── ai/                    # Phase 3; empty until then
 │   ├── config/
+│   │   ├── owner-colours.ts           # ownerColour(userId) — keyed by users.id
 │   │   └── relationship-thresholds.ts
 │   └── types/
 │       └── database.ts            # Generated; do not hand-edit
@@ -266,7 +267,9 @@ Sync is **incremental** using Gmail `historyId` stored on `gmail_accounts.sync_c
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | App | Public |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | App | Public |
+| `NEXT_PUBLIC_SITE_URL` | Auth magic-link redirects | Public; defaults to localhost:3000 in dev |
 | `SUPABASE_SERVICE_ROLE_KEY` | Cron, import jobs | Server only |
+| `DEFAULT_ORG_SLUG` | Auth bootstrap | Server only; slug of the org to bootstrap on first sign-in |
 | `CRON_SECRET` | Cron routes | Verify Vercel cron |
 | `GOOGLE_CLIENT_ID` | Gmail OAuth | Server only |
 | `GOOGLE_CLIENT_SECRET` | Gmail OAuth | Server only |

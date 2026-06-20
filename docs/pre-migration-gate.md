@@ -24,6 +24,7 @@
 | 0005 | Orbit recency: Active 0–6 months, Reconnect 6–9 months, Dormant 9+ months. Config-driven. |
 | 0006 | Search: Postgres FTS (Phase 1), pgvector optional (Phase 2). No external search infra in V1. |
 | 0007 | Gmail sync is Ecosystem-owned. Dedicated cron, not shared with Pathway PM. |
+| 0008 | Google Calendar sync: `calendar_sync` reserved in `activities.source` enum; `calendar_accounts` + `calendar_events` table shapes defined for Phase 1.1. |
 
 ---
 
@@ -105,10 +106,13 @@ Views are read-only derived concepts. They do not block Phase 1 functionality an
 
 ---
 
-## Next step
+## Status update — 2026-06-20
 
-Generate migrations from `docs/domain-model-v1.md` in the sequence above.
+**Phase 1 migrations complete.** 11 migration files applied to remote Supabase. Auth scaffolding is in place (Supabase clients, `requireUser()`, login flow, users row bootstrap on first sign-in).
 
-Recommended Cursor prompt:
+**Schema is now locked.** The schema-locked rule in `.cursor/rules/supabase.mdc` is active. Do not suggest new tables or columns without an explicit ADR.
 
-> Using `docs/domain-model-v1.md` as the source of truth, generate Supabase migrations for Phase 1 tables in this exact order: organisations, users, profiles, tags, profile_tags, relationships, relationship_owners, relationship_sources, connections, events, event_attendees, gmail_accounts, email_threads, email_messages, email_participant_reviews, activities, imports, import_rows. Then add RLS policies per table (org_id isolation; two-tier email body access per ADR 0003). Then add tsvector + GIN indexes for full-text search. One file per migration step. Follow `docs/technical-architecture.md` and `docs/ai-conventions.md` for naming and layer conventions.
+**Next steps:**
+1. Write `supabase/seed.sql` — PU org row, team users, sample profiles, relationships in each state, a pending import, email review rows (see `docs/build-quality.md §1`)
+2. UI foundation — `@theme` tokens in `globals.css`, shadcn/ui init, `src/config/owner-colours.ts`, app shell with sidebar
+3. Phase 1 feature build — Profiles → Relationships → Tags → Search → Events → Import → Gmail sync

@@ -1,4 +1,7 @@
-import { signInWithMagicLink } from "./actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+import { signInWithMagicLink, signInWithPassword } from "./actions";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -12,23 +15,23 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const error = params.error;
   const message = params.message;
+  const showSeedHint = process.env.NODE_ENV === "development";
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+    <div className="rounded-lg border border-border bg-card p-8 shadow-sm">
       <div className="space-y-2">
-        <p className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+        <p className="text-label font-medium uppercase tracking-wide text-muted-foreground">
           Ecosystem
         </p>
-        <h1 className="text-2xl font-semibold text-zinc-950">Sign in</h1>
-        <p className="text-sm leading-6 text-zinc-600">
-          Use your work email. We&apos;ll send a magic link to finish signing
-          in.
+        <h1 className="text-display font-medium text-foreground">Sign in</h1>
+        <p className="text-body text-muted-foreground">
+          Internal access only. Sign in with your work account.
         </p>
       </div>
 
       {error ? (
         <p
-          className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          className="mt-6 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-body text-destructive"
           role="alert"
         >
           {error}
@@ -37,43 +40,83 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
       {message === "check_email" ? (
         <p
-          className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          className="mt-6 rounded-lg border border-border bg-muted px-4 py-3 text-body text-foreground"
           role="status"
         >
           Check your inbox for a sign-in link.
         </p>
       ) : null}
 
-      <form action={signInWithMagicLink} className="mt-8 space-y-4">
+      {showSeedHint ? (
+        <p className="mt-6 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-3 text-caption text-muted-foreground">
+          Seed account: <span className="font-medium">james@seed.test</span> /
+          password <span className="font-medium">password123</span>
+        </p>
+      ) : null}
+
+      <form action={signInWithPassword} className="mt-8 space-y-4">
         <div className="space-y-2">
           <label
             htmlFor="email"
-            className="block text-sm font-medium text-zinc-800"
+            className="block text-caption font-medium text-foreground"
           >
             Email
           </label>
-          <input
+          <Input
             id="email"
             name="email"
             type="email"
             autoComplete="email"
             required
-            className="block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-950 outline-none ring-zinc-950/10 focus:border-zinc-500 focus:ring-2"
-            placeholder="you@company.com"
+            placeholder="james@seed.test"
           />
         </div>
 
-        <button
-          type="submit"
-          className="inline-flex w-full items-center justify-center rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800"
-        >
-          Send magic link
-        </button>
+        <div className="space-y-2">
+          <label
+            htmlFor="password"
+            className="block text-caption font-medium text-foreground"
+          >
+            Password
+          </label>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            placeholder="••••••••"
+          />
+        </div>
+
+        <Button type="submit" className="w-full">
+          Sign in
+        </Button>
       </form>
 
-      <p className="mt-6 text-center text-xs text-zinc-500">
-        Internal access only.
-      </p>
+      <div className="my-6 flex items-center gap-3">
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-caption text-muted-foreground">or</span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+
+      <form action={signInWithMagicLink} className="space-y-4">
+        <p className="text-caption text-muted-foreground">
+          Magic links are rate-limited. Use password sign-in if you hit the
+          cooldown.
+        </p>
+        <Input
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          placeholder="you@company.com"
+          aria-label="Email for magic link"
+        />
+        <Button type="submit" variant="outline" className="w-full">
+          Send magic link
+        </Button>
+      </form>
     </div>
   );
 }

@@ -62,24 +62,51 @@ export async function bootstrapUser(authUser: User): Promise<UserRow> {
   const admin = createAdminClient();
   const orgId = await resolveOrgId(authUser);
 
-  const { data, error } = await admin
-    .from("users")
-    .upsert(
-      {
-        id: authUser.id,
-        org_id: orgId,
-        email: authUser.email,
-        full_name: readFullName(authUser),
-        role: "member",
-      },
-      { onConflict: "id" },
-    )
-    .select()
-    .single();
+  const fullName = readFullName(authUser);
 
-  if (error) {
-    throw new Error(`Failed to bootstrap user row: ${error.message}`);
+  const { data: inserted, error: insertError } = await admin
+    .from("users")
+    .insert({
+      id: authUser.id,
+      org_id: orgId,
+      email: authUser.email,
+      full_name: fullName,
+      role: "member",
+    })
+    .select()
+    .maybeSingle();
+
+  if (insertError) {
+    if (insertError.code === "23505") {
+      const { data: existing, error: fetchError } = await admin
+        .from("users")
+        .select()
+        .eq("id", authUser.id)
+        .single();
+
+      if (fetchError) {
+        throw new Error(`Failed to load existing user row: ${fetchError.message}`);
+      }
+
+      return existing;
+    }
+
+    throw new Error(`Failed to bootstrap user row: ${insertError.message}`);
   }
 
-  return data;
+  if (inserted) {
+    return inserted;
+  }
+
+  const { data: existing, error: fetchError } = await admin
+    .from("users")
+    .select()
+    .eq("id", authUser.id)
+    .single();
+
+  if (fetchError) {
+    throw new Error(`Failed to load bootstrapped user row: ${fetchError.message}`);
+  }
+
+  return existing;
 }
