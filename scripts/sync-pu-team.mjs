@@ -69,30 +69,82 @@ const supabase = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-async function ensureAuthUser(member) {
-  const { data: existing, error: lookupError } =
-    await supabase.auth.admin.getUserById(member.id);
+function authUserPayload(member) {
+  return {
+    email: member.email,
+    user_metadata: { full_name: member.fullName },
+    app_metadata: {
+      provider: "email",
+      providers: ["email"],
+      org_id: ORG_ID,
+    },
+  };
+}
 
-  if (lookupError && lookupError.status !== 404) {
-    throw lookupError;
-  }
+async function findAuthUserByEmail(email) {
+  const normalised = email.trim().toLowerCase();
+  let page = 1;
 
-  if (existing?.user) {
-    const { error } = await supabase.auth.admin.updateUserById(member.id, {
-      email: member.email,
-      user_metadata: { full_name: member.fullName },
-      app_metadata: {
-        provider: "email",
-        providers: ["email"],
-        org_id: ORG_ID,
-      },
+  while (true) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage: 1000,
     });
 
     if (error) {
       throw error;
     }
 
-    return "updated";
+    const match = data.users.find(
+      (user) => user.email?.trim().toLowerCase() === normalised,
+    );
+
+    if (match) {
+      return match;
+    }
+
+    if (data.users.length < 1000) {
+      return null;
+    }
+
+    page += 1;
+  }
+}
+
+async function ensureAuthUser(member) {
+  const { data: byId, error: lookupError } =
+    await supabase.auth.admin.getUserById(member.id);
+
+  if (lookupError && lookupError.status !== 404) {
+    throw lookupError;
+  }
+
+  if (byId?.user) {
+    const { error } = await supabase.auth.admin.updateUserById(
+      member.id,
+      authUserPayload(member),
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    return { result: "updated", userId: member.id };
+  }
+
+  const byEmail = await findAuthUserByEmail(member.email);
+
+  if (byEmail) {
+    const { error } = await supabase.auth.admin.updateUserById(
+      byEmail.id,
+      authUserPayload(member),
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    return { result: "updated-by-email", userId: byEmail.id };
   }
 
   const { error } = await supabase.auth.admin.createUser({
@@ -100,25 +152,32 @@ async function ensureAuthUser(member) {
     email: member.email,
     password: "password123",
     email_confirm: true,
-    user_metadata: { full_name: member.fullName },
-    app_metadata: {
-      provider: "email",
-      providers: ["email"],
-      org_id: ORG_ID,
-    },
+    ...authUserPayload(member),
   });
 
   if (error) {
     throw error;
   }
 
-  return "created";
+  return { result: "created", userId: member.id };
 }
 
-async function ensurePublicUser(member) {
+async function ensurePublicUser(member, userId) {
+  if (userId !== member.id) {
+    const { error: deleteError } = await supabase
+      .from("users")
+      .delete()
+      .eq("id", member.id)
+      .eq("org_id", ORG_ID);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+  }
+
   const { error } = await supabase.from("users").upsert(
     {
-      id: member.id,
+      id: userId,
       org_id: ORG_ID,
       email: member.email,
       full_name: member.fullName,
@@ -134,9 +193,9 @@ async function ensurePublicUser(member) {
 
 async function main() {
   for (const member of TEAM) {
-    const authResult = await ensureAuthUser(member);
-    await ensurePublicUser(member);
-    console.log(`${member.fullName}: auth ${authResult}, public.users ok`);
+    const { result, userId } = await ensureAuthUser(member);
+    await ensurePublicUser(member, userId);
+    console.log(`${member.fullName}: auth ${result}, public.users ok (${userId})`);
   }
 
   const { data: users } = await supabase
