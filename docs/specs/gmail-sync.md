@@ -277,10 +277,12 @@ All sync runs log: account, threads processed, messages upserted, matches, queue
 
 Minimum Gmail scopes:
 
-- `gmail.readonly` — read threads and messages
+- `https://www.googleapis.com/auth/gmail.readonly` — read threads and messages
 - `openid email profile` — identify connecting user
 
 Request incremental auth. Store refresh token encrypted with `TOKEN_ENCRYPTION_KEY`.
+
+**OAuth verification status:** `gmail.readonly` is a sensitive scope but **verification is not required** — the Google Cloud project OAuth app is configured as Internal user type (PU Google Workspace only). Internal apps bypass Google's OAuth verification process. Each integration (Gmail, Calendar) uses a separate OAuth client ID within the same GCP project.
 
 ---
 

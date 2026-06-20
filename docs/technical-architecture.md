@@ -271,10 +271,13 @@ Sync is **incremental** using Gmail `historyId` stored on `gmail_accounts.sync_c
 | `SUPABASE_SERVICE_ROLE_KEY` | Cron, import jobs | Server only |
 | `DEFAULT_ORG_SLUG` | Auth bootstrap | Server only; slug of the org to bootstrap on first sign-in |
 | `CRON_SECRET` | Cron routes | Verify Vercel cron |
-| `GOOGLE_CLIENT_ID` | Gmail OAuth | Server only |
-| `GOOGLE_CLIENT_SECRET` | Gmail OAuth | Server only |
-| `GOOGLE_OAUTH_REDIRECT_URI` | Gmail OAuth | Callback URL |
-| `TOKEN_ENCRYPTION_KEY` | Gmail token storage | Server only |
+| `GOOGLE_GMAIL_CLIENT_ID` | Gmail OAuth | Server only |
+| `GOOGLE_GMAIL_CLIENT_SECRET` | Gmail OAuth | Server only |
+| `GOOGLE_GMAIL_REDIRECT_URI` | Gmail OAuth callback | Server only |
+| `GOOGLE_CALENDAR_CLIENT_ID` | Calendar OAuth (Phase 1.1) | Server only |
+| `GOOGLE_CALENDAR_CLIENT_SECRET` | Calendar OAuth (Phase 1.1) | Server only |
+| `GOOGLE_CALENDAR_REDIRECT_URI` | Calendar OAuth callback (Phase 1.1) | Server only |
+| `TOKEN_ENCRYPTION_KEY` | OAuth refresh token storage | Server only |
 | `GMAIL_SYNC_LABELS` | Gmail sync label filter | Server only; comma-separated label names/IDs |
 | `ANTHROPIC_API_KEY` | Phase 3 AI | Server only |
 

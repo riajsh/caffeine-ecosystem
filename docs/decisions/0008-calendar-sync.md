@@ -8,7 +8,7 @@
 
 Industry research shows 79% of opportunity-relevant data never enters CRMs due to manual entry friction. The Gmail sync (ADR 0007) captures email evidence automatically. The highest-signal gap remaining is **meetings**: every PU team member has meetings with founders, investors, and partners recorded in Google Calendar. Without calendar sync, those meetings are only logged if someone manually creates an activity. That friction is high enough that most meetings go unlogged.
 
-Google Calendar uses the same OAuth 2.0 flow as Gmail and the same `calendar.readonly` scope is sufficient for read-only sync. The architectural pattern is identical to `gmail_accounts` + `gmail_sync` cron.
+Google Calendar uses the same OAuth 2.0 flow as Gmail. The `https://www.googleapis.com/auth/calendar.readonly` scope is sufficient — it grants read access to all events across calendars the user can access, which is what participant matching and meeting activity generation require. No write scopes are needed. The architectural pattern is identical to `gmail_accounts` + `gmail_sync` cron.
 
 ## Decision
 
@@ -52,3 +52,4 @@ Specifically:
 - Phase 1.1 adds `calendar_accounts` and `calendar_events` tables, a new cron job, and reuses the participant-matching logic from `gmail_sync`.
 - Combined Gmail + Calendar sync covers the two highest-volume relationship evidence channels without requiring any manual logging from the team.
 - The `calendar_accounts` OAuth flow is separate from `gmail_accounts` (different scope, different token). Admin UI additions are minimal.
+- `calendar.readonly` is a sensitive scope but **verification is not required** — the Google Cloud project OAuth app is configured as Internal user type (PU Google Workspace only). Internal apps bypass the OAuth verification process entirely. Phase 1.1 build can proceed immediately.

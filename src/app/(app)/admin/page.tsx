@@ -4,15 +4,35 @@ import {
   InferAllCoAttendanceButton,
   InferSameCompanyButton,
 } from "@/components/admin/infer-all-co-attendance-button";
+import { CalendarAccountRow } from "@/components/admin/calendar-account-row";
+import { CalendarConnectButton } from "@/components/admin/calendar-connect-button";
 import { DeployChecklist } from "@/components/admin/deploy-checklist";
+import { RunCalendarSyncButton } from "@/components/admin/run-calendar-sync-button";
 import { PageHeader } from "@/components/app-shell/page-header";
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/auth/session";
+import { listCalendarAccountsForOrg } from "@/lib/data/calendar-accounts";
 import { getDeployChecklist } from "@/lib/deploy/checklist";
 
-export default async function AdminPage() {
-  await requireAdmin();
+type AdminPageProps = {
+  searchParams: Promise<{
+    calendar_connected?: string;
+    calendar_error?: string;
+  }>;
+};
+
+export default async function AdminPage({ searchParams }: AdminPageProps) {
+  const user = await requireAdmin();
+  const params = await searchParams;
   const deployChecks = getDeployChecklist();
+  let calendarAccounts: Awaited<ReturnType<typeof listCalendarAccountsForOrg>> =
+    [];
+
+  try {
+    calendarAccounts = await listCalendarAccountsForOrg();
+  } catch {
+    calendarAccounts = [];
+  }
 
   return (
     <>
@@ -53,6 +73,54 @@ export default async function AdminPage() {
           <Button asChild>
             <Link href="/admin/users">View users</Link>
           </Button>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-heading font-medium text-foreground">
+            Google Calendar
+          </h2>
+          <p className="max-w-2xl text-body text-muted-foreground">
+            Connect a Google Calendar account to sync meetings with external
+            participants. Matched attendees become meeting activities on profile
+            timelines; unmatched emails go to a review queue.
+          </p>
+          {params.calendar_connected ? (
+            <p className="text-body text-foreground">
+              Connected {params.calendar_connected}. Initial sync is running in
+              the background.
+            </p>
+          ) : null}
+          {params.calendar_error ? (
+            <p className="text-body text-destructive">
+              Calendar connect failed: {params.calendar_error}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-3">
+            <CalendarConnectButton />
+            <RunCalendarSyncButton />
+            <Button asChild variant="outline">
+              <Link href="/admin/calendar-sync/review">Review sync results</Link>
+            </Button>
+          </div>
+          {calendarAccounts.length > 0 ? (
+            <div className="space-y-2 pt-2">
+              {calendarAccounts.map((account) => (
+                <CalendarAccountRow
+                  key={account.id}
+                  accountId={account.id}
+                  email={account.email}
+                  userName={account.userName}
+                  syncStatus={account.syncStatus}
+                  syncEnabled={account.syncEnabled}
+                  isCurrentUser={account.userId === user.id}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-caption text-muted-foreground">
+              No calendar accounts connected yet.
+            </p>
+          )}
         </section>
 
         <section className="space-y-3">

@@ -131,6 +131,194 @@ export type Database = {
           },
         ]
       }
+      calendar_accounts: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          last_sync_at: string | null
+          metadata: Json
+          org_id: string
+          refresh_token: string
+          sync_cursor: string | null
+          sync_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          last_sync_at?: string | null
+          metadata?: Json
+          org_id: string
+          refresh_token: string
+          sync_cursor?: string | null
+          sync_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          last_sync_at?: string | null
+          metadata?: Json
+          org_id?: string
+          refresh_token?: string
+          sync_cursor?: string | null
+          sync_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_accounts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_accounts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_events: {
+        Row: {
+          calendar_account_id: string
+          created_at: string
+          description: string | null
+          end_at: string | null
+          google_event_id: string
+          id: string
+          is_deleted: boolean
+          org_id: string
+          participants: Json
+          start_at: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          calendar_account_id: string
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          google_event_id: string
+          id?: string
+          is_deleted?: boolean
+          org_id: string
+          participants?: Json
+          start_at?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          calendar_account_id?: string
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          google_event_id?: string
+          id?: string
+          is_deleted?: boolean
+          org_id?: string
+          participants?: Json
+          start_at?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_calendar_account_id_fkey"
+            columns: ["calendar_account_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_participant_reviews: {
+        Row: {
+          calendar_event_id: string
+          created_at: string
+          display_name: string | null
+          email: string
+          id: string
+          org_id: string
+          profile_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["participant_review_status"]
+          updated_at: string
+        }
+        Insert: {
+          calendar_event_id: string
+          created_at?: string
+          display_name?: string | null
+          email: string
+          id?: string
+          org_id: string
+          profile_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["participant_review_status"]
+          updated_at?: string
+        }
+        Update: {
+          calendar_event_id?: string
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          id?: string
+          org_id?: string
+          profile_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["participant_review_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_participant_reviews_calendar_event_id_fkey"
+            columns: ["calendar_event_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_participant_reviews_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_participant_reviews_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_participant_reviews_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       connections: {
         Row: {
           connection_type: Database["public"]["Enums"]["connection_type"]

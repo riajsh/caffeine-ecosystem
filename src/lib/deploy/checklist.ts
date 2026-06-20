@@ -92,12 +92,32 @@ export function getDeployChecklist(): DeployCheckItem[] {
         "Run supabase db push (or apply migrations) on the linked project before go-live.",
     },
     {
-      id: "gmail-cron",
-      label: "Gmail sync cron",
-      status: "optional",
+      id: "calendar-cron",
+      label: "Calendar sync cron",
+      status: isVercel ? (envSet("CRON_SECRET") ? "ok" : "warning") : "optional",
       detail: isVercel
-        ? "Not scheduled — vercel.json cron removed until /api/cron/gmail-sync exists."
-        : "Deferred. Enable when Gmail sync is implemented.",
+        ? envSet("CRON_SECRET")
+          ? "Scheduled daily at 03:00 UTC via vercel.json."
+          : "Set CRON_SECRET before enabling the calendar-sync cron in production."
+        : "Run /api/cron/calendar-sync manually or via local cron when testing.",
+    },
+    {
+      id: "calendar-oauth",
+      label: "Google Calendar OAuth",
+      status:
+        envSet("GOOGLE_CALENDAR_CLIENT_ID") &&
+        envSet("GOOGLE_CALENDAR_CLIENT_SECRET") &&
+        envSet("GOOGLE_CALENDAR_REDIRECT_URI") &&
+        envSet("TOKEN_ENCRYPTION_KEY")
+          ? "ok"
+          : "optional",
+      detail:
+        envSet("GOOGLE_CALENDAR_CLIENT_ID") &&
+        envSet("GOOGLE_CALENDAR_CLIENT_SECRET") &&
+        envSet("GOOGLE_CALENDAR_REDIRECT_URI") &&
+        envSet("TOKEN_ENCRYPTION_KEY")
+          ? "Calendar OAuth and token encryption are configured."
+          : "Required to connect Google Calendar from Admin.",
     },
     {
       id: "cron-secret",

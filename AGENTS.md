@@ -12,10 +12,11 @@ Ecosystem is a relationship intelligence platform for Previously Unavailable. It
 - `docs/ai-conventions.md` — stack, layer rules, and hard "never do" list.
 - `docs/specs/gmail-sync.md` — email ingestion (highest-risk subsystem).
 - `docs/specs/import-pipeline.md` — CSV import flow.
+- `docs/decisions/0008-calendar-sync.md` — Google Calendar sync design (implemented Phase 1.1).
 - `docs/specs/search.md` — FTS index design (applied in Phase 1 migrations; read before any search feature work).
 - `docs/design-tokens.md` — @theme tokens, owner palette, strength colours, CVA pattern. Read before any UI work.
 - `docs/build-quality.md` — session discipline, AI red team, Caffeine canary, schema-locked mode.
-- `docs/decisions/` — accepted ADRs (0001–0008).
+- `docs/decisions/` — accepted ADRs (0001–0009).
 
 ## Core rules
 

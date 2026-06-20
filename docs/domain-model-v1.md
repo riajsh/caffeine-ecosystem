@@ -2,7 +2,7 @@
 
 - Version: 1.1
 - Status: Accepted
-- Changelog: v1.1 adds organisation_name_normalised (profiles), introduced_by + introduction_outcome (activities), source_event_id + introduced_by (connections), calendar_sync source type. All additions are nullable and non-breaking.
+- Changelog: v1.2 adds calendar_accounts, calendar_events, calendar_participant_reviews (Phase 1.1 Google Calendar sync, ADR 0008). v1.1 adds organisation_name_normalised (profiles), introduced_by + introduction_outcome (activities), source_event_id + introduced_by (connections), calendar_sync source type. All additions are nullable and non-breaking.
 - Owner: Previously Unavailable
 - Purpose of this file: single source of truth for the data model. Schema, APIs and UI are generated from this, not the other way around.
 
@@ -279,7 +279,56 @@ Resolution: match `participants[].email` and `sender` to `profiles.email`. On ma
 
 Privacy: full email bodies are sensitive. Access is org-scoped via RLS with a metadata/body split per ADR 0003. Honour `organisations.email_access_level`.
 
-### 5.10 events and event_attendees
+### 5.10 calendar_accounts, calendar_events, calendar_participant_reviews
+
+Raw calendar data from Google Calendar sync (ADR 0008). Same org-scoped, idempotent pattern as Gmail. Cron writes here; `meeting` activities and `relationship_sources` are derived.
+
+**calendar_accounts**
+
+| column | type | notes |
+|---|---|---|
+| user_id | uuid | references users; the PU team member who connected this calendar |
+| email | text | the Google account email |
+| refresh_token | text | encrypted; server-side only |
+| sync_enabled | boolean | admin or owner can pause without disconnecting |
+| last_sync_at | timestamptz | |
+| sync_cursor | text | Google Calendar nextSyncToken for incremental sync |
+| metadata | jsonb | last sync run stats |
+
+Constraint: `unique(org_id, email)`.
+
+**calendar_events**
+
+| column | type | notes |
+|---|---|---|
+| google_event_id | text | unique per org |
+| calendar_account_id | uuid | references calendar_accounts |
+| title | text | |
+| description | text | |
+| participants | jsonb | array of `{email, name, responseStatus, organizer}` |
+| start_at | timestamptz | |
+| end_at | timestamptz | |
+| is_deleted | boolean | tombstone when event cancelled or removed from sync |
+
+**calendar_participant_reviews**
+
+Queue for unmatched external attendees (ADR 0002 pattern). Not a profile until promoted.
+
+| column | type | notes |
+|---|---|---|
+| email | text | participant address |
+| display_name | text | nullable; from attendee metadata |
+| calendar_event_id | uuid | references calendar_events |
+| status | enum | `pending` / `linked` / `created` / `ignored` |
+| profile_id | uuid | nullable; set when linked or created |
+| reviewed_by | uuid | nullable; references users |
+| reviewed_at | timestamptz | |
+
+Constraint: `unique(org_id, email, calendar_event_id)`.
+
+Resolution: match `participants[].email` to `profiles.email`. On match, generate a `meeting` activity with `source=calendar_sync` and `source_ref=google_event_id`, append `relationship_sources` with `source_type=meeting`. On no match, create `calendar_participant_reviews` row. Skip internal-only meetings (no external participants outside org team emails).
+
+### 5.11 events and event_attendees
 
 PU community events as a first-class object. This is where a lot of the network value originates for PU.
 
@@ -305,7 +354,7 @@ Constraint: `unique(event_id, profile_id)`.
 
 Unlocks: who attends often, who stopped attending, who attends together (a cheap signal for inferred connections), which relationships originated at an event.
 
-### 5.11 tags and profile_tags
+### 5.12 tags and profile_tags
 
 **tags**
 
@@ -316,7 +365,7 @@ Unlocks: who attends often, who stopped attending, who attends together (a cheap
 
 **profile_tags**: join of `profile_id` and `tag_id`, `unique(profile_id, tag_id)`. Kept to profiles in V1 rather than a generic polymorphic taggable, to stay simple.
 
-### 5.12 imports
+### 5.13 imports
 
 Supporting. Tracks each CSV load for traceability and rollback.
 
@@ -329,7 +378,7 @@ Supporting. Tracks each CSV load for traceability and rollback.
 | created_by | uuid | references users |
 | metadata | jsonb | column mapping, error rows |
 
-### 5.13 custom_fields (deferred)
+### 5.14 custom_fields (deferred)
 
 The original brief wanted flexible custom fields. We are deferring this deliberately, it is a classic source of the complexity Lovable fell into. The `profiles.extended` jsonb column is the interim escape hatch. Revisit only if a real need appears.
 
@@ -413,13 +462,13 @@ See ADR 0001.
 
 - Subjective scoring fields: Influence, Trust, Alignment, Warmth, Momentum, Current Relevance, Future Potential. Hidden, not surfaced for human upkeep.
 - Claude chat and copilot.
-- Automated strength scoring and agents.
+- Automated strength scoring and agents (Phase 3 — see ADR 0009 for the planned workflows).
 - Network ML or graph analytics beyond the deterministic Connect queries.
 - Billing, public signup, self-serve onboarding.
 - Custom field UI.
 
-**Phase 1.1 (designed for, not in initial migrations):**
-- Google Calendar sync — `calendar_sync` source type reserved in activities; `calendar_events` table; see ADR 0008.
+**Phase 1.1 (partially shipped):**
+- Google Calendar sync — `calendar_accounts`, `calendar_events`, `calendar_participant_reviews`; OAuth connect + daily cron; see ADR 0008.
 - Continuous dedup — `potential_duplicates` review table + background fuzzy name+company scan job.
 - Field-level merge rules on the admin merge UI (preserve best value per field, not just "winner takes all").
 
@@ -431,7 +480,7 @@ See ADR 0001.
 
 **Phase 2, Intelligence.** Connections graph (incl. inferred), Orbit, computed strength and last_interaction, Connect suggestions, watchlist.
 
-**Phase 3, AI.** Only once the graph holds real data. Claude reasons over profiles, relationships, owners, connections, activities, emails and events.
+**Phase 3, AI.** Only once the graph holds real data. Four agent workflows: meeting intelligence (calendar-triggered participant matching and connection inference), relationship health (weekly proactive action suggestions), event preparation (per-attendee briefings), and introduction facilitation (draft → outcome tracking). See ADR 0009. Human confirms all writes; agents never write Layer 1 directly.
 
 ---
 
@@ -451,4 +500,5 @@ See ADR 0001.
 | Introduction attribution | — | Accepted: `introduced_by` on both `activities` and `connections`; `introduction_outcome` on introduction activities |
 | Organisation name matching | — | Accepted: `organisation_name_normalised` computed at write for inference only; company-as-entity deferred |
 | Calendar sync design intent | 0008 | Accepted: `calendar_sync` source type reserved; build in Phase 1.1 |
+| Phase 3 agent workflows | 0009 | Accepted: four agents (meeting intelligence, relationship health, event prep, intro facilitation); calendar sync is prerequisite |
 | Continuous dedup | — | Accepted: `potential_duplicates` review table in Phase 1.1; field-level merge rules at that point |
