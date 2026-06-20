@@ -4,54 +4,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { CalendarParticipant } from "@/lib/integrations/calendar/types";
 import { ensureRelationshipForProfile } from "@/lib/integrations/calendar/review-utils";
+import {
+  hasExternalParticipant,
+  isInternalParticipant,
+  normaliseEmail,
+  type OrgParticipantFilters,
+} from "@/lib/integrations/participant-email";
 import type { Database } from "@/types/database";
-
-const IGNORED_EMAIL_PATTERNS = [
-  /^noreply@/i,
-  /^no-reply@/i,
-  /^calendar-notification@/i,
-  /^mailer-daemon@/i,
-];
 
 type AdminClient = SupabaseClient<Database>;
 
-function normaliseEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-function isIgnoredEmail(email: string): boolean {
-  return IGNORED_EMAIL_PATTERNS.some((pattern) => pattern.test(email));
-}
-
-export async function loadOrgTeamEmails(
-  supabase: AdminClient,
-  orgId: string,
-): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from("users")
-    .select("email")
-    .eq("org_id", orgId);
-
-  if (error) {
-    throw new Error(`Failed to load org team emails: ${error.message}`);
-  }
-
-  return new Set(
-    (data ?? [])
-      .map((row) => row.email?.trim().toLowerCase())
-      .filter((email): email is string => Boolean(email)),
-  );
-}
-
-export function hasExternalParticipant(
-  participants: CalendarParticipant[],
-  teamEmails: Set<string>,
-): boolean {
-  return participants.some((participant) => {
-    const email = normaliseEmail(participant.email);
-    return email && !teamEmails.has(email) && !isIgnoredEmail(email);
-  });
-}
+export { hasExternalParticipant };
 
 async function ensureRelationship(
   supabase: AdminClient,
@@ -70,7 +33,7 @@ export async function processCalendarParticipants(
     title: string | null;
     startAt: string | null;
     participants: CalendarParticipant[];
-    teamEmails: Set<string>;
+    participantFilters: OrgParticipantFilters;
   },
 ): Promise<{ activitiesCreated: number; reviewsQueued: number }> {
   let activitiesCreated = 0;
@@ -78,19 +41,26 @@ export async function processCalendarParticipants(
 
   for (const participant of params.participants) {
     const email = normaliseEmail(participant.email);
-    if (!email || params.teamEmails.has(email) || isIgnoredEmail(email)) {
+    if (!email || isInternalParticipant(email, params.participantFilters)) {
       continue;
     }
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id")
+      .select("id, email")
       .eq("org_id", params.orgId)
       .ilike("email", email)
       .maybeSingle();
 
     if (profileError) {
       throw new Error(`Failed to match profile by email: ${profileError.message}`);
+    }
+
+    if (
+      profile?.email &&
+      isInternalParticipant(profile.email, params.participantFilters)
+    ) {
+      continue;
     }
 
     if (profile) {

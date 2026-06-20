@@ -7,8 +7,8 @@
  * Fixed UUIDs are stable across resets so UI and tests can reference them.
  *
  * Local auth (password, optional):
- *   james@seed.test / password123  (admin)
- *   henry@seed.test  / password123  (member)
+ *   ce@previously.co / password123  (admin)
+ *   jh@previously.co / password123  (admin)
  *
  * Magic-link sign-in also works for those addresses once auth.users exists.
  * Bootstrap reads app_metadata.org_id — no manual users row needed on first login
@@ -27,6 +27,7 @@ begin;
 -- 11111111-1111-1111-1111-111111111111
 
 -- users (auth + public)
+-- chris e  22222222-2222-2222-2222-222222222229  admin
 -- james     22222222-2222-2222-2222-222222222221  admin
 -- henry     22222222-2222-2222-2222-222222222222  member
 -- simon     22222222-2222-2222-2222-222222222223  member
@@ -74,10 +75,33 @@ insert into auth.users (
 values
   (
     '00000000-0000-0000-0000-000000000000',
+    '22222222-2222-2222-2222-222222222229',
+    'authenticated',
+    'authenticated',
+    'ce@previously.co',
+    extensions.crypt('password123', extensions.gen_salt('bf')),
+    now(),
+    now(),
+    now(),
+    jsonb_build_object(
+      'provider', 'email',
+      'providers', jsonb_build_array('email'),
+      'org_id', '11111111-1111-1111-1111-111111111111'
+    ),
+    jsonb_build_object('full_name', 'Chris E'),
+    now(),
+    now(),
+    '',
+    '',
+    '',
+    ''
+  ),
+  (
+    '00000000-0000-0000-0000-000000000000',
     '22222222-2222-2222-2222-222222222221',
     'authenticated',
     'authenticated',
-    'james@seed.test',
+    'jh@previously.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -100,7 +124,7 @@ values
     '22222222-2222-2222-2222-222222222222',
     'authenticated',
     'authenticated',
-    'henry@seed.test',
+    'hk@previously.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -123,7 +147,7 @@ values
     '22222222-2222-2222-2222-222222222223',
     'authenticated',
     'authenticated',
-    'simon@seed.test',
+    'sp@previously.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -146,7 +170,7 @@ values
     '22222222-2222-2222-2222-222222222224',
     'authenticated',
     'authenticated',
-    'ed@seed.test',
+    'ed@previously.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -169,7 +193,7 @@ values
     '22222222-2222-2222-2222-222222222225',
     'authenticated',
     'authenticated',
-    'chrisp@seed.test',
+    'cp@previously.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -192,7 +216,7 @@ values
     '22222222-2222-2222-2222-222222222226',
     'authenticated',
     'authenticated',
-    'phoebes@seed.test',
+    'ps@previously.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -215,7 +239,7 @@ values
     '22222222-2222-2222-2222-222222222227',
     'authenticated',
     'authenticated',
-    'phoebed@seed.test',
+    'pd@previously.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -238,7 +262,7 @@ values
     '22222222-2222-2222-2222-222222222228',
     'authenticated',
     'authenticated',
-    'widerpu@seed.test',
+    'team@previously.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -269,11 +293,25 @@ insert into auth.identities (
 )
 values
   (
+    '22222222-2222-2222-2222-222222222229',
+    '22222222-2222-2222-2222-222222222229',
+    jsonb_build_object(
+      'sub', '22222222-2222-2222-2222-222222222229',
+      'email', 'ce@previously.co',
+      'email_verified', true
+    ),
+    'email',
+    '22222222-2222-2222-2222-222222222229',
+    now(),
+    now(),
+    now()
+  ),
+  (
     '22222222-2222-2222-2222-222222222221',
     '22222222-2222-2222-2222-222222222221',
     jsonb_build_object(
       'sub', '22222222-2222-2222-2222-222222222221',
-      'email', 'james@seed.test',
+      'email', 'jh@previously.co',
       'email_verified', true
     ),
     'email',
@@ -287,7 +325,7 @@ values
     '22222222-2222-2222-2222-222222222222',
     jsonb_build_object(
       'sub', '22222222-2222-2222-2222-222222222222',
-      'email', 'henry@seed.test',
+      'email', 'hk@previously.co',
       'email_verified', true
     ),
     'email',
@@ -301,7 +339,7 @@ values
     '22222222-2222-2222-2222-222222222223',
     jsonb_build_object(
       'sub', '22222222-2222-2222-2222-222222222223',
-      'email', 'simon@seed.test',
+      'email', 'sp@previously.co',
       'email_verified', true
     ),
     'email',
@@ -315,7 +353,7 @@ values
     '22222222-2222-2222-2222-222222222224',
     jsonb_build_object(
       'sub', '22222222-2222-2222-2222-222222222224',
-      'email', 'ed@seed.test',
+      'email', 'ed@previously.co',
       'email_verified', true
     ),
     'email',
@@ -329,7 +367,7 @@ values
     '22222222-2222-2222-2222-222222222225',
     jsonb_build_object(
       'sub', '22222222-2222-2222-2222-222222222225',
-      'email', 'chrisp@seed.test',
+      'email', 'cp@previously.co',
       'email_verified', true
     ),
     'email',
@@ -343,7 +381,7 @@ values
     '22222222-2222-2222-2222-222222222226',
     jsonb_build_object(
       'sub', '22222222-2222-2222-2222-222222222226',
-      'email', 'phoebes@seed.test',
+      'email', 'ps@previously.co',
       'email_verified', true
     ),
     'email',
@@ -357,7 +395,7 @@ values
     '22222222-2222-2222-2222-222222222227',
     jsonb_build_object(
       'sub', '22222222-2222-2222-2222-222222222227',
-      'email', 'phoebed@seed.test',
+      'email', 'pd@previously.co',
       'email_verified', true
     ),
     'email',
@@ -371,7 +409,7 @@ values
     '22222222-2222-2222-2222-222222222228',
     jsonb_build_object(
       'sub', '22222222-2222-2222-2222-222222222228',
-      'email', 'widerpu@seed.test',
+      'email', 'team@previously.co',
       'email_verified', true
     ),
     'email',
@@ -388,58 +426,65 @@ values
 insert into public.users (id, org_id, email, full_name, role)
 values
   (
+    '22222222-2222-2222-2222-222222222229',
+    '11111111-1111-1111-1111-111111111111',
+    'ce@previously.co',
+    'Chris E',
+    'admin'
+  ),
+  (
     '22222222-2222-2222-2222-222222222221',
     '11111111-1111-1111-1111-111111111111',
-    'james@seed.test',
+    'jh@previously.co',
     'James',
     'admin'
   ),
   (
     '22222222-2222-2222-2222-222222222222',
     '11111111-1111-1111-1111-111111111111',
-    'henry@seed.test',
+    'hk@previously.co',
     'Henry',
     'member'
   ),
   (
     '22222222-2222-2222-2222-222222222223',
     '11111111-1111-1111-1111-111111111111',
-    'simon@seed.test',
+    'sp@previously.co',
     'Simon',
     'member'
   ),
   (
     '22222222-2222-2222-2222-222222222224',
     '11111111-1111-1111-1111-111111111111',
-    'ed@seed.test',
+    'ed@previously.co',
     'Ed',
     'member'
   ),
   (
     '22222222-2222-2222-2222-222222222225',
     '11111111-1111-1111-1111-111111111111',
-    'chrisp@seed.test',
+    'cp@previously.co',
     'Chris P',
     'member'
   ),
   (
     '22222222-2222-2222-2222-222222222226',
     '11111111-1111-1111-1111-111111111111',
-    'phoebes@seed.test',
+    'ps@previously.co',
     'Phoebe S',
     'member'
   ),
   (
     '22222222-2222-2222-2222-222222222227',
     '11111111-1111-1111-1111-111111111111',
-    'phoebed@seed.test',
+    'pd@previously.co',
     'Phoebe D',
     'member'
   ),
   (
     '22222222-2222-2222-2222-222222222228',
     '11111111-1111-1111-1111-111111111111',
-    'widerpu@seed.test',
+    'team@previously.co',
     'Wider PU',
     'member'
   );
@@ -492,7 +537,7 @@ values (
   'cccccccc-cccc-cccc-cccc-cccccccccc01',
   '11111111-1111-1111-1111-111111111111',
   '22222222-2222-2222-2222-222222222221',
-  'james@seed.test',
+  'jh@previously.co',
   'seed-refresh-token-not-real',
   true,
   '2026-06-19 08:00:00+00',
@@ -517,7 +562,7 @@ values (
   'cccccccc-cccc-cccc-cccc-cccccccccc01',
   'Intro request — unknown participant',
   jsonb_build_array(
-    jsonb_build_object('email', 'james@seed.test', 'name', 'James', 'role', 'from'),
+    jsonb_build_object('email', 'jh@previously.co', 'name', 'James', 'role', 'from'),
     jsonb_build_object('email', 'unknown@external-startup.io', 'name', 'Alex Unknown', 'role', 'to')
   ),
   'Projects',
@@ -541,7 +586,7 @@ values (
   'dddddddd-dddd-dddd-dddd-dddddddddd02',
   'seed-message-unknown-001',
   'unknown@external-startup.io',
-  jsonb_build_array(jsonb_build_object('email', 'james@seed.test', 'role', 'to')),
+  jsonb_build_array(jsonb_build_object('email', 'jh@previously.co', 'role', 'to')),
   'Great to meet you at the event — would love to connect.',
   '2026-06-18 14:00:00+00'
 );

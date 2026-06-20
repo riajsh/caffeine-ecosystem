@@ -6,9 +6,10 @@ import { getCalendarClient } from "@/lib/integrations/calendar/client";
 import { CALENDAR_BACKFILL_MONTHS } from "@/lib/integrations/calendar/env";
 import {
   hasExternalParticipant,
-  loadOrgTeamEmails,
   processCalendarParticipants,
 } from "@/lib/integrations/calendar/match";
+import { loadOrgParticipantFilters } from "@/lib/integrations/participant-email";
+import { purgeInternalCalendarSyncData } from "@/lib/integrations/calendar/purge-internal";
 import type {
   CalendarParticipant,
   CalendarSyncStats,
@@ -100,12 +101,12 @@ async function upsertCalendarEvent(
   supabase: ReturnType<typeof createAdminClient>,
   account: CalendarAccount,
   parsed: ParsedCalendarEvent,
-  teamEmails: Set<string>,
+  participantFilters: Awaited<ReturnType<typeof loadOrgParticipantFilters>>,
 ): Promise<{ activitiesCreated: number; reviewsQueued: number }> {
 
   if (
     !parsed.isDeleted &&
-    !hasExternalParticipant(parsed.participants, teamEmails)
+    !hasExternalParticipant(parsed.participants, participantFilters)
   ) {
     return { activitiesCreated: 0, reviewsQueued: 0 };
   }
@@ -144,7 +145,7 @@ async function upsertCalendarEvent(
     title: parsed.title,
     startAt: parsed.startAt,
     participants: parsed.participants,
-    teamEmails,
+    participantFilters,
   });
 }
 
@@ -160,7 +161,12 @@ export async function syncCalendarAccount(
 
   const supabase = createAdminClient();
   const calendar = getCalendarClient(account);
-  const teamEmails = await loadOrgTeamEmails(supabase, account.org_id);
+  const participantFilters = await loadOrgParticipantFilters(
+    supabase,
+    account.org_id,
+  );
+
+  await purgeInternalCalendarSyncData(supabase, account.org_id, participantFilters);
 
   await supabase
     .from("calendar_accounts")
@@ -200,7 +206,7 @@ export async function syncCalendarAccount(
             supabase,
             account,
             parsed,
-            teamEmails,
+            participantFilters,
           );
           stats.eventsProcessed += 1;
           stats.activitiesCreated += result.activitiesCreated;

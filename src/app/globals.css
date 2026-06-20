@@ -37,6 +37,7 @@
   --color-interactive-subtle: var(--color-blue-50);
 
   /* Owner palette */
+  --color-owner-chris-e: oklch(62% 0.18 25);
   --color-owner-james: oklch(62% 0.18 250);
   --color-owner-henry: oklch(62% 0.18 145);
   --color-owner-simon: oklch(62% 0.18 310);

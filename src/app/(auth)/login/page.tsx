@@ -49,7 +49,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
       {showSeedHint ? (
         <p className="mt-6 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-3 text-caption text-muted-foreground">
-          Seed account: <span className="font-medium">james@seed.test</span> /
+          Seed account: <span className="font-medium">ce@previously.co</span> /
           password <span className="font-medium">password123</span>
         </p>
       ) : null}
@@ -68,7 +68,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             type="email"
             autoComplete="email"
             required
-            placeholder="james@seed.test"
+            placeholder="ce@previously.co"
           />
         </div>
 

@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import { getOrgId, requireAdmin, requireUser } from "@/lib/auth/session";
 import { backfillCalendarReviewsForProfile } from "@/lib/integrations/calendar/backfill-review";
+import {
+  isInternalParticipant,
+  loadOrgParticipantFilters,
+} from "@/lib/integrations/participant-email";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
 
@@ -75,8 +79,13 @@ export async function createProfileFromCalendarReviewAction(formData: FormData) 
     return { error: "Email is required" };
   }
 
+  const orgId = await getOrgId();
+  const filters = await loadOrgParticipantFilters(createAdminClient(), orgId);
+  if (isInternalParticipant(email, filters)) {
+    return { error: "That address is internal to your organisation" };
+  }
+
   try {
-    const orgId = await getOrgId();
     const supabase = createAdminClient();
 
     const { data: existing, error: existingError } = await supabase
