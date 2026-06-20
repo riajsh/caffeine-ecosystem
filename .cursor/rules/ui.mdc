@@ -1,0 +1,81 @@
+---
+description: UI, component, and Next.js App Router conventions for Ecosystem
+globs: ["src/app/**/*.tsx", "src/components/**/*.tsx", "src/app/**/*.ts"]
+---
+
+# UI and component rules
+
+Stack: Next.js 15 App Router, TypeScript, Tailwind, shadcn/ui.
+
+## Token rules — read first
+
+Tokens are defined in `@theme` in `src/app/globals.css`. Full spec: `docs/design-tokens.md`.
+
+- **Never use arbitrary Tailwind values** (`text-[14px]`, `bg-[#3b82f6]`). Use a named token.
+- **Never hardcode hex, rgb, or hsl values** in JSX or component files.
+- **Never use `@apply`** — write explicit CSS properties (deprecated in Tailwind 4).
+- If you need a value that has no token, add the token to `@theme` first.
+
+**Owner colours:** always use `ownerColour(userId)` from `src/config/owner-colours.ts`. Never hardcode a colour per owner name or user ID anywhere else.
+
+**Inferred data:** any connection, company, or data point with `source` starting with `inferred_` must use `--color-data-inferred` text colour and `--border-data-inferred` (dashed) border. Never render inferred data with confirmed styling.
+
+## Component rules
+
+- Use shadcn/ui primitives for Button, Input, Select, Badge, Modal/Sheet, Tabs, Avatar, Card. Do not rebuild these.
+- Domain components live in `src/components/{domain}/` (profiles/, search/, admin/).
+- shadcn primitives live in `src/components/ui/`. Do not modify shadcn source files.
+- Never put data-fetching logic inside a component file. Server components fetch via RSC + repository functions; client components receive props or use SWR/query hooks.
+- **CVA for variants:** any component with 3+ visual states (sizes, strength levels, status types) uses Class Variance Authority. No ad-hoc conditional class strings.
+
+## Data fetching pattern
+
+```ts
+// Server component (preferred)
+const data = await getProfiles({ orgId })  // src/lib/data/profiles.ts
+
+// Server Action (mutations)
+'use server'
+const { orgId } = await requireUser()
+await createProfile({ orgId, ...input })
+revalidatePath('/profiles')
+```
+
+Never write directly to Supabase from a client component. All mutations go through Server Actions or Route Handlers.
+
+## Layer discipline in UI
+
+- Layer 1 data (profiles, activities, relationships): display as-is.
+- Layer 2 computed data (orbit ring, strength, connect suggestions): always label as computed. Never let a user edit a computed field.
+- Inferred connections (`source = 'inferred_company'` or `'inferred_event'`): render with a visual distinction (muted, dashed border, "inferred" label). Never present as confirmed.
+
+## Privacy rules
+
+- Never render `email_messages.body` to a user who is not an owner/admin for the matched profile. Check server-side before passing body to the component.
+- Never put personal data in URLs or query strings.
+
+## Route structure
+
+```
+(auth)/           Login, OAuth callback — no sidebar
+(app)/            Authenticated shell with sidebar
+  overview/       Phase 1
+  search/         Phase 1
+  profiles/       Phase 1
+  events/         Phase 1
+  admin/          Phase 1
+  connect/        Phase 2
+  orbit/          Phase 2
+  watchlist/      Phase 2
+```
+
+Phase 2 routes can be scaffolded but must be behind a feature flag or disabled nav item until Phase 2 ships.
+
+## Design principles
+
+Relationship-native UI: evidence over assertion. Show activity counts, last interaction, shared events. Do not ask users to maintain warmth scores.
+
+Progressive disclosure: show the summary; expand to detail on demand. Especially important for Orbit and search results.
+
+Full principles: `docs/design-principles.md`
+IA and screen map: `docs/information-architecture.md`

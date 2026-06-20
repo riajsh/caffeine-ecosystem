@@ -1,0 +1,60 @@
+---
+description: Import pipeline, Gmail sync, search, and data integration conventions
+globs: ["src/lib/integrations/**", "src/lib/data/**", "src/lib/computed/**", "src/app/api/cron/**", "supabase/migrations/**"]
+---
+
+# Data integration rules
+
+These rules apply to import pipeline, Gmail sync, search, and all cron/background work.
+
+## Gmail sync
+
+Full spec: `docs/specs/gmail-sync.md`
+
+- Ecosystem owns Gmail sync. Not shared with Pathway PM (ADR 0007).
+- Sync code lives in `src/lib/integrations/gmail/`.
+- Cron endpoint: `src/app/api/cron/gmail-sync/route.ts`. Verify `CRON_SECRET` header before processing.
+- Use `createAdminClient()` (service role) for sync writes. Set `org_id` explicitly on every insert.
+- Label filter: read from `GMAIL_SYNC_LABELS` env var. Never hard-code label names.
+- Upsert on `(org_id, gmail_thread_id)` and `(org_id, gmail_message_id)`. Never insert duplicates.
+- On participant match: generate activity + append relationship_source. Skip if `source_ref` already exists.
+- On no match: create `email_participant_reviews` row with `status=pending`. Never auto-create a profile from email ingestion.
+- Backfill runs once on account connect (12 months). Incremental sync daily from `sync_cursor`.
+
+## Import pipeline
+
+Full spec: `docs/specs/import-pipeline.md`
+
+- Pipeline stages: Upload → Parse → Preview → Map → Dedup → Review → Commit → Audit.
+- Staged rows in `import_rows` table. Never stage in jsonb metadata for row-level dedup.
+- Dedup tier 1: email exact match → `matched_email` → update existing profile (fill empty fields only, never overwrite).
+- Dedup tier 2: `lower(full_name) + lower(organisation_name)` → `soft_match` → admin review required.
+- Dedup tier 3: no match → `new` → create profile.
+- Never auto-merge on name alone (ADR 0004).
+- Commit is atomic (database transaction). If any step fails, roll back the transaction.
+- Retain `import_rows` after commit for audit trail. Do not delete staging rows.
+- File limits: 10 MB, 5,000 rows. Enforce at upload.
+
+## Search
+
+Full spec: `docs/specs/search.md`
+
+- Phase 1: Postgres FTS only. No external search service, no pgvector until Phase 2.
+- Each indexed table has a generated `fts tsvector` column and a GIN index.
+- Cross-entity search: parallel queries per entity type, merged in `src/lib/computed/search.ts`.
+- Body search (`email_messages.fts`) is a separate query path. Never include in the general search view.
+- Use `plainto_tsquery` (AND semantics) for user input. Use `ts_rank_cd` for ranking.
+- Empty query → return nothing. Never return all rows on an empty search.
+
+## Layer 2 computed values
+
+- Orbit ring, relationship strength, last_interaction, connect suggestions: implement as SQL views in `supabase/migrations/` or query-time functions in `src/lib/computed/`.
+- Never store a computed value in a user-editable column. If a formula changes, update the view — no migration required.
+- Source columns (`source`, `source_ref`) must be present on every ingested record. Do not omit.
+
+## Cron discipline
+
+- All cron endpoints: verify `CRON_SECRET`. Return 401 if missing or wrong.
+- Use `createAdminClient()` only in `api/cron/` and `lib/integrations/`. Never import it from UI code.
+- Log each run: account/job processed, rows affected, errors.
+- Idempotent by design. Cron failure and retry must not produce duplicate data.

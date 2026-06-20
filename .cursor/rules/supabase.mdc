@@ -1,0 +1,58 @@
+---
+description: Supabase, Postgres, RLS, and schema conventions for Ecosystem
+alwaysApply: true
+---
+
+# Supabase and schema rules
+
+Source of truth: `docs/domain-model-v1.md`. Schema derives from the model, not the other way around. Update the doc in the same PR when the schema changes.
+
+## Hard rules
+
+- Never take `org_id` from the client. Always derive it server-side: `getOrgId()` in `src/lib/auth/session.ts`.
+- Never ship a table without an RLS policy. Every table: `org_id = (select org_id from users where id = auth.uid())`.
+- Never hand-edit `src/types/database.ts`. Run `supabase gen types typescript` after every migration.
+- Never make schema changes outside `supabase/migrations/`. No manual dashboard edits.
+- Never write a Layer 2 computed value (strength, orbit ring, last_interaction) as a user-editable column. Use SQL views only.
+- Never add subjective score columns (Influence, Trust, Warmth, Momentum, etc.) to any user-facing table.
+
+## Client selection
+
+| Where | Client | File |
+|---|---|---|
+| RSC, Server Actions | `createServerClient(cookies)` | `src/lib/supabase/server.ts` |
+| Cron, sync, batch jobs | `createAdminClient()` service role | `src/lib/supabase/admin.ts` |
+| Browser (rare) | `createBrowserClient()` anon | `src/lib/supabase/client.ts` |
+
+Cron and sync jobs use service role but must still set `org_id` explicitly on every insert.
+
+## Email body access (ADR 0003)
+
+`email_messages.body` requires a second RLS check: user must be admin OR a `relationship_owner` for a matched profile on that thread. Honour `organisations.email_access_level`. Never expose body fts through the general search view — body search is a separate query path.
+
+## Naming
+
+- Database: `snake_case`
+- TypeScript: `camelCase`
+- Files and routes: `kebab-case`
+- Migrations: `YYYYMMDDHHMMSS_description.sql`
+
+## Idempotency
+
+All sync and import writes use upserts on natural keys: `(org_id, gmail_thread_id)`, `(org_id, gmail_message_id)`, `(org_id, lower(email))` for profiles. Re-running must not duplicate rows.
+
+Every ingested record carries `source` and `source_ref`. Do not omit these.
+
+## Clone safety
+
+Never hard-code "Previously Unavailable", "PU", or any PU-specific ID outside the `organisations` row. The Caffeine clone depends on this. Org identity always resolves from `users.org_id`.
+
+## Schema-locked mode
+
+Once Phase 1 migrations are accepted: **do not suggest new tables, new columns, or schema changes.** If a feature cannot be built against the current schema, stop and flag it as a required discussion. Do not silently add a migration to make the feature fit.
+
+Phase 2 schema work (connections, views) re-opens the schema — but only under explicit instruction to do so.
+
+Full conventions: `docs/ai-conventions.md`
+Architecture: `docs/technical-architecture.md`
+Build quality: `docs/build-quality.md`
