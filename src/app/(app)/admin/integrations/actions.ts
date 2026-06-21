@@ -13,6 +13,7 @@ export async function disconnectCalendarAccountAction(accountId: string) {
   try {
     await disconnectCalendarAccount(accountId);
     revalidatePath("/admin");
+    revalidatePath("/admin/calendar-sync/review");
     return { success: true as const };
   } catch (error) {
     return {
@@ -31,11 +32,13 @@ export async function runCalendarSyncAction() {
     try {
       await syncAllCalendarAccounts();
       revalidatePath("/admin");
+      revalidatePath("/admin/calendar-sync/review");
     } catch (error) {
       console.error("Background calendar sync failed:", error);
     }
   });
 
   revalidatePath("/admin");
+  revalidatePath("/admin/calendar-sync/review");
   return { success: true as const, started: true as const };
 }
