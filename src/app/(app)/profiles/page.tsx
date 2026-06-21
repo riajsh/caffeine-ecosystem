@@ -160,7 +160,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 px-8 pb-6 pt-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-8 pb-6 pt-4">
         <ListMeta className="mb-3">
           {formatCountLabel(profiles.length, "profile")}
           {hasActiveFilters ? " matching filters" : ""}

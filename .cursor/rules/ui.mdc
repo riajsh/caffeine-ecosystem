@@ -79,5 +79,7 @@ Progressive disclosure: show the summary; expand to detail on demand. Especially
 
 Full principles: `docs/design-principles.md`
 IA and screen map: `docs/information-architecture.md`
+**Interaction speed rules (read before building any screen):** `docs/specs/interaction-speed.md`
+Core user workflows: `docs/specs/workflows.md`
 Profile detail (page + drawer): `docs/specs/profile-detail.md`
 Admin review queues: `docs/specs/admin-review.md`

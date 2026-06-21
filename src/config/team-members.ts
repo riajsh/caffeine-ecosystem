@@ -31,6 +31,13 @@ export const TEAM_MEMBERS = [
     colourToken: "var(--color-owner-simon)",
   },
   {
+    id: "22222222-2222-2222-2222-222222222230",
+    email: "rs@previously.co",
+    fullName: "Ria",
+    role: "member" as const,
+    colourToken: "var(--color-owner-ria)",
+  },
+  {
     id: "22222222-2222-2222-2222-222222222224",
     email: "ed@previously.co",
     fullName: "Ed",
