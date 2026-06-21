@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/app-shell/page-header";
+import { Breadcrumbs } from "@/components/app-shell/breadcrumbs";
 import { ProfileDetailView } from "@/components/profiles/profile-detail-view";
 import { getProfileById } from "@/lib/data/profiles";
 import { getProfileNetworkIntel } from "@/lib/computed/profile-intelligence";
 import { listOrgTags } from "@/lib/data/tags";
 import { listOrgUsers } from "@/lib/data/users";
 import { requireUser } from "@/lib/auth/session";
-import { parseProfileTab } from "@/lib/profiles/tab";
+import { parseProfileTabOrDefault } from "@/lib/profiles/tab";
 
 type ProfilePageProps = {
   params: Promise<{ id: string }>;
@@ -20,11 +20,7 @@ export default async function ProfilePage({
 }: ProfilePageProps) {
   const { id } = await params;
   const { tab } = await searchParams;
-  const defaultTab = parseProfileTab(tab);
-
-  if (defaultTab === undefined && tab) {
-    notFound();
-  }
+  const defaultTab = parseProfileTabOrDefault(tab);
 
   if (!/^[0-9a-f-]{36}$/i.test(id)) {
     notFound();
@@ -41,7 +37,14 @@ export default async function ProfilePage({
 
   return (
     <>
-      <PageHeader title="Profile" />
+      <div className="border-b border-border px-8 pt-6">
+        <Breadcrumbs
+          items={[
+            { label: "Profiles", href: "/profiles" },
+            { label: profile.fullName },
+          ]}
+        />
+      </div>
       <ProfileDetailView
         profile={profile}
         teamUsers={teamUsers}

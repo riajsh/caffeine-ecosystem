@@ -1,14 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
 
 import { runCalendarSyncAction } from "@/app/(app)/admin/integrations/actions";
 import { Button } from "@/components/ui/button";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 export function RunCalendarSyncButton() {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { isPending, run } = useAsyncAction();
 
   return (
     <Button
@@ -16,13 +17,9 @@ export function RunCalendarSyncButton() {
       variant="outline"
       disabled={isPending}
       onClick={() => {
-        startTransition(async () => {
-          const result = await runCalendarSyncAction();
-          if ("error" in result && result.error) {
-            window.alert(result.error);
-            return;
-          }
-
+        void run(async () => {
+          await runCalendarSyncAction();
+          toastSuccess("Calendar sync started");
           router.push("/admin/calendar-sync/review");
         });
       }}

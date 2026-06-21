@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import { createTagAction } from "@/app/(app)/admin/tags/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,23 +16,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatEnumLabel } from "@/lib/format/enum";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 const TAG_CATEGORIES = ["sector", "role", "interest", "other"] as const;
 
 export function CreateTagForm() {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
   const [category, setCategory] = useState<string>("other");
 
   return (
     <form
       action={(formData) => {
-        startTransition(async () => {
+        void run(async () => {
           const result = await createTagAction(formData);
           if (result.error) {
-            window.alert(result.error);
+            await alert({ title: "Could not create tag", description: result.error });
             return;
           }
+          toastSuccess("Tag created");
           router.refresh();
         });
       }}

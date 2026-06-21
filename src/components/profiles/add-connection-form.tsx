@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { addConnectionAction } from "@/app/(app)/profiles/[id]/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,6 +19,8 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ProfilePickerOption } from "@/lib/data/profiles";
 import type { OrgUser } from "@/lib/data/users";
 import { formatEnumLabel } from "@/lib/format/enum";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 const CONNECTION_TYPES = [
   "colleague",
@@ -49,8 +52,9 @@ export function AddConnectionForm({
   onSearch,
 }: AddConnectionFormProps) {
   const router = useRouter();
-  const [isSubmitting, startSubmitTransition] = useTransition();
-  const [isSearching, startSearchTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending: isSubmitting, run: runSubmit } = useAsyncAction();
+  const { isPending: isSearching, run: runSearch } = useAsyncAction();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProfilePickerOption[]>([]);
   const [selectedProfile, setSelectedProfile] =
@@ -76,9 +80,13 @@ export function AddConnectionForm({
     }
 
     searchTimeoutRef.current = window.setTimeout(() => {
-      startSearchTransition(async () => {
+      void runSearch(async () => {
         const response = await onSearch(value);
         if (response.error) {
+          await alert({
+            title: "Search failed",
+            description: response.error,
+          });
           return;
         }
 
@@ -94,17 +102,21 @@ export function AddConnectionForm({
   return (
     <form
       action={(formData) => {
-        if (!selectedProfile) {
-          window.alert("Select a profile from the search results.");
-          return;
-        }
-
-        startSubmitTransition(async () => {
-          const result = await addConnectionAction(formData);
-          if (result.error) {
-            window.alert(result.error);
+        void runSubmit(async () => {
+          if (!selectedProfile) {
+            await alert({
+              title: "Select a profile",
+              description: "Choose someone from the search results before adding a connection.",
+            });
             return;
           }
+
+          const result = await addConnectionAction(formData);
+          if (result.error) {
+            await alert({ title: "Could not add connection", description: result.error });
+            return;
+          }
+          toastSuccess("Connection added");
           setQuery("");
           setResults([]);
           setSelectedProfile(null);

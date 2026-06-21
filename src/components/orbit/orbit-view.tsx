@@ -4,6 +4,7 @@ import type { OrbitRing } from "@/config/relationship-thresholds";
 import { OwnerDot } from "@/components/profiles/owner-dot";
 import { StrengthBadge } from "@/components/profiles/strength-badge";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatInteractionDate } from "@/lib/format/date";
 import type { OrbitNode } from "@/lib/computed/orbit";
 
@@ -31,9 +32,9 @@ export function OrbitView({ nodes }: OrbitViewProps) {
   return (
     <div className="space-y-8">
       {rings.map((ring) => (
-        <section key={ring} className="space-y-3">
+        <section key={ring} className="space-y-3" aria-labelledby={`orbit-ring-${ring}`}>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-heading font-medium text-foreground">
+            <h2 id={`orbit-ring-${ring}`} className="text-heading font-medium text-foreground">
               {RING_LABELS[ring]}
             </h2>
             <Badge variant="secondary">{nodes[ring].length}</Badge>
@@ -43,18 +44,18 @@ export function OrbitView({ nodes }: OrbitViewProps) {
           </p>
 
           {nodes[ring].length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-8 text-center">
-              <p className="text-body text-muted-foreground">
-                No profiles in this ring for the current filter.
-              </p>
-            </div>
+            <EmptyState
+              variant="dashed"
+              title={`No profiles in ${RING_LABELS[ring].toLowerCase()}`}
+              description="Adjust the owner filter to see profiles in this ring."
+            />
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {nodes[ring].map((node) => (
                 <li key={node.profileId}>
                   <Link
                     href={`/profiles/${node.profileId}`}
-                    className="flex flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
+                    className="flex flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>

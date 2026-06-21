@@ -1,10 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState } from "react";
 
 import { deleteTagAction } from "@/app/(app)/admin/tags/actions";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
+import { useAsyncAction } from "@/lib/use-async-action";
+import { toastSuccess } from "@/lib/toast";
 import {
   Table,
   TableBody,
@@ -20,18 +24,63 @@ type TagsTableProps = {
   tags: OrgTag[];
 };
 
-export function TagsTable({ tags }: TagsTableProps) {
+function DeleteTagButton({ tag }: { tag: OrgTag }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { confirm, alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
+  const [isConfirming, setIsConfirming] = useState(false);
 
+  async function handleDelete() {
+    setIsConfirming(true);
+    try {
+      const confirmed = await confirm({
+        title: "Delete tag",
+        description: `Delete tag "${tag.name}"? It will be removed from all profiles.`,
+        confirmLabel: "Delete",
+        destructive: true,
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      await run(async () => {
+        const formData = new FormData();
+        formData.set("tagId", tag.id);
+        const result = await deleteTagAction(formData);
+        if (result.error) {
+          await alert({ title: "Could not delete tag", description: result.error });
+          return;
+        }
+        toastSuccess("Tag deleted");
+        router.refresh();
+      });
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={isPending || isConfirming}
+      className="text-destructive hover:text-destructive"
+      onClick={handleDelete}
+    >
+      Delete
+    </Button>
+  );
+}
+
+export function TagsTable({ tags }: TagsTableProps) {
   if (tags.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-6 py-12 text-center">
-        <p className="text-subheading font-medium text-foreground">No tags yet</p>
-        <p className="mt-2 text-body text-muted-foreground">
-          Create sector, role, and interest tags to classify profiles.
-        </p>
-      </div>
+      <EmptyState
+        title="No tags yet"
+        description="Create sector, role, and interest tags to classify profiles."
+      />
     );
   }
 
@@ -57,37 +106,7 @@ export function TagsTable({ tags }: TagsTableProps) {
                 {tag.profileCount}
               </TableCell>
               <TableCell>
-                <form
-                  action={(formData) => {
-                    if (
-                      !window.confirm(
-                        `Delete tag "${tag.name}"? It will be removed from all profiles.`,
-                      )
-                    ) {
-                      return;
-                    }
-
-                    startTransition(async () => {
-                      const result = await deleteTagAction(formData);
-                      if (result.error) {
-                        window.alert(result.error);
-                        return;
-                      }
-                      router.refresh();
-                    });
-                  }}
-                >
-                  <input type="hidden" name="tagId" value={tag.id} />
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    size="sm"
-                    disabled={isPending}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    Delete
-                  </Button>
-                </form>
+                <DeleteTagButton tag={tag} />
               </TableCell>
             </TableRow>
           ))}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatInteractionDate } from "@/lib/format/date";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { ReconnectSuggestion } from "@/lib/computed/connect";
@@ -12,20 +13,23 @@ type ReconnectPromptsCardProps = {
 export function ReconnectPromptsCard({ suggestions }: ReconnectPromptsCardProps) {
   if (suggestions.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 px-5 py-6">
-        <p className="text-subheading font-medium text-foreground">
-          Reconnect prompts
-        </p>
-        <p className="mt-2 text-body text-muted-foreground">
-          Strong relationships going quiet will surface here once activity ages
-          past six months.
-        </p>
-      </div>
+      <EmptyState
+        variant="dashed"
+        title="Reconnect prompts"
+        description="Strong relationships going quiet will surface here once activity ages past six months."
+      >
+        <Link
+          href="/connect"
+          className="text-caption text-interactive-primary hover:underline"
+        >
+          Open Connect →
+        </Link>
+      </EmptyState>
     );
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card px-5 py-6">
+    <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between gap-3">
         <p className="text-subheading font-medium text-foreground">
           Reconnect prompts

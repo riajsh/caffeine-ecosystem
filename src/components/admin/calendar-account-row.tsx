@@ -1,9 +1,11 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState } from "react";
 
 import { disconnectCalendarAccountAction } from "@/app/(app)/admin/integrations/actions";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Button } from "@/components/ui/button";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 type CalendarAccountRowProps = {
   accountId: string;
@@ -22,7 +24,9 @@ export function CalendarAccountRow({
   syncEnabled,
   isCurrentUser,
 }: CalendarAccountRowProps) {
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-4 py-3">
@@ -32,6 +36,11 @@ export function CalendarAccountRow({
           {userName ? `Connected by ${userName}` : "Unknown user"} · {syncStatus}
           {!syncEnabled ? " · disconnected" : ""}
         </p>
+        {error ? (
+          <p className="mt-1 text-caption text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
       {isCurrentUser && syncEnabled ? (
         <Button
@@ -39,8 +48,16 @@ export function CalendarAccountRow({
           variant="outline"
           disabled={isPending}
           onClick={() => {
-            startTransition(async () => {
-              await disconnectCalendarAccountAction(accountId);
+            void run(async () => {
+              setError(null);
+              const result = await disconnectCalendarAccountAction(accountId);
+              if (result.error) {
+                setError(result.error);
+                await alert({
+                  title: "Could not disconnect",
+                  description: result.error,
+                });
+              }
             });
           }}
         >

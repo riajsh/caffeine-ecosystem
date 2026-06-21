@@ -1,6 +1,9 @@
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  FilterChipLink,
+  FilterChipRow,
+} from "@/components/filters/filter-chips";
 import type { OrgUser } from "@/lib/data/users";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { Database } from "@/types/database";
@@ -60,13 +63,15 @@ export function SearchFilters({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-caption text-muted-foreground">Owner:</span>
-        <Link href={buildSearchHref({ ...filterBase, tag: activeTagId, status: activeStatus })}>
-          <Badge variant={activeOwnerId ? "secondary" : "default"}>All</Badge>
-        </Link>
+      <FilterChipRow label="Owner:">
+        <FilterChipLink
+          href={buildSearchHref({ ...filterBase, tag: activeTagId, status: activeStatus })}
+          isActive={!activeOwnerId}
+        >
+          All
+        </FilterChipLink>
         {teamUsers.map((user) => (
-          <Link
+          <FilterChipLink
             key={user.id}
             href={buildSearchHref({
               ...filterBase,
@@ -74,21 +79,22 @@ export function SearchFilters({
               owner: user.id,
               status: activeStatus,
             })}
+            isActive={activeOwnerId === user.id}
           >
-            <Badge variant={activeOwnerId === user.id ? "default" : "secondary"}>
-              {user.fullName}
-            </Badge>
-          </Link>
+            {user.fullName}
+          </FilterChipLink>
         ))}
-      </div>
+      </FilterChipRow>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-caption text-muted-foreground">Status:</span>
-        <Link href={buildSearchHref({ ...filterBase, tag: activeTagId, owner: activeOwnerId })}>
-          <Badge variant={activeStatus ? "secondary" : "default"}>All</Badge>
-        </Link>
+      <FilterChipRow label="Status:">
+        <FilterChipLink
+          href={buildSearchHref({ ...filterBase, tag: activeTagId, owner: activeOwnerId })}
+          isActive={!activeStatus}
+        >
+          All
+        </FilterChipLink>
         {STATUS_OPTIONS.map((status) => (
-          <Link
+          <FilterChipLink
             key={status}
             href={buildSearchHref({
               ...filterBase,
@@ -96,13 +102,12 @@ export function SearchFilters({
               owner: activeOwnerId,
               status,
             })}
+            isActive={activeStatus === status}
           >
-            <Badge variant={activeStatus === status ? "default" : "secondary"}>
-              {formatEnumLabel(status)}
-            </Badge>
-          </Link>
+            {formatEnumLabel(status)}
+          </FilterChipLink>
         ))}
-      </div>
+      </FilterChipRow>
 
       {hasFilters ? (
         <Link

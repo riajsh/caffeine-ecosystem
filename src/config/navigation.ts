@@ -19,6 +19,7 @@ export type NavItem = {
   adminOnly?: boolean;
 };
 
+/** Sidebar order matches docs/information-architecture.md */
 export const MAIN_NAV: NavItem[] = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
   { label: "Search", href: "/search", icon: Search },

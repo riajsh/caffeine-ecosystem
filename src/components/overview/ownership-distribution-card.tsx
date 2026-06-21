@@ -14,7 +14,7 @@ export function OwnershipDistributionCard({
   const { owners, unownedProfileCount } = summary;
 
   return (
-    <section className="space-y-4 rounded-lg border border-border bg-card p-4">
+    <section className="space-y-4 rounded-lg border border-border bg-card p-6">
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-heading font-medium text-foreground">

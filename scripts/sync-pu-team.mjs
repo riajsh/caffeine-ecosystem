@@ -69,9 +69,13 @@ const supabase = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
+const DEV_PASSWORD = "password123";
+
 function authUserPayload(member) {
   return {
     email: member.email,
+    password: DEV_PASSWORD,
+    email_confirm: true,
     user_metadata: { full_name: member.fullName },
     app_metadata: {
       provider: "email",
@@ -149,9 +153,6 @@ async function ensureAuthUser(member) {
 
   const { error } = await supabase.auth.admin.createUser({
     id: member.id,
-    email: member.email,
-    password: "password123",
-    email_confirm: true,
     ...authUserPayload(member),
   });
 

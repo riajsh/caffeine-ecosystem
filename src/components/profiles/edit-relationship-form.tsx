@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import { updateRelationshipAction } from "@/app/(app)/profiles/[id]/actions";
 import { ProfileDetailField } from "@/components/profiles/profile-detail-field";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -17,6 +18,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { ProfileDetail } from "@/lib/data/profiles";
 import { formatEnumLabel } from "@/lib/format/enum";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 const STATUS_OPTIONS = [
   "prospect",
@@ -45,7 +48,8 @@ type EditRelationshipFormProps = {
 
 export function EditRelationshipForm({ profile }: EditRelationshipFormProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
   const relationship = profile.relationship;
   const [isEditing, setIsEditing] = useState(false);
 
@@ -114,12 +118,13 @@ export function EditRelationshipForm({ profile }: EditRelationshipFormProps) {
       ) : (
         <form
           action={(formData) => {
-            startTransition(async () => {
+            void run(async () => {
               const result = await updateRelationshipAction(formData);
               if (result.error) {
-                window.alert(result.error);
+                await alert({ title: "Could not save relationship", description: result.error });
                 return;
               }
+              toastSuccess("Relationship saved");
               setIsEditing(false);
               router.refresh();
             });

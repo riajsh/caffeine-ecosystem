@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import { updateOwnerAction } from "@/app/(app)/profiles/[id]/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -16,6 +17,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { ProfileOwner } from "@/lib/data/profiles";
 import { formatEnumLabel } from "@/lib/format/enum";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 const STRENGTH_OPTIONS = [
   "inner_circle",
@@ -39,7 +42,8 @@ export function EditOwnerForm({
   onSaved,
 }: EditOwnerFormProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
   const [strength, setStrength] = useState<string>(owner.strength);
   const [isPrimary, setIsPrimary] = useState(owner.isPrimary);
   const [notes, setNotes] = useState(owner.notes ?? "");
@@ -54,12 +58,13 @@ export function EditOwnerForm({
   return (
     <form
       action={(formData) => {
-        startTransition(async () => {
+        void run(async () => {
           const result = await updateOwnerAction(formData);
           if (result.error) {
-            window.alert(result.error);
+            await alert({ title: "Could not update owner", description: result.error });
             return;
           }
+          toastSuccess("Owner updated");
           onSaved();
           router.refresh();
         });

@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { Badge } from "@/components/ui/badge";
 import { formatProfileProvenance } from "@/lib/format/provenance";
 import { formatEnumLabel } from "@/lib/format/enum";
@@ -10,26 +8,14 @@ import { StrengthBadge } from "./strength-badge";
 
 type ProfileHeaderProps = {
   profile: ProfileDetail;
-  mode?: "page" | "drawer";
 };
 
-export function ProfileHeader({ profile, mode = "page" }: ProfileHeaderProps) {
+export function ProfileHeader({ profile }: ProfileHeaderProps) {
   const primaryOwner =
     profile.owners.find((owner) => owner.isPrimary) ?? profile.owners[0];
 
   return (
     <div className="space-y-6">
-      {mode === "page" ? (
-        <div>
-          <Link
-            href="/profiles"
-            className="text-caption text-muted-foreground transition-colors hover:text-foreground"
-          >
-            ← Back to profiles
-          </Link>
-        </div>
-      ) : null}
-
       {profile.isInternalProfile ? (
         <p className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-body text-muted-foreground">
           PU team member — calendar sync does not track internal meetings on
@@ -68,6 +54,7 @@ export function ProfileHeader({ profile, mode = "page" }: ProfileHeaderProps) {
                 href={profile.linkedinUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label={`${profile.fullName} on LinkedIn`}
                 className="text-interactive-primary hover:underline"
               >
                 LinkedIn
@@ -78,6 +65,7 @@ export function ProfileHeader({ profile, mode = "page" }: ProfileHeaderProps) {
                 href={profile.websiteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label={`${profile.fullName} website`}
                 className="text-interactive-primary hover:underline"
               >
                 Website

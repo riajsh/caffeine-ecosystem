@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatInteractionDate } from "@/lib/format/date";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { EventListItem } from "@/lib/data/events";
@@ -21,21 +22,20 @@ export function OverviewEventsCard({
 
   if (events.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 px-5 py-6">
-        <p className="text-subheading font-medium text-foreground">Events</p>
-        <p className="mt-2 text-body text-muted-foreground">
-          Create PU dinners and roundtables under{" "}
-          <Link href="/events" className="text-foreground underline">
-            Events
-          </Link>
-          .
-        </p>
-      </div>
+      <EmptyState
+        variant="dashed"
+        title="Events"
+        description="Create PU dinners and roundtables to build the attendance graph."
+      >
+        <Link href="/events" className="text-body text-interactive-primary hover:underline">
+          Go to Events →
+        </Link>
+      </EmptyState>
     );
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card px-5 py-6">
+    <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between gap-3">
         <p className="text-subheading font-medium text-foreground">{title}</p>
         <Link href="/events" className="text-caption text-interactive-primary hover:underline">
@@ -47,7 +47,7 @@ export function OverviewEventsCard({
           <li key={event.id}>
             <Link
               href={`/events/${event.id}`}
-              className="block rounded-md px-1 py-1 transition-colors hover:bg-muted/50"
+              className="block rounded-md px-1 py-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-body font-medium text-foreground">

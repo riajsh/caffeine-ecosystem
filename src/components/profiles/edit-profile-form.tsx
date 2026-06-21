@@ -1,16 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import { updateProfileAction } from "@/app/(app)/profiles/[id]/actions";
 import { ProfileDetailField } from "@/components/profiles/profile-detail-field";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ProfileDetail } from "@/lib/data/profiles";
 import { formatLocation } from "@/lib/format/location";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 type EditProfileFormProps = {
   profile: ProfileDetail;
@@ -33,7 +36,8 @@ function profileFormState(profile: ProfileDetail) {
 
 export function EditProfileForm({ profile }: EditProfileFormProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState(() => profileFormState(profile));
 
@@ -89,12 +93,13 @@ export function EditProfileForm({ profile }: EditProfileFormProps) {
       ) : (
         <form
           action={(formData) => {
-            startTransition(async () => {
+            void run(async () => {
               const result = await updateProfileAction(formData);
               if (result.error) {
-                window.alert(result.error);
+                await alert({ title: "Could not save profile", description: result.error });
                 return;
               }
+              toastSuccess("Profile saved");
               setIsEditing(false);
               router.refresh();
             });

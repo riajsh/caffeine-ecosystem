@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { signOut } from "@/app/(auth)/login/actions";
-import { MAIN_NAV } from "@/config/navigation";
+import { MAIN_NAV, type NavItem } from "@/config/navigation";
 import type { AppUser } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,49 @@ type AppSidebarProps = {
   user: AppUser;
   profileId: string | null;
 };
+
+function isNavItemActive(pathname: string, item: NavItem) {
+  if (item.href === "/") {
+    return pathname === "/";
+  }
+  return pathname.startsWith(item.href);
+}
+
+function SidebarNavLink({
+  item,
+  isActive,
+}: {
+  item: NavItem;
+  isActive: boolean;
+}) {
+  return (
+    <Link
+      href={item.href}
+      aria-current={isActive ? "page" : undefined}
+      className={cn(
+        "flex items-center gap-2.5 rounded-md px-3 py-2 text-body transition-colors",
+        isActive
+          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/70",
+      )}
+    >
+      <item.icon className="size-4 shrink-0 opacity-80" aria-hidden />
+      <span>{item.label}</span>
+    </Link>
+  );
+}
+
+function SidebarNavPlaceholder({ item }: { item: NavItem }) {
+  return (
+    <span
+      className="flex items-center gap-2.5 rounded-md px-3 py-2 text-body text-muted-foreground opacity-60"
+      aria-disabled="true"
+    >
+      <item.icon className="size-4 shrink-0" aria-hidden />
+      <span>{item.label}</span>
+    </span>
+  );
+}
 
 export function AppSidebar({ user, profileId }: AppSidebarProps) {
   const pathname = usePathname();
@@ -26,81 +69,70 @@ export function AppSidebar({ user, profileId }: AppSidebarProps) {
         pathname.startsWith(`/profiles/${profileId}/`) ||
         (pathname === "/profiles" && drawerProfileId === profileId)));
 
+  const visibleNav = MAIN_NAV.filter(
+    (item) => !item.adminOnly || user.role === "admin",
+  );
+  const activeNav = visibleNav.filter((item) => !item.disabled);
+  const upcomingNav = visibleNav.filter((item) => item.disabled);
+
   return (
     <aside className="flex h-dvh w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-      <div className="shrink-0 border-b border-sidebar-border px-4 py-4">
-        <p className="text-label font-medium uppercase tracking-wide text-muted-foreground">
-          Ecosystem
-        </p>
+      <div className="shrink-0 border-b border-sidebar-border px-4 py-5">
         <Link
-          href={meHref}
-          className={cn(
-            "mt-2 block rounded-md px-2 py-2 transition-colors hover:bg-sidebar-accent/70",
-            isMeActive && "bg-sidebar-accent text-sidebar-accent-foreground",
-          )}
+          href="/"
+          className="text-subheading font-semibold tracking-tight text-sidebar-foreground transition-colors hover:text-sidebar-accent-foreground"
         >
-          <p className="text-subheading font-medium">{user.full_name}</p>
-          <p className="text-caption text-muted-foreground">{user.email}</p>
-          <p className="mt-1 text-caption text-interactive-primary">
-            {profileId ? "My profile →" : "My account →"}
-          </p>
+          Ecosystem
         </Link>
       </div>
 
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
-        {MAIN_NAV.filter(
-          (item) => !item.adminOnly || user.role === "admin",
-        ).map((item) => {
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
+      <nav
+        aria-label="Main navigation"
+        className="flex shrink-0 flex-col px-3 py-4"
+      >
+        <ul className="flex flex-col gap-0.5">
+          {activeNav.map((item) => (
+            <li key={item.href}>
+              <SidebarNavLink
+                item={item}
+                isActive={isNavItemActive(pathname, item)}
+              />
+            </li>
+          ))}
+        </ul>
 
-          if (item.disabled) {
-            return (
-              <span
-                key={item.href}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-body text-muted-foreground opacity-60"
-                aria-disabled="true"
-              >
-                <item.icon className="size-4" />
-                <span>{item.label}</span>
-                {item.phase ? (
-                  <span className="ml-auto text-label">Phase {item.phase}</span>
-                ) : null}
-              </span>
-            );
-          }
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-body transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/70",
-              )}
-            >
-              <item.icon className="size-4" />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
+        {upcomingNav.length > 0 ? (
+          <div className="mt-8">
+            <p className="mb-2 px-3 text-label font-medium uppercase tracking-wide text-muted-foreground">
+              Coming soon
+            </p>
+            <ul className="flex flex-col gap-0.5">
+              {upcomingNav.map((item) => (
+                <li key={item.href}>
+                  <SidebarNavPlaceholder item={item} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </nav>
 
-      <div className="shrink-0 space-y-2 border-t border-sidebar-border p-3">
+      <div className="mt-auto shrink-0 border-t border-sidebar-border p-3">
         <Link
           href={meHref}
+          aria-current={isMeActive ? "page" : undefined}
           className={cn(
-            "flex items-center rounded-md px-3 py-2 text-body transition-colors",
-            isMeActive
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent/70",
+            "mb-3 block rounded-md px-3 py-2.5 transition-colors hover:bg-sidebar-accent/70",
+            isMeActive && "bg-sidebar-accent text-sidebar-accent-foreground",
           )}
         >
-          {profileId ? "My profile" : "My account"}
+          <p className="truncate text-subheading font-medium">{user.full_name}</p>
+          <p className="truncate text-caption text-muted-foreground">
+            {user.email}
+          </p>
+          <p className="mt-1 text-caption text-interactive-primary">
+            {profileId ? "My profile" : "My account"}
+          </p>
         </Link>
         <form action={signOut}>
           <Button type="submit" variant="outline" className="w-full">

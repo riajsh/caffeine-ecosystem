@@ -1,8 +1,9 @@
-import Link from "next/link";
+import { Suspense } from "react";
 
 import { EditProfileForm } from "@/components/profiles/edit-profile-form";
 import { EditRelationshipForm } from "@/components/profiles/edit-relationship-form";
 import { ProfileDetailTabs } from "@/components/profiles/profile-detail-tabs";
+import { ProfileFullPageLink } from "@/components/profiles/profile-full-page-link";
 import { ProfileHeader } from "@/components/profiles/profile-header";
 import { ProfileNetworkIntelligence } from "@/components/profiles/profile-network-intelligence";
 import { ProfileOwnersSection } from "@/components/profiles/profile-owners-section";
@@ -11,6 +12,7 @@ import { ProfileTagsSection } from "@/components/profiles/profile-tags-section";
 import type { ProfileDetail } from "@/lib/data/profiles";
 import type { OrgTag } from "@/lib/data/tags";
 import type { OrgUser } from "@/lib/data/users";
+import type { ProfileTab } from "@/lib/profiles/tab";
 
 type ProfileDetailViewProps = {
   profile: ProfileDetail;
@@ -18,9 +20,13 @@ type ProfileDetailViewProps = {
   orgTags: OrgTag[];
   networkIntel: ProfileNetworkIntel;
   currentUserId: string;
-  defaultTab?: "activity" | "connections" | "events" | "notes";
+  defaultTab?: ProfileTab;
   mode?: "page" | "drawer";
 };
+
+function ProfileTabsFallback() {
+  return <div className="h-48 animate-pulse rounded-lg bg-muted/40" />;
+}
 
 export function ProfileDetailView({
   profile,
@@ -33,7 +39,7 @@ export function ProfileDetailView({
 }: ProfileDetailViewProps) {
   return (
     <div className={mode === "drawer" ? "space-y-8" : "space-y-8 px-8 py-6"}>
-      <ProfileHeader profile={profile} mode={mode} />
+      <ProfileHeader profile={profile} />
 
       <ProfileNetworkIntelligence profileId={profile.id} intel={networkIntel} />
 
@@ -67,22 +73,27 @@ export function ProfileDetailView({
 
       <section className="space-y-3">
         <h2 className="text-heading font-medium text-foreground">Timeline</h2>
-        <ProfileDetailTabs
-          profile={profile}
-          teamUsers={teamUsers}
-          currentUserId={currentUserId}
-          defaultTab={defaultTab}
-        />
+        <Suspense fallback={<ProfileTabsFallback />}>
+          <ProfileDetailTabs
+            key={profile.id}
+            profile={profile}
+            teamUsers={teamUsers}
+            currentUserId={currentUserId}
+            defaultTab={defaultTab}
+          />
+        </Suspense>
       </section>
 
       {mode === "drawer" ? (
         <div className="border-t border-border pt-4">
-          <Link
-            href={`/profiles/${profile.id}`}
-            className="text-body text-interactive-primary hover:underline"
-          >
-            View full profile page →
-          </Link>
+          <Suspense fallback={null}>
+            <ProfileFullPageLink
+              profileId={profile.id}
+              className="text-body text-interactive-primary hover:underline"
+            >
+              View full profile page →
+            </ProfileFullPageLink>
+          </Suspense>
         </div>
       ) : null}
     </div>

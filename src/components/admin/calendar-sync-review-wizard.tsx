@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import {
   createProfileFromCalendarReviewAction,
@@ -22,6 +22,8 @@ import type {
   CalendarUnmatchedGroup,
 } from "@/lib/data/calendar-sync-review";
 import { formatInteractionDate } from "@/lib/format/date";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 type CalendarSyncReviewWizardProps = {
   summary: CalendarSyncReviewSummary;
@@ -45,7 +47,7 @@ function formatMeetingContext(group: CalendarUnmatchedGroup): string {
 
 function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { isPending, run } = useAsyncAction();
   const [error, setError] = useState<string | null>(null);
 
   return (
@@ -65,8 +67,8 @@ function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
         variant="outline"
         disabled={isPending}
         onClick={() => {
-          setError(null);
-          startTransition(async () => {
+          void run(async () => {
+            setError(null);
             const formData = new FormData();
             formData.set("email", group.email);
             const result = await ignoreCalendarReviewAction(formData);
@@ -74,6 +76,7 @@ function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
               setError(result.error);
               return;
             }
+            toastSuccess("Review ignored");
             router.refresh();
           });
         }}
@@ -89,7 +92,7 @@ function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
 
 function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { isPending, run } = useAsyncAction();
   const [error, setError] = useState<string | null>(null);
   const [linkQuery, setLinkQuery] = useState(group.displayName ?? "");
   const [candidates, setCandidates] = useState<
@@ -110,14 +113,15 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
     setSelectedProfileId(result.profiles[0]?.id ?? null);
   }
 
-  function runAction(action: () => Promise<{ error?: string }>) {
-    setError(null);
-    startTransition(async () => {
+  function runAction(action: () => Promise<{ error?: string }>, successMessage: string) {
+    void run(async () => {
+      setError(null);
       const result = await action();
       if (result.error) {
         setError(result.error);
         return;
       }
+      toastSuccess(successMessage);
       router.refresh();
     });
   }
@@ -143,7 +147,7 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
             const formData = new FormData();
             formData.set("email", group.email);
             formData.set("displayName", group.displayName ?? "");
-            runAction(() => createProfileFromCalendarReviewAction(formData));
+            runAction(() => createProfileFromCalendarReviewAction(formData), "Profile created");
           }}
         >
           Create profile
@@ -156,7 +160,7 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
           onClick={() => {
             const formData = new FormData();
             formData.set("email", group.email);
-            runAction(() => ignoreCalendarReviewAction(formData));
+            runAction(() => ignoreCalendarReviewAction(formData), "Review ignored");
           }}
         >
           Ignore
@@ -178,7 +182,7 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
             variant="outline"
             disabled={isPending}
             onClick={() => {
-              startTransition(handleSearch);
+              void run(handleSearch);
             }}
           >
             Search
@@ -214,7 +218,7 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
                 const formData = new FormData();
                 formData.set("email", group.email);
                 formData.set("profileId", selectedProfileId);
-                runAction(() => linkCalendarReviewAction(formData));
+                runAction(() => linkCalendarReviewAction(formData), "Profile linked");
               }}
             >
               Link selected profile
@@ -234,7 +238,7 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
 
 function TeamReviewSection({ groups }: { groups: CalendarUnmatchedGroup[] }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { isPending, run } = useAsyncAction();
   const [error, setError] = useState<string | null>(null);
 
   if (groups.length === 0) {
@@ -257,13 +261,14 @@ function TeamReviewSection({ groups }: { groups: CalendarUnmatchedGroup[] }) {
           variant="outline"
           disabled={isPending}
           onClick={() => {
-            setError(null);
-            startTransition(async () => {
+            void run(async () => {
+              setError(null);
               const result = await ignoreAllInternalCalendarReviewsAction();
               if (result.error) {
                 setError(result.error);
                 return;
               }
+              toastSuccess("Team reviews ignored");
               router.refresh();
             });
           }}

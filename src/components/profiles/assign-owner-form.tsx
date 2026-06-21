@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import { assignOwnerAction } from "@/app/(app)/profiles/[id]/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -15,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import type { OrgUser } from "@/lib/data/users";
 import { formatEnumLabel } from "@/lib/format/enum";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 const STRENGTH_OPTIONS = [
   "inner_circle",
@@ -36,7 +39,8 @@ export function AssignOwnerForm({
   assignedUserIds,
 }: AssignOwnerFormProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
   const [isOpen, setIsOpen] = useState(false);
   const [userId, setUserId] = useState("");
   const [strength, setStrength] = useState<string>("unknown");
@@ -75,12 +79,13 @@ export function AssignOwnerForm({
   return (
     <form
       action={(formData) => {
-        startTransition(async () => {
+        void run(async () => {
           const result = await assignOwnerAction(formData);
           if (result.error) {
-            window.alert(result.error);
+            await alert({ title: "Could not assign owner", description: result.error });
             return;
           }
+          toastSuccess("Owner assigned");
           setUserId("");
           setStrength("unknown");
           setIsOpen(false);

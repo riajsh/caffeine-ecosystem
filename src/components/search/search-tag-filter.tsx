@@ -1,7 +1,8 @@
-import Link from "next/link";
-
-import { Badge } from "@/components/ui/badge";
 import { buildSearchTagHref } from "@/components/search/search-filters";
+import {
+  FilterChipLink,
+  FilterChipRow,
+} from "@/components/filters/filter-chips";
 import type { OrgTag } from "@/lib/data/tags";
 
 type SearchTagFilterProps = {
@@ -30,18 +31,22 @@ export function SearchTagFilter({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-caption text-muted-foreground">Tag:</span>
-      <Link href={buildSearchTagHref(undefined, filterOptions)}>
-        <Badge variant={activeTagId ? "secondary" : "default"}>All</Badge>
-      </Link>
+    <FilterChipRow label="Tags:">
+      <FilterChipLink
+        href={buildSearchTagHref(undefined, filterOptions)}
+        isActive={!activeTagId}
+      >
+        All
+      </FilterChipLink>
       {tags.map((tag) => (
-        <Link key={tag.id} href={buildSearchTagHref(tag.id, filterOptions)}>
-          <Badge variant={activeTagId === tag.id ? "default" : "secondary"}>
-            {tag.name}
-          </Badge>
-        </Link>
+        <FilterChipLink
+          key={tag.id}
+          href={buildSearchTagHref(tag.id, filterOptions)}
+          isActive={activeTagId === tag.id}
+        >
+          {tag.name}
+        </FilterChipLink>
       ))}
-    </div>
+    </FilterChipRow>
   );
 }

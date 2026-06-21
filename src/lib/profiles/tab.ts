@@ -11,3 +11,10 @@ export function parseProfileTab(value: string | undefined): ProfileTab | undefin
     ? (value as ProfileTab)
     : undefined;
 }
+
+export function parseProfileTabOrDefault(
+  value: string | undefined,
+  fallback: ProfileTab = "activity",
+): ProfileTab {
+  return parseProfileTab(value) ?? fallback;
+}

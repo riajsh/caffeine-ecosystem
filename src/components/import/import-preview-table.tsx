@@ -22,7 +22,7 @@ export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
   const columns = [...new Set(rows.flatMap((row) => Object.keys(row.raw)))];
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    <div className="rounded-lg border border-border bg-card">
       <Table>
         <TableHeader>
           <TableRow>

@@ -1,12 +1,11 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Breadcrumbs } from "@/components/app-shell/breadcrumbs";
 import { PageHeader } from "@/components/app-shell/page-header";
 import { AddEventAttendeeForm } from "@/components/events/add-event-attendee-form";
 import { EventAttendeesTable } from "@/components/events/event-attendees-table";
 import { EventConnectionsSection } from "@/components/events/event-connections-section";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { InferCoAttendanceButton } from "@/components/events/infer-co-attendance-button";
 import { formatInteractionDate } from "@/lib/format/date";
@@ -38,10 +37,16 @@ export default async function EventPage({ params }: EventPageProps) {
 
   return (
     <>
+      <div className="border-b border-border px-8 pt-6">
+        <Breadcrumbs
+          items={[
+            { label: "Events", href: "/events" },
+            { label: event.title },
+          ]}
+        />
+      </div>
       <PageHeader title={event.title}>
-        <Button asChild variant="outline">
-          <Link href="/events">Back to events</Link>
-        </Button>
+        <DeleteEventButton eventId={event.id} eventTitle={event.title} />
       </PageHeader>
       <div className="space-y-8 px-8 py-6">
         <section className="space-y-3 rounded-lg border border-border bg-card p-6">
@@ -68,7 +73,6 @@ export default async function EventPage({ params }: EventPageProps) {
               eventId={event.id}
               attendeeCount={event.attendeeCount}
             />
-            <DeleteEventButton eventId={event.id} eventTitle={event.title} />
           </div>
         </section>
 

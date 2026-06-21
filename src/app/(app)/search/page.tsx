@@ -67,40 +67,45 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const hasProfileFilters = Boolean(tagId || ownerUserId || status);
 
   return (
-    <>
-      <PageHeader
-        title="Search"
-        description="Evidence-rich results across profiles, activity, events, and email."
-      />
-      <div className="space-y-8 px-8 py-6">
-        <SearchForm
-          defaultQuery={query}
-          preserveParams={{
-            tag: tagId,
-            owner: ownerUserId,
-            status,
-          }}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="sticky top-0 z-20 shrink-0 bg-background">
+        <PageHeader
+          title="Search"
+          description="Evidence-rich results across profiles, activity, events, and email."
         />
-        <SearchTagFilter
-          tags={orgTags}
-          query={query}
-          activeTagId={tagId}
-          activeOwnerId={ownerUserId}
-          activeStatus={status}
-        />
-        <SearchFilters
-          query={query}
-          teamUsers={teamUsers}
-          activeTagId={tagId}
-          activeOwnerId={ownerUserId}
-          activeStatus={status}
-        />
+        <div className="space-y-3 border-b border-border px-8 pb-4">
+          <SearchForm
+            defaultQuery={query}
+            autoFocus
+            preserveParams={{
+              tag: tagId,
+              owner: ownerUserId,
+              status,
+            }}
+          />
+          <SearchTagFilter
+            tags={orgTags}
+            query={query}
+            activeTagId={tagId}
+            activeOwnerId={ownerUserId}
+            activeStatus={status}
+          />
+          <SearchFilters
+            query={query}
+            teamUsers={teamUsers}
+            activeTagId={tagId}
+            activeOwnerId={ownerUserId}
+            activeStatus={status}
+          />
+        </div>
+      </div>
+      <div className="px-8 py-6">
         <SearchResults
           query={query}
           results={results}
           hasProfileFilters={hasProfileFilters}
         />
       </div>
-    </>
+    </div>
   );
 }

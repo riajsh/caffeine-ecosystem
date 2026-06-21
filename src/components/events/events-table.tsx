@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -24,20 +25,21 @@ export function EventsTable({ events }: EventsTableProps) {
 
   if (events.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-6 py-12 text-center">
-        <p className="text-subheading font-medium text-foreground">No events yet</p>
-        <p className="mt-2 text-body text-muted-foreground">
-          Create PU dinners, roundtables, and workshops — then add attendees to
-          build the attendance graph.
+      <EmptyState
+        title="No events yet"
+        description="Create PU dinners, roundtables, and workshops — then add attendees to build the attendance graph."
+      >
+        <p className="text-caption text-muted-foreground">
+          Use the New event button above to get started.
         </p>
-      </div>
+      </EmptyState>
     );
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       <Table>
-        <TableHeader>
+        <TableHeader className="sticky top-0 z-10 bg-card [&_tr]:border-b">
           <TableRow>
             <TableHead>Title</TableHead>
             <TableHead>Type</TableHead>
@@ -53,7 +55,7 @@ export function EventsTable({ events }: EventsTableProps) {
               tabIndex={0}
               role="link"
               aria-label={`Open event ${event.title}`}
-              className="cursor-pointer hover:bg-muted/50"
+              className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
               onClick={() => router.push(`/events/${event.id}`)}
               onKeyDown={(keydownEvent) => {
                 if (keydownEvent.key === "Enter" || keydownEvent.key === " ") {

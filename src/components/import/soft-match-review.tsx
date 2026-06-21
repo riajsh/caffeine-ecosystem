@@ -14,12 +14,24 @@ type SoftMatchReviewProps = {
 
 export function SoftMatchReview({ importId, rows }: SoftMatchReviewProps) {
   const [error, setError] = useState<string | null>(null);
+  const [resolvingRowId, setResolvingRowId] = useState<string | null>(null);
 
   async function handleResolve(formData: FormData) {
+    const rowId = String(formData.get("rowId") ?? "");
+    if (resolvingRowId) {
+      return;
+    }
+
+    setResolvingRowId(rowId);
     setError(null);
-    const result = await resolveSoftMatchAction(formData);
-    if (result?.error) {
-      setError(result.error);
+
+    try {
+      const result = await resolveSoftMatchAction(formData);
+      if (result?.error) {
+        setError(result.error);
+      }
+    } finally {
+      setResolvingRowId(null);
     }
   }
 
@@ -84,6 +96,7 @@ export function SoftMatchReview({ importId, rows }: SoftMatchReviewProps) {
                   <Button
                     type="submit"
                     size="sm"
+                    disabled={resolvingRowId !== null}
                     variant={action === "confirm" ? "default" : "outline"}
                   >
                     {action === "confirm"

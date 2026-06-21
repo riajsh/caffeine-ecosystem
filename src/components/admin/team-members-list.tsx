@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
 
+import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
 import type { OrgUser } from "@/lib/data/users";
 import { TEAM_MEMBER_TITLES } from "@/config/team-members";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 function initials(name: string): string {
   return name
@@ -21,66 +23,38 @@ type TeamMembersListProps = {
 
 export function TeamMembersList({ users }: TeamMembersListProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
+  const { isPending, run } = useAsyncAction();
+
+  if (users.length === 0) {
+    return (
+      <EmptyState
+        variant="dashed"
+        title="No team members yet"
+        description="V1 provisions sign-in via Supabase Auth and scripts/sync-pu-team.mjs. Run the sync script after adding someone in Supabase Auth."
+      >
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isPending}
+          onClick={() => void run(async () => router.refresh())}
+        >
+          Refresh
+        </Button>
+      </EmptyState>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-border bg-card p-4">
+      <section className="rounded-lg border border-dashed border-border bg-muted/30 p-5">
         <h2 className="text-subheading font-medium text-foreground">
-          Add team member
+          Adding team members
         </h2>
         <p className="mt-2 text-body text-muted-foreground">
           V1 provisions sign-in via Supabase Auth and{" "}
           <code className="text-caption">scripts/sync-pu-team.mjs</code>. Inline
           add/edit ships in a later pass.
         </p>
-        <form
-          className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setMessage(
-              "Team provisioning is script-driven in V1. Run sync-pu-team.mjs after adding someone in Supabase Auth.",
-            );
-          }}
-        >
-          <label className="space-y-1 text-body">
-            <span className="text-caption text-muted-foreground">Name</span>
-            <input
-              disabled
-              placeholder="Full name"
-              className="w-full rounded-md border border-border bg-muted/30 px-3 py-2"
-            />
-          </label>
-          <label className="space-y-1 text-body">
-            <span className="text-caption text-muted-foreground">Email</span>
-            <input
-              disabled
-              placeholder="name@previously.co"
-              className="w-full rounded-md border border-border bg-muted/30 px-3 py-2"
-            />
-          </label>
-          <label className="space-y-1 text-body">
-            <span className="text-caption text-muted-foreground">Role</span>
-            <input
-              disabled
-              placeholder="e.g. Partnerships"
-              className="w-full rounded-md border border-border bg-muted/30 px-3 py-2"
-            />
-          </label>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled
-              className="rounded-md bg-muted px-4 py-2 text-body text-muted-foreground"
-            >
-              Add
-            </button>
-          </div>
-        </form>
-        {message ? (
-          <p className="mt-3 text-body text-muted-foreground">{message}</p>
-        ) : null}
       </section>
 
       <ul className="divide-y divide-border rounded-lg border border-border bg-card">
@@ -90,10 +64,7 @@ export function TeamMembersList({ users }: TeamMembersListProps) {
             (user.role === "admin" ? "Admin" : "Member");
 
           return (
-            <li
-              key={user.id}
-              className="flex items-center gap-4 px-4 py-4"
-            >
+            <li key={user.id} className="flex items-center gap-4 px-4 py-4">
               <div
                 aria-hidden
                 className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-body font-medium text-foreground"
@@ -112,21 +83,6 @@ export function TeamMembersList({ users }: TeamMembersListProps) {
           );
         })}
       </ul>
-
-      {users.length === 0 ? (
-        <p className="text-body text-muted-foreground">
-          No team users found. Run{" "}
-          <button
-            type="button"
-            className="underline"
-            disabled={isPending}
-            onClick={() => startTransition(() => router.refresh())}
-          >
-            refresh
-          </button>{" "}
-          after seeding or sync.
-        </p>
-      ) : null}
     </div>
   );
 }

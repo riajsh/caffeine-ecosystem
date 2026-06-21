@@ -1,5 +1,9 @@
 import Link from "next/link";
 
+import {
+  FilterChipLink,
+  FilterChipRow,
+} from "@/components/filters/filter-chips";
 import { Badge } from "@/components/ui/badge";
 import type { OrgUser } from "@/lib/data/users";
 import { formatEnumLabel } from "@/lib/format/enum";
@@ -60,34 +64,34 @@ export function ProfilesListFilters({
   return (
     <div className="space-y-3">
       {activeCompany ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-caption text-muted-foreground">Company:</span>
+        <FilterChipRow label="Company:">
           <Badge variant="default">{activeCompany}</Badge>
-          <Link
+          <FilterChipLink
             href={buildProfilesHref({
               tag: activeTagId,
               owner: activeOwnerId,
               status: activeStatus,
             })}
+            isActive={false}
           >
-            <Badge variant="secondary">Clear company</Badge>
-          </Link>
-        </div>
+            Clear company
+          </FilterChipLink>
+        </FilterChipRow>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-caption text-muted-foreground">Owner:</span>
-        <Link
+      <FilterChipRow label="Owner:">
+        <FilterChipLink
           href={buildProfilesHref({
             tag: activeTagId,
             status: activeStatus,
             company: activeCompany,
           })}
+          isActive={!activeOwnerId}
         >
-          <Badge variant={activeOwnerId ? "secondary" : "default"}>All</Badge>
-        </Link>
+          All
+        </FilterChipLink>
         {teamUsers.map((user) => (
-          <Link
+          <FilterChipLink
             key={user.id}
             href={buildProfilesHref({
               tag: activeTagId,
@@ -95,27 +99,26 @@ export function ProfilesListFilters({
               status: activeStatus,
               company: activeCompany,
             })}
+            isActive={activeOwnerId === user.id}
           >
-            <Badge variant={activeOwnerId === user.id ? "default" : "secondary"}>
-              {user.fullName}
-            </Badge>
-          </Link>
+            {user.fullName}
+          </FilterChipLink>
         ))}
-      </div>
+      </FilterChipRow>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-caption text-muted-foreground">Status:</span>
-        <Link
+      <FilterChipRow label="Status:">
+        <FilterChipLink
           href={buildProfilesHref({
             tag: activeTagId,
             owner: activeOwnerId,
             company: activeCompany,
           })}
+          isActive={!activeStatus}
         >
-          <Badge variant={activeStatus ? "secondary" : "default"}>All</Badge>
-        </Link>
+          All
+        </FilterChipLink>
         {STATUS_OPTIONS.map((status) => (
-          <Link
+          <FilterChipLink
             key={status}
             href={buildProfilesHref({
               tag: activeTagId,
@@ -123,13 +126,12 @@ export function ProfilesListFilters({
               status,
               company: activeCompany,
             })}
+            isActive={activeStatus === status}
           >
-            <Badge variant={activeStatus === status ? "default" : "secondary"}>
-              {formatEnumLabel(status)}
-            </Badge>
-          </Link>
+            {formatEnumLabel(status)}
+          </FilterChipLink>
         ))}
-      </div>
+      </FilterChipRow>
 
       {hasFilters ? (
         <Link

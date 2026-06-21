@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 import {
   Tabs,
@@ -8,10 +10,12 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatInteractionDate } from "@/lib/format/date";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { ProfileDetail } from "@/lib/data/profiles";
 import type { OrgUser } from "@/lib/data/users";
+import { parseProfileTab, type ProfileTab } from "@/lib/profiles/tab";
 
 import { ActivityTimeline } from "./activity-timeline";
 import { LogActivityForm } from "./log-activity-form";
@@ -21,7 +25,7 @@ type ProfileDetailTabsProps = {
   profile: ProfileDetail;
   teamUsers: OrgUser[];
   currentUserId: string;
-  defaultTab?: "activity" | "connections" | "events" | "notes";
+  defaultTab?: ProfileTab;
 };
 
 export function ProfileDetailTabs({
@@ -30,8 +34,32 @@ export function ProfileDetailTabs({
   currentUserId,
   defaultTab = "activity",
 }: ProfileDetailTabsProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabFromUrl = parseProfileTab(searchParams.get("tab") ?? undefined);
+  const [activeTab, setActiveTab] = useState<ProfileTab>(
+    () => tabFromUrl ?? defaultTab,
+  );
+
+  function onTabChange(value: string) {
+    const nextTab = value as ProfileTab;
+    setActiveTab(nextTab);
+
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (nextTab === "activity") {
+      params.delete("tab");
+    } else {
+      params.set("tab", nextTab);
+    }
+
+    const query = params.toString();
+    const url = query ? `${pathname}?${query}` : pathname;
+    window.history.replaceState(null, "", url);
+  }
+
   return (
-    <Tabs defaultValue={defaultTab} className="gap-6">
+    <Tabs value={activeTab} onValueChange={onTabChange} className="gap-6">
       <TabsList variant="line">
         <TabsTrigger value="activity">Activity</TabsTrigger>
         <TabsTrigger value="connections">Connections</TabsTrigger>
@@ -62,18 +90,18 @@ export function ProfileDetailTabs({
 
       <TabsContent value="events">
         {profile.events.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-10 text-center">
-            <p className="text-subheading font-medium text-foreground">
-              No events attended
-            </p>
-            <p className="mt-2 text-body text-muted-foreground">
-              Add this profile as an attendee on an{" "}
-              <Link href="/events" className="text-foreground underline">
-                event
-              </Link>
-              .
-            </p>
-          </div>
+          <EmptyState
+            variant="dashed"
+            title="No events attended"
+            description="Add this profile as an attendee on an event."
+          >
+            <Link
+              href="/events"
+              className="text-body text-interactive-primary hover:underline"
+            >
+              Browse events →
+            </Link>
+          </EmptyState>
         ) : (
           <ul className="divide-y divide-border rounded-lg border border-border bg-card">
             {profile.events.map((event) => (
@@ -104,9 +132,11 @@ export function ProfileDetailTabs({
             {profile.relationship.notes}
           </p>
         ) : (
-          <p className="text-body text-muted-foreground">
-            No org-level relationship notes yet.
-          </p>
+          <EmptyState
+            variant="dashed"
+            title="No relationship notes"
+            description="Org-level notes about this relationship appear here once added."
+          />
         )}
       </TabsContent>
     </Tabs>

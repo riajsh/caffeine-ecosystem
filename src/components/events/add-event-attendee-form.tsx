@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -8,9 +8,12 @@ import {
   searchProfilesForPickerAction,
 } from "@/app/(app)/events/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProfilePickerOption } from "@/lib/data/profiles";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 type AddEventAttendeeFormProps = {
   eventId: string;
@@ -22,8 +25,9 @@ export function AddEventAttendeeForm({
   existingProfileIds,
 }: AddEventAttendeeFormProps) {
   const router = useRouter();
-  const [isSubmitting, startSubmitTransition] = useTransition();
-  const [isSearching, startSearchTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending: isSubmitting, run: runSubmit } = useAsyncAction();
+  const { isPending: isSearching, run: runSearch } = useAsyncAction();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProfilePickerOption[]>([]);
   const [selectedProfile, setSelectedProfile] =
@@ -44,9 +48,13 @@ export function AddEventAttendeeForm({
     }
 
     searchTimeoutRef.current = window.setTimeout(() => {
-      startSearchTransition(async () => {
+      void runSearch(async () => {
         const response = await searchProfilesForPickerAction(value);
         if (response.error) {
+          await alert({
+            title: "Search failed",
+            description: response.error,
+          });
           return;
         }
 
@@ -62,17 +70,21 @@ export function AddEventAttendeeForm({
   return (
     <form
       action={(formData) => {
-        if (!selectedProfile) {
-          window.alert("Select a profile from the search results.");
-          return;
-        }
-
-        startSubmitTransition(async () => {
-          const result = await addEventAttendeeAction(formData);
-          if (result.error) {
-            window.alert(result.error);
+        void runSubmit(async () => {
+          if (!selectedProfile) {
+            await alert({
+              title: "Select a profile",
+              description: "Choose someone from the search results before adding them as an attendee.",
+            });
             return;
           }
+
+          const result = await addEventAttendeeAction(formData);
+          if (result.error) {
+            await alert({ title: "Could not add attendee", description: result.error });
+            return;
+          }
+          toastSuccess("Attendee added");
           setQuery("");
           setResults([]);
           setSelectedProfile(null);

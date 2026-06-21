@@ -17,7 +17,7 @@ export default async function OverviewPage() {
       listRecentOrgActivities(8),
       listUpcomingEvents(5),
       listRecentPastEvents(5),
-      getReconnectSuggestions(5),
+      getReconnectSuggestions(3),
       getOwnershipSummary(),
     ]);
 
@@ -25,22 +25,27 @@ export default async function OverviewPage() {
     <>
       <PageHeader
         title="Overview"
-        description="Search is the centre of gravity. Start here, then drill into profiles."
+        description="Start with search, then follow signals into profiles, Connect, and Events."
       />
       <div className="space-y-8 px-8 py-6">
         <section className="space-y-3">
-          <h2 className="text-heading font-medium text-foreground">Search</h2>
           <SearchForm />
-          <p className="text-caption text-muted-foreground">
-            Searches profiles, tags, activity, events, and email subjects.
-            Email body matches appear for owners and admins only.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-caption text-muted-foreground">
+              Profiles, tags, activity, events, and email subjects. Body matches
+              for owners and admins only.
+            </p>
+            <Link
+              href="/search"
+              className="text-caption text-interactive-primary hover:underline"
+            >
+              Advanced search with filters →
+            </Link>
+          </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="md:col-span-2">
-            <RecentActivityCard activities={recentActivity} />
-          </div>
+        <section className="grid gap-4 md:grid-cols-2">
+          <RecentActivityCard activities={recentActivity} />
           <OverviewEventsCard
             upcomingEvents={upcomingEvents}
             recentEvents={recentEvents}
@@ -53,10 +58,14 @@ export default async function OverviewPage() {
           Browse the full graph in{" "}
           <Link href="/profiles" className="text-foreground underline">
             Profiles
-          </Link>{" "}
-          or review{" "}
-          <Link href="/events" className="text-foreground underline">
-            Events
+          </Link>
+          , review suggestions on{" "}
+          <Link href="/connect" className="text-foreground underline">
+            Connect
+          </Link>
+          , or explore{" "}
+          <Link href="/orbit" className="text-foreground underline">
+            Orbit
           </Link>
           .
         </p>

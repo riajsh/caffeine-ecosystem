@@ -1,29 +1,33 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
 
 import {
   inferAllCoAttendanceAction,
   inferSameCompanyAction,
 } from "@/app/(app)/admin/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 export function InferAllCoAttendanceButton() {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
 
   return (
     <form
       action={() => {
-        startTransition(async () => {
+        void run(async () => {
           const result = await inferAllCoAttendanceAction();
           if (result.error) {
-            window.alert(result.error);
+            await alert({ title: "Inference failed", description: result.error });
             return;
           }
-          window.alert(
-            `Co-attendance: ${result.created} created, ${result.skipped} skipped.`,
+          toastSuccess(
+            "Co-attendance inference complete",
+            `${result.created} created, ${result.skipped} skipped.`,
           );
           router.refresh();
         });
@@ -38,19 +42,21 @@ export function InferAllCoAttendanceButton() {
 
 export function InferSameCompanyButton() {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
 
   return (
     <form
       action={() => {
-        startTransition(async () => {
+        void run(async () => {
           const result = await inferSameCompanyAction();
           if (result.error) {
-            window.alert(result.error);
+            await alert({ title: "Inference failed", description: result.error });
             return;
           }
-          window.alert(
-            `Same company: ${result.created} created, ${result.skipped} skipped.`,
+          toastSuccess(
+            "Same-company inference complete",
+            `${result.created} created, ${result.skipped} skipped.`,
           );
           router.refresh();
         });

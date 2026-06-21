@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import {
   addProfileTagAction,
@@ -9,6 +9,7 @@ import {
 } from "@/app/(app)/profiles/[id]/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -19,6 +20,8 @@ import {
 } from "@/components/ui/select";
 import type { OrgTag } from "@/lib/data/tags";
 import { formatEnumLabel } from "@/lib/format/enum";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 type ProfileTagsSectionProps = {
   profileId: string;
@@ -32,7 +35,8 @@ export function ProfileTagsSection({
   orgTags,
 }: ProfileTagsSectionProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
   const [isEditing, setIsEditing] = useState(false);
   const [tagId, setTagId] = useState("");
 
@@ -41,12 +45,13 @@ export function ProfileTagsSection({
 
   function runAction(action: (formData: FormData) => Promise<{ error?: string }>) {
     return (formData: FormData) => {
-      startTransition(async () => {
+      void run(async () => {
         const result = await action(formData);
         if (result.error) {
-          window.alert(result.error);
+          await alert({ title: "Could not update tags", description: result.error });
           return;
         }
+        toastSuccess("Tags updated");
         setTagId("");
         router.refresh();
       });

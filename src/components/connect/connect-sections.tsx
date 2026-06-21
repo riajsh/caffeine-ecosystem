@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatInteractionDate } from "@/lib/format/date";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type {
@@ -23,10 +24,7 @@ function EmptySection({
   description: string;
 }) {
   return (
-    <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-10 text-center">
-      <p className="text-subheading font-medium text-foreground">{title}</p>
-      <p className="mt-2 text-body text-muted-foreground">{description}</p>
-    </div>
+    <EmptyState variant="dashed" title={title} description={description} />
   );
 }
 

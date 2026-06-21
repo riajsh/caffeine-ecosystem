@@ -2,12 +2,15 @@
 
 import { redirect } from "next/navigation";
 
+import { formatLoginError } from "@/lib/auth/login-errors";
 import { ensureUserRow } from "@/lib/auth/session";
 import { publicEnv } from "@/lib/env/public";
 import { createClient } from "@/lib/supabase/server";
 
-function loginRedirect(error: string): never {
-  redirect(`/login?error=${encodeURIComponent(error)}`);
+function loginRedirect(error: string, source: "password" | "magic" = "password"): never {
+  redirect(
+    `/login?${source === "magic" ? "magic_error" : "error"}=${encodeURIComponent(error)}`,
+  );
 }
 
 export async function signInWithPassword(formData: FormData) {
@@ -31,7 +34,7 @@ export async function signInWithPassword(formData: FormData) {
   });
 
   if (error) {
-    loginRedirect(error.message);
+    loginRedirect(formatLoginError(error.message));
   }
 
   const {
@@ -62,7 +65,7 @@ export async function signInWithMagicLink(formData: FormData) {
     .toLowerCase();
 
   if (!email) {
-    redirect("/login?error=missing_email");
+    redirect("/login?magic_error=missing_email");
   }
 
   const supabase = await createClient();
@@ -75,7 +78,7 @@ export async function signInWithMagicLink(formData: FormData) {
   });
 
   if (error) {
-    redirect(`/login?error=${encodeURIComponent(error.message)}`);
+    loginRedirect(formatLoginError(error.message), "magic");
   }
 
   redirect("/login?message=check_email");

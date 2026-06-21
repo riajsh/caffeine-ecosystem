@@ -1,11 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+import { formatLoginError } from "@/lib/auth/login-errors";
+
 import { signInWithMagicLink, signInWithPassword } from "./actions";
 
 type LoginPageProps = {
   searchParams: Promise<{
     error?: string;
+    magic_error?: string;
     message?: string;
     next?: string;
   }>;
@@ -13,7 +16,12 @@ type LoginPageProps = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
-  const error = params.error;
+  const passwordError = params.error
+    ? formatLoginError(params.error)
+    : undefined;
+  const magicError = params.magic_error
+    ? formatLoginError(params.magic_error)
+    : undefined;
   const message = params.message;
   const showSeedHint = process.env.NODE_ENV === "development";
 
@@ -29,12 +37,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </p>
       </div>
 
-      {error ? (
+      {passwordError ? (
         <p
           className="mt-6 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-body text-destructive"
           role="alert"
         >
-          {error}
+          {passwordError}
         </p>
       ) : null}
 
@@ -85,7 +93,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             type="password"
             autoComplete="current-password"
             required
-            placeholder="••••••••"
+            placeholder="Your password"
           />
         </div>
 
@@ -101,10 +109,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       </div>
 
       <form action={signInWithMagicLink} className="space-y-4">
-        <p className="text-caption text-muted-foreground">
-          Magic links are rate-limited. Use password sign-in if you hit the
-          cooldown.
-        </p>
+        {magicError ? (
+          <p
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-body text-amber-950 dark:text-amber-100"
+            role="alert"
+          >
+            {magicError}
+          </p>
+        ) : (
+          <p className="text-caption text-muted-foreground">
+            Magic links are rate-limited. Use password sign-in if you hit the
+            cooldown.
+          </p>
+        )}
         <Input
           name="email"
           type="email"

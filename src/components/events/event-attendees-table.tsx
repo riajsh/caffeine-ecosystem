@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState } from "react";
 
 import { removeEventAttendeeAction } from "@/app/(app)/events/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import {
   Table,
   TableBody,
@@ -17,6 +19,8 @@ import {
 } from "@/components/ui/table";
 import type { EventAttendee } from "@/lib/data/events";
 import { isRegularEventAttendee } from "@/lib/event-attendance";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 type EventAttendeesTableProps = {
   eventId: string;
@@ -24,24 +28,75 @@ type EventAttendeesTableProps = {
   attendanceCounts: Record<string, number>;
 };
 
+function RemoveAttendeeButton({
+  eventId,
+  attendee,
+}: {
+  eventId: string;
+  attendee: EventAttendee;
+}) {
+  const router = useRouter();
+  const { confirm, alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  async function handleRemove() {
+    setIsConfirming(true);
+    try {
+      const confirmed = await confirm({
+        title: "Remove attendee",
+        description: `Remove ${attendee.fullName} from this event?`,
+        confirmLabel: "Remove",
+        destructive: true,
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      await run(async () => {
+        const formData = new FormData();
+        formData.set("eventId", eventId);
+        formData.set("profileId", attendee.profileId);
+        const result = await removeEventAttendeeAction(formData);
+        if (result.error) {
+          await alert({ title: "Could not remove attendee", description: result.error });
+          return;
+        }
+        toastSuccess("Attendee removed");
+        router.refresh();
+      });
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={isPending || isConfirming}
+      className="text-destructive hover:text-destructive"
+      onClick={handleRemove}
+    >
+      Remove
+    </Button>
+  );
+}
+
 export function EventAttendeesTable({
   eventId,
   attendees,
   attendanceCounts,
 }: EventAttendeesTableProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
   if (attendees.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-10 text-center">
-        <p className="text-subheading font-medium text-foreground">
-          No attendees yet
-        </p>
-        <p className="mt-2 text-body text-muted-foreground">
-          Search for profiles below to record who attended.
-        </p>
-      </div>
+      <EmptyState
+        variant="dashed"
+        title="No attendees yet"
+        description="Search for profiles below to record who attended."
+      />
     );
   }
 
@@ -65,65 +120,34 @@ export function EventAttendeesTable({
             );
 
             return (
-            <TableRow key={attendee.id}>
-              <TableCell>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link
-                    href={`/profiles/${attendee.profileId}`}
-                    className="font-medium text-foreground hover:underline"
-                  >
-                    {attendee.fullName}
-                  </Link>
-                  {isRegular ? (
-                    <Badge variant="outline">
-                      Regular · {eventCount} events
-                    </Badge>
-                  ) : null}
-                </div>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {attendee.organisationName ?? "—"}
-              </TableCell>
-              <TableCell>
-                <Badge variant={attendee.attended ? "default" : "secondary"}>
-                  {attendee.attended ? "Attended" : "Registered"}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <form
-                  action={(formData) => {
-                    if (
-                      !window.confirm(
-                        `Remove ${attendee.fullName} from this event?`,
-                      )
-                    ) {
-                      return;
-                    }
-
-                    startTransition(async () => {
-                      const result = await removeEventAttendeeAction(formData);
-                      if (result.error) {
-                        window.alert(result.error);
-                        return;
-                      }
-                      router.refresh();
-                    });
-                  }}
-                >
-                  <input type="hidden" name="eventId" value={eventId} />
-                  <input type="hidden" name="profileId" value={attendee.profileId} />
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    size="sm"
-                    disabled={isPending}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    Remove
-                  </Button>
-                </form>
-              </TableCell>
-            </TableRow>
+              <TableRow key={attendee.id}>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/profiles/${attendee.profileId}`}
+                      className="font-medium text-foreground hover:underline"
+                    >
+                      {attendee.fullName}
+                    </Link>
+                    {isRegular ? (
+                      <Badge variant="outline">
+                        Regular · {eventCount} events
+                      </Badge>
+                    ) : null}
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {attendee.organisationName ?? "—"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={attendee.attended ? "default" : "secondary"}>
+                    {attendee.attended ? "Attended" : "Registered"}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <RemoveAttendeeButton eventId={eventId} attendee={attendee} />
+                </TableCell>
+              </TableRow>
             );
           })}
         </TableBody>

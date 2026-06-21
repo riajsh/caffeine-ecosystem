@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState } from "react";
 
 import {
   removeConnectionAction,
@@ -11,6 +11,10 @@ import {
 import { AddConnectionForm } from "@/components/profiles/add-connection-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
+import { useAsyncAction } from "@/lib/use-async-action";
+import { toastSuccess } from "@/lib/toast";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { ProfileConnection } from "@/lib/data/profiles";
 import type { OrgUser } from "@/lib/data/users";
@@ -27,15 +31,69 @@ function isInferredConnection(source: string): boolean {
   return source.startsWith("inferred_");
 }
 
+function RemoveConnectionButton({
+  profileId,
+  connection,
+}: {
+  profileId: string;
+  connection: ProfileConnection;
+}) {
+  const router = useRouter();
+  const { confirm, alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  async function handleRemove() {
+    setIsConfirming(true);
+    try {
+      const confirmed = await confirm({
+        title: "Remove connection",
+        description: `Remove connection to ${connection.otherFullName}?`,
+        confirmLabel: "Remove",
+        destructive: true,
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      await run(async () => {
+        const formData = new FormData();
+        formData.set("profileId", profileId);
+        formData.set("connectionId", connection.id);
+        const result = await removeConnectionAction(formData);
+        if (result.error) {
+          await alert({ title: "Could not remove connection", description: result.error });
+          return;
+        }
+        toastSuccess("Connection removed");
+        router.refresh();
+      });
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={isPending || isConfirming}
+      className="text-destructive hover:text-destructive"
+      onClick={handleRemove}
+    >
+      Remove
+    </Button>
+  );
+}
+
 export function ProfileConnectionsSection({
   profileId,
   connections,
   teamUsers,
   currentUserId,
 }: ProfileConnectionsSectionProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
   const excludedProfileIds = [
     profileId,
     ...connections.map((connection) => connection.otherProfileId),
@@ -52,14 +110,11 @@ export function ProfileConnectionsSection({
       />
 
       {connections.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-10 text-center">
-          <p className="text-subheading font-medium text-foreground">
-            No connections recorded
-          </p>
-          <p className="mt-2 text-body text-muted-foreground">
-            Manual and inferred profile-to-person edges appear here.
-          </p>
-        </div>
+        <EmptyState
+          variant="dashed"
+          title="No connections recorded"
+          description="Manual and inferred profile-to-person edges appear here."
+        />
       ) : (
         <ul className="space-y-3">
           {connections.map((connection) => {
@@ -96,42 +151,10 @@ export function ProfileConnectionsSection({
                   </div>
 
                   {canRemove ? (
-                    <form
-                      action={(formData) => {
-                        if (
-                          !window.confirm(
-                            `Remove connection to ${connection.otherFullName}?`,
-                          )
-                        ) {
-                          return;
-                        }
-
-                        startTransition(async () => {
-                          const result = await removeConnectionAction(formData);
-                          if (result.error) {
-                            window.alert(result.error);
-                            return;
-                          }
-                          router.refresh();
-                        });
-                      }}
-                    >
-                      <input type="hidden" name="profileId" value={profileId} />
-                      <input
-                        type="hidden"
-                        name="connectionId"
-                        value={connection.id}
-                      />
-                      <Button
-                        type="submit"
-                        variant="ghost"
-                        size="sm"
-                        disabled={isPending}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        Remove
-                      </Button>
-                    </form>
+                    <RemoveConnectionButton
+                      profileId={profileId}
+                      connection={connection}
+                    />
                   ) : null}
                 </div>
                 {connection.notes ? (

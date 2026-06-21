@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { AppProviders } from "@/components/app-shell/app-providers";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import { requireUser } from "@/lib/auth/session";
 import { findNavProfileIdForEmail } from "@/lib/data/users";
@@ -18,7 +19,7 @@ export default async function AppLayout({
         <AppSidebar user={user} profileId={profileId} />
       </Suspense>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-        {children}
+        <AppProviders>{children}</AppProviders>
       </div>
     </div>
   );

@@ -1,13 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import { createProfileAction } from "@/app/(app)/profiles/new/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 type CreateProfileFormProps = {
   initialValues?: {
@@ -19,7 +22,8 @@ type CreateProfileFormProps = {
 
 export function CreateProfileForm({ initialValues }: CreateProfileFormProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
   const [fullName, setFullName] = useState(initialValues?.fullName ?? "");
   const [email, setEmail] = useState(initialValues?.email ?? "");
   const [phone, setPhone] = useState("");
@@ -36,12 +40,13 @@ export function CreateProfileForm({ initialValues }: CreateProfileFormProps) {
   return (
     <form
       action={(formData) => {
-        startTransition(async () => {
+        void run(async () => {
           const result = await createProfileAction(formData);
           if (result.error) {
-            window.alert(result.error);
+            await alert({ title: "Could not create profile", description: result.error });
             return;
           }
+          toastSuccess("Profile created");
           if (result.profileId) {
             router.push(`/profiles/${result.profileId}`);
           }

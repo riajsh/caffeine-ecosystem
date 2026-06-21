@@ -5,6 +5,8 @@ import { useState } from "react";
 
 import { deleteImportAction } from "@/app/(app)/admin/import/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
+import { toastSuccess } from "@/lib/toast";
 
 type ImportDeleteButtonProps = {
   importId: string;
@@ -13,15 +15,19 @@ type ImportDeleteButtonProps = {
 
 export function ImportDeleteButton({ importId, filename }: ImportDeleteButtonProps) {
   const router = useRouter();
+  const { confirm, alert } = useAppDialog();
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   async function handleDelete() {
-    if (
-      !window.confirm(
-        `Delete import "${filename}"? Staged rows will be removed. This cannot be undone.`,
-      )
-    ) {
+    const confirmed = await confirm({
+      title: "Delete import",
+      description: `Delete import "${filename}"? Staged rows will be removed. This cannot be undone.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -35,9 +41,11 @@ export function ImportDeleteButton({ importId, filename }: ImportDeleteButtonPro
       const result = await deleteImportAction(formData);
       if (result?.error) {
         setError(result.error);
+        await alert({ title: "Could not delete import", description: result.error });
         return;
       }
 
+      toastSuccess("Import deleted");
       router.refresh();
     } finally {
       setIsDeleting(false);

@@ -1,4 +1,3 @@
-import { AdminSubNav } from "@/components/admin/admin-subnav";
 import { requireAdmin } from "@/lib/auth/session";
 
 export default async function AdminLayout({
@@ -8,10 +7,5 @@ export default async function AdminLayout({
 }) {
   await requireAdmin();
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <AdminSubNav />
-      {children}
-    </div>
-  );
+  return <div className="flex min-h-0 flex-1 flex-col">{children}</div>;
 }

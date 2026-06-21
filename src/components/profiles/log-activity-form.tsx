@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 
 import { logActivityAction } from "@/app/(app)/profiles/[id]/actions";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,6 +18,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { OrgUser } from "@/lib/data/users";
 import { formatEnumLabel } from "@/lib/format/enum";
+import { toastSuccess } from "@/lib/toast";
+import { useAsyncAction } from "@/lib/use-async-action";
 
 const ACTIVITY_TYPES = ["note", "meeting", "introduction"] as const;
 
@@ -45,7 +48,8 @@ export function LogActivityForm({
   currentUserId,
 }: LogActivityFormProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
   const [activityType, setActivityType] = useState<string>("note");
   const [introducedBy, setIntroducedBy] = useState(currentUserId);
   const [introductionOutcome, setIntroductionOutcome] = useState("pending");
@@ -56,12 +60,13 @@ export function LogActivityForm({
   return (
     <form
       action={(formData) => {
-        startTransition(async () => {
+        void run(async () => {
           const result = await logActivityAction(formData);
           if (result.error) {
-            window.alert(result.error);
+            await alert({ title: "Could not log activity", description: result.error });
             return;
           }
+          toastSuccess("Activity logged");
           router.refresh();
         });
       }}

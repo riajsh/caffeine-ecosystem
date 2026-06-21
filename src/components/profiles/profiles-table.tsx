@@ -1,8 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef } from "react";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -20,26 +24,66 @@ import { StrengthBadge } from "./strength-badge";
 
 type ProfilesTableProps = {
   profiles: ProfileListItem[];
+  hasActiveFilters?: boolean;
+  canImportDatasets?: boolean;
 };
 
-export function ProfilesTable({ profiles }: ProfilesTableProps) {
+export function ProfilesTable({
+  profiles,
+  hasActiveFilters = false,
+  canImportDatasets = false,
+}: ProfilesTableProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const lastOpenedProfileId = useRef<string | null>(null);
+  const drawerProfileId = searchParams.get("profile");
+
+  useEffect(() => {
+    if (drawerProfileId || !lastOpenedProfileId.current) {
+      return;
+    }
+
+    const row = document.querySelector<HTMLElement>(
+      `[data-profile-row="${lastOpenedProfileId.current}"]`,
+    );
+    row?.focus();
+    lastOpenedProfileId.current = null;
+  }, [drawerProfileId]);
 
   if (profiles.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-6 py-12 text-center">
-        <p className="text-subheading font-medium text-foreground">
-          No profiles yet
-        </p>
-        <p className="mt-2 text-body text-muted-foreground">
-          Import a CSV or add profiles manually to start building the graph.
-        </p>
-      </div>
+      <EmptyState
+        title={hasActiveFilters ? "No profiles match these filters" : "No profiles yet"}
+        description={
+          hasActiveFilters
+            ? "Try clearing filters or broadening your search."
+            : "Import a CSV or add profiles manually to start building the graph."
+        }
+      >
+        <div className="flex flex-wrap justify-center gap-3">
+          {hasActiveFilters ? (
+            <Button asChild variant="outline">
+              <Link href="/profiles">Clear filters</Link>
+            </Button>
+          ) : null}
+          {canImportDatasets ? (
+            <Button asChild variant="outline">
+              <Link href="/admin/datasets">Import dataset</Link>
+            </Button>
+          ) : null}
+          <Button asChild>
+            <Link href="/profiles/new">New profile</Link>
+          </Button>
+        </div>
+      </EmptyState>
     );
   }
 
   function openProfile(profileId: string) {
-    router.push(`/profiles?profile=${profileId}`, { scroll: false });
+    lastOpenedProfileId.current = profileId;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("profile", profileId);
+    router.push(`/profiles?${params.toString()}`, { scroll: false });
   }
 
   return (
@@ -63,10 +107,11 @@ export function ProfilesTable({ profiles }: ProfilesTableProps) {
             {profiles.map((profile) => (
               <TableRow
                 key={profile.id}
+                data-profile-row={profile.id}
                 tabIndex={0}
                 role="link"
                 aria-label={`Open profile for ${profile.fullName}`}
-                className="cursor-pointer hover:bg-muted/50"
+                className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 onClick={() => openProfile(profile.id)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {

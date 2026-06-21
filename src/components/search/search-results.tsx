@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+import { FilterChipLink } from "@/components/filters/filter-chips";
+import { EmptyState } from "@/components/ui/empty-state";
+import { formatCountLabel, ListMeta } from "@/components/ui/list-meta";
 import { Button } from "@/components/ui/button";
 import { formatInteractionDate } from "@/lib/format/date";
 import {
@@ -23,6 +26,13 @@ const GROUP_TITLES: Record<(typeof GROUP_ORDER)[number], string> = {
   message: "Email messages",
 };
 
+const EXAMPLE_SEARCHES = [
+  "investor",
+  "previously unavailable",
+  "London",
+  "partner",
+] as const;
+
 type SearchResultsProps = {
   query: string;
   results: SearchResult[];
@@ -36,15 +46,23 @@ export function SearchResults({
 }: SearchResultsProps) {
   if (!query.trim()) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-10 text-center">
-        <p className="text-subheading font-medium text-foreground">
-          Search the graph
-        </p>
-        <p className="mt-2 text-body text-muted-foreground">
-          Find people, activity, events, tags, and email subjects across the
-          org.
-        </p>
-      </div>
+      <EmptyState
+        variant="dashed"
+        title="Search the graph"
+        description="Find people, activity, events, tags, and email subjects across the org."
+      >
+        <div className="flex flex-wrap justify-center gap-2">
+          {EXAMPLE_SEARCHES.map((example) => (
+            <FilterChipLink
+              key={example}
+              href={`/search?q=${encodeURIComponent(example)}`}
+              isActive={false}
+            >
+              {example}
+            </FilterChipLink>
+          ))}
+        </div>
+      </EmptyState>
     );
   }
 
@@ -52,20 +70,16 @@ export function SearchResults({
     const createHref = `/profiles/new?name=${encodeURIComponent(query)}`;
 
     return (
-      <div className="rounded-lg border border-border bg-card px-6 py-10 text-center">
-        <p className="text-subheading font-medium text-foreground">
-          No results for &ldquo;{query}&rdquo;
-        </p>
-        <p className="mt-2 text-body text-muted-foreground">
-          Try a name, company, tag, or email subject — or add them to the graph.
-          {hasProfileFilters
-            ? " Profile filters may also be hiding matches."
-            : ""}
-        </p>
-        <Button asChild className="mt-6">
+      <EmptyState
+        title={`No results for "${query}"`}
+        description={`Try a name, company, tag, or email subject — or add them to the graph.${
+          hasProfileFilters ? " Profile filters may also be hiding matches." : ""
+        }`}
+      >
+        <Button asChild>
           <Link href={createHref}>Add &ldquo;{query}&rdquo; as new profile</Link>
         </Button>
-      </div>
+      </EmptyState>
     );
   }
 
@@ -73,6 +87,9 @@ export function SearchResults({
 
   return (
     <div className="space-y-8">
+      <ListMeta>
+        {formatCountLabel(results.length, "result")} for &ldquo;{query}&rdquo;
+      </ListMeta>
       {GROUP_ORDER.map((entityType) => {
         const items = groups[entityType];
         if (items.length === 0) {
@@ -89,7 +106,7 @@ export function SearchResults({
                 <li key={`${result.entityType}-${result.id}`}>
                   <Link
                     href={result.href}
-                    className="flex flex-col gap-1 px-4 py-3 transition-colors hover:bg-muted/50 sm:flex-row sm:items-start sm:justify-between"
+                    className="flex flex-col gap-1 px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:flex-row sm:items-start sm:justify-between"
                   >
                     <div className="space-y-1">
                       <p className="text-body font-medium text-foreground">
