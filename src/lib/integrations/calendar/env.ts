@@ -39,4 +39,22 @@ export function getCalendarEnv(): CalendarEnv {
 export const CALENDAR_READONLY_SCOPE =
   "https://www.googleapis.com/auth/calendar.readonly";
 
+/** How far back the initial sync pulls events (months). */
 export const CALENDAR_BACKFILL_MONTHS = 12;
+
+/** How far ahead the sync window extends (months). Cron keeps this horizon rolling. */
+export const CALENDAR_LOOKAHEAD_MONTHS = 3;
+
+export function calendarLookaheadCutoff(): Date {
+  const date = new Date();
+  date.setMonth(date.getMonth() + CALENDAR_LOOKAHEAD_MONTHS);
+  return date;
+}
+
+export function isBeyondCalendarLookahead(startAt: string | null): boolean {
+  if (!startAt) {
+    return false;
+  }
+
+  return new Date(startAt) > calendarLookaheadCutoff();
+}

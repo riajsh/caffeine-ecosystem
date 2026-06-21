@@ -3,12 +3,17 @@ import "server-only";
 import type { calendar_v3 } from "googleapis";
 
 import { getCalendarClient } from "@/lib/integrations/calendar/client";
-import { CALENDAR_BACKFILL_MONTHS } from "@/lib/integrations/calendar/env";
+import {
+  CALENDAR_BACKFILL_MONTHS,
+  calendarLookaheadCutoff,
+  isBeyondCalendarLookahead,
+} from "@/lib/integrations/calendar/env";
 import {
   hasExternalParticipant,
   processCalendarParticipants,
 } from "@/lib/integrations/calendar/match";
 import { loadOrgParticipantFilters } from "@/lib/integrations/participant-email";
+import { purgeBeyondLookaheadCalendarData } from "@/lib/integrations/calendar/purge-beyond-lookahead";
 import { purgeInternalCalendarSyncData } from "@/lib/integrations/calendar/purge-internal";
 import type {
   CalendarParticipant,
@@ -97,6 +102,10 @@ function backfillTimeMin(): string {
   return date.toISOString();
 }
 
+function backfillTimeMax(): string {
+  return calendarLookaheadCutoff().toISOString();
+}
+
 async function upsertCalendarEvent(
   supabase: ReturnType<typeof createAdminClient>,
   account: CalendarAccount,
@@ -108,6 +117,10 @@ async function upsertCalendarEvent(
     !parsed.isDeleted &&
     !hasExternalParticipant(parsed.participants, participantFilters)
   ) {
+    return { activitiesCreated: 0, reviewsQueued: 0 };
+  }
+
+  if (!parsed.isDeleted && isBeyondCalendarLookahead(parsed.startAt)) {
     return { activitiesCreated: 0, reviewsQueued: 0 };
   }
 
@@ -167,6 +180,7 @@ export async function syncCalendarAccount(
   );
 
   await purgeInternalCalendarSyncData(supabase, account.org_id, participantFilters);
+  await purgeBeyondLookaheadCalendarData(supabase, account.org_id);
 
   await supabase
     .from("calendar_accounts")
@@ -193,6 +207,7 @@ export async function syncCalendarAccount(
         pageToken,
         syncToken,
         timeMin: syncToken ? undefined : backfillTimeMin(),
+        timeMax: syncToken ? undefined : backfillTimeMax(),
       });
 
       for (const item of response.data.items ?? []) {
