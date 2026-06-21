@@ -758,29 +758,6 @@ async function loadOrgUserRecords(orgId: string): Promise<OrgUserRecord[]> {
   }));
 }
 
-async function runConcurrentMap<T, R>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-
-  async function runWorker() {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      results[index] = await worker(items[index]);
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, runWorker),
-  );
-
-  return results;
-}
-
 async function runConcurrent<T>(
   items: T[],
   concurrency: number,
