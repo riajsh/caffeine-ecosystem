@@ -39,11 +39,33 @@ async function resolvePendingReviewsForEmail(
   }
 
   if (status !== "ignored" && profileId) {
-    await backfillCalendarReviewsForProfile(supabase, {
+    const activitiesCreated = await backfillCalendarReviewsForProfile(supabase, {
       orgId,
       profileId,
       reviewIds,
     });
+
+    const { error: updateError } = await supabase
+      .from("calendar_participant_reviews")
+      .update({
+        status,
+        profile_id: profileId,
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("org_id", orgId)
+      .ilike("email", normalisedEmail)
+      .eq("status", "pending");
+
+    if (updateError) {
+      throw new Error(`Failed to update review rows: ${updateError.message}`);
+    }
+
+    return {
+      reviewCount: reviewIds.length,
+      activitiesCreated,
+      profileId: profileId ?? null,
+    };
   }
 
   const { error: updateError } = await supabase
@@ -64,7 +86,7 @@ async function resolvePendingReviewsForEmail(
 
   return {
     reviewCount: reviewIds.length,
-    activitiesCreated: status === "ignored" ? 0 : reviewIds.length,
+    activitiesCreated: 0,
     profileId: profileId ?? null,
   };
 }

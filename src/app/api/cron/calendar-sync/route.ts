@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 import { syncAllCalendarAccounts } from "@/lib/integrations/calendar/sync";
@@ -9,7 +11,19 @@ function authoriseCron(request: Request): boolean {
   }
 
   const authHeader = request.headers.get("authorization");
-  return authHeader === `Bearer ${secret}`;
+  if (!authHeader) {
+    return false;
+  }
+
+  const expected = `Bearer ${secret}`;
+  try {
+    const a = Buffer.from(authHeader);
+    const b = Buffer.from(expected);
+    // Constant-time comparison to prevent timing attacks (#33).
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }
 
 export async function GET(request: Request) {
@@ -19,14 +33,15 @@ export async function GET(request: Request) {
 
   try {
     const result = await syncAllCalendarAccounts();
-    const hasErrors = result.stats.errors.length > 0;
     return NextResponse.json(
       {
-        ok: !hasErrors,
+        ok: true,
         accountsProcessed: result.accountsProcessed,
         stats: result.stats,
+        warnings:
+          result.stats.errors.length > 0 ? result.stats.errors : undefined,
       },
-      { status: hasErrors ? 500 : 200 },
+      { status: 200 },
     );
   } catch (error) {
     const message =

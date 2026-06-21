@@ -18,29 +18,6 @@ export type InferenceResult = {
   skipped: number;
 };
 
-async function connectionExists(
-  orgId: string,
-  profileAId: string,
-  profileBId: string,
-): Promise<boolean> {
-  const supabase = await createClient();
-  const [a, b] = orderProfileIds(profileAId, profileBId);
-
-  const { data, error } = await supabase
-    .from("connections")
-    .select("id")
-    .eq("org_id", orgId)
-    .eq("profile_a_id", a)
-    .eq("profile_b_id", b)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to check connection: ${error.message}`);
-  }
-
-  return Boolean(data);
-}
-
 async function insertInferredConnection(
   orgId: string,
   profileAId: string,
@@ -54,10 +31,6 @@ async function insertInferredConnection(
 ): Promise<"created" | "skipped"> {
   const supabase = await createClient();
   const [a, b] = orderProfileIds(profileAId, profileBId);
-
-  if (await connectionExists(orgId, a, b)) {
-    return "skipped";
-  }
 
   const { error } = await supabase.from("connections").insert({
     org_id: orgId,
@@ -173,16 +146,17 @@ export async function inferCoAttendanceForOrg(): Promise<InferenceResult> {
     throw new Error(`Failed to list events for inference: ${error.message}`);
   }
 
-  let created = 0;
-  let skipped = 0;
+  const results = await Promise.all(
+    (events ?? []).map((event) => inferCoAttendanceForEvent(event.id)),
+  );
 
-  for (const event of events ?? []) {
-    const result = await inferCoAttendanceForEvent(event.id);
-    created += result.created;
-    skipped += result.skipped;
-  }
-
-  return { created, skipped };
+  return results.reduce(
+    (acc, result) => ({
+      created: acc.created + result.created,
+      skipped: acc.skipped + result.skipped,
+    }),
+    { created: 0, skipped: 0 },
+  );
 }
 
 export async function inferSameCompanyConnections(): Promise<InferenceResult> {

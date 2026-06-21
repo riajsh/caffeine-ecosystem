@@ -53,7 +53,7 @@ export function EventsTable({ events }: EventsTableProps) {
             <TableRow
               key={event.id}
               tabIndex={0}
-              role="link"
+              role="button"
               aria-label={`Open event ${event.title}`}
               className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
               onClick={() => router.push(`/events/${event.id}`)}

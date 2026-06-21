@@ -1,5 +1,6 @@
 import "server-only";
 
+import { GaxiosError } from "gaxios";
 import type { calendar_v3 } from "googleapis";
 
 import { getCalendarClient } from "@/lib/integrations/calendar/client";
@@ -11,7 +12,9 @@ import {
 } from "@/lib/integrations/calendar/env";
 import {
   hasExternalParticipant,
+  loadOrgProfilesByEmail,
   processCalendarParticipants,
+  type OrgProfileByEmail,
 } from "@/lib/integrations/calendar/match";
 import { loadOrgParticipantFilters } from "@/lib/integrations/participant-email";
 import { loadIgnoredParticipantEmails } from "@/lib/integrations/calendar/review-utils";
@@ -59,7 +62,9 @@ function parseParticipants(event: calendar_v3.Schema$Event): CalendarParticipant
     participants.set(organizerEmail, {
       email: organizerEmail,
       name: event.organizer?.displayName ?? null,
-      responseStatus: event.organizer?.self ? "accepted" : "accepted",
+      // self: true = PU team member is the organiser (accepted by definition).
+      // self: false = external organiser; actual status comes from attendees array.
+      responseStatus: event.organizer?.self ? "accepted" : "needsAction",
       organizer: true,
     });
   }
@@ -114,6 +119,7 @@ async function upsertCalendarEvent(
   parsed: ParsedCalendarEvent,
   participantFilters: Awaited<ReturnType<typeof loadOrgParticipantFilters>>,
   ignoredParticipantEmails: ReadonlySet<string>,
+  profilesByEmail: OrgProfileByEmail,
 ): Promise<{ activitiesCreated: number; reviewsQueued: number }> {
 
   if (
@@ -169,6 +175,7 @@ async function upsertCalendarEvent(
     participants: parsed.participants,
     participantFilters,
     ignoredParticipantEmails,
+    profilesByEmail,
   });
 }
 
@@ -193,22 +200,7 @@ export async function syncCalendarAccount(
     supabase,
     account.org_id,
   );
-
-  await purgeInternalCalendarSyncData(supabase, account.org_id, participantFilters);
-  await purgeBeyondLookaheadCalendarData(supabase, account.org_id);
-
-  if (!isTokenRetry) {
-    await supabase
-      .from("calendar_accounts")
-      .update({
-        metadata: {
-          syncing: true,
-          started_at: new Date().toISOString(),
-        },
-      })
-      .eq("id", account.id)
-      .eq("org_id", account.org_id);
-  }
+  const profilesByEmail = await loadOrgProfilesByEmail(supabase, account.org_id);
 
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
@@ -216,6 +208,24 @@ export async function syncCalendarAccount(
   let retryingAfterInvalidToken = false;
 
   try {
+    // Set syncing flag and run purges inside the try so the finally block
+    // always resets syncing: false even if these steps throw (#4).
+    if (!isTokenRetry) {
+      await supabase
+        .from("calendar_accounts")
+        .update({
+          metadata: {
+            syncing: true,
+            started_at: new Date().toISOString(),
+          },
+        })
+        .eq("id", account.id)
+        .eq("org_id", account.org_id);
+    }
+
+    await purgeInternalCalendarSyncData(supabase, account.org_id, participantFilters);
+    await purgeBeyondLookaheadCalendarData(supabase, account.org_id);
+
     do {
       const response = await calendar.events.list({
         calendarId: "primary",
@@ -241,6 +251,7 @@ export async function syncCalendarAccount(
             parsed,
             participantFilters,
             ignoredParticipantEmails,
+            profilesByEmail,
           );
           stats.eventsProcessed += 1;
           stats.activitiesCreated += result.activitiesCreated;
@@ -256,12 +267,31 @@ export async function syncCalendarAccount(
       nextSyncToken = response.data.nextSyncToken ?? nextSyncToken;
     } while (pageToken);
   } catch (error) {
+    if (error instanceof GaxiosError && error.response?.status === 429) {
+      stats.errors.push(
+        "Rate limited by Google Calendar API — will retry on next run",
+      );
+      stats.rateLimited = true;
+      return stats;
+    }
+
     const message =
       error instanceof Error ? error.message : "Calendar sync request failed";
 
-    if (message.includes("Sync token is no longer valid") && !isTokenRetry) {
+    const isExpiredToken =
+      (error instanceof GaxiosError && error.response?.status === 410) ||
+      message.includes("Sync token is no longer valid");
+
+    if (isExpiredToken && !isTokenRetry) {
       retryingAfterInvalidToken = true;
-      return syncCalendarAccount({ ...account, sync_cursor: null }, true);
+      try {
+        // Await so that if the retry itself throws, we can reset the flag
+        // and let this call's finally block clean up syncing: false (#3).
+        return await syncCalendarAccount({ ...account, sync_cursor: null }, true);
+      } catch (retryError) {
+        retryingAfterInvalidToken = false;
+        throw retryError;
+      }
     }
 
     stats.errors.push(message);
@@ -344,6 +374,8 @@ export async function upsertCalendarAccount(params: {
         email: params.email,
         refresh_token: params.encryptedRefreshToken,
         sync_enabled: true,
+        sync_cursor: null,
+        metadata: { needs_backfill: true },
       },
       { onConflict: "org_id,email" },
     )

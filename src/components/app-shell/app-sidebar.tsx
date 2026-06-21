@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 import { signOut } from "@/app/(auth)/login/actions";
 import { MAIN_NAV, type NavItem } from "@/config/navigation";
@@ -47,17 +48,24 @@ function SidebarNavLink({
 
 function SidebarNavPlaceholder({ item }: { item: NavItem }) {
   return (
-    <span
-      className="flex items-center gap-2.5 rounded-md px-3 py-2 text-body text-muted-foreground opacity-60"
-      aria-disabled="true"
+    <button
+      type="button"
+      disabled
+      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-body text-muted-foreground opacity-60"
     >
       <item.icon className="size-4 shrink-0" aria-hidden />
       <span>{item.label}</span>
-    </span>
+    </button>
   );
 }
 
-export function AppSidebar({ user, profileId }: AppSidebarProps) {
+function SidebarMeSection({
+  user,
+  profileId,
+}: {
+  user: AppUser;
+  profileId: string | null;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const meHref = profileId ? `/profiles/${profileId}` : "/me";
@@ -68,6 +76,36 @@ export function AppSidebar({ user, profileId }: AppSidebarProps) {
       (pathname === `/profiles/${profileId}` ||
         pathname.startsWith(`/profiles/${profileId}/`) ||
         (pathname === "/profiles" && drawerProfileId === profileId)));
+
+  return (
+    <Link
+      href={meHref}
+      aria-current={isMeActive ? "page" : undefined}
+      className={cn(
+        "mb-3 block rounded-md px-3 py-2.5 transition-colors hover:bg-sidebar-accent/70",
+        isMeActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+      )}
+    >
+      <p className="truncate text-subheading font-medium">{user.full_name}</p>
+      <p className="truncate text-caption text-muted-foreground">{user.email}</p>
+      <p className="mt-1 text-caption text-interactive-primary">
+        {profileId ? "My profile" : "My account"}
+      </p>
+    </Link>
+  );
+}
+
+function SidebarMeFallback({ user }: { user: AppUser }) {
+  return (
+    <div className="mb-3 rounded-md px-3 py-2.5">
+      <p className="truncate text-subheading font-medium">{user.full_name}</p>
+      <p className="truncate text-caption text-muted-foreground">{user.email}</p>
+    </div>
+  );
+}
+
+export function AppSidebar({ user, profileId }: AppSidebarProps) {
+  const pathname = usePathname();
 
   const visibleNav = MAIN_NAV.filter(
     (item) => !item.adminOnly || user.role === "admin",
@@ -118,22 +156,9 @@ export function AppSidebar({ user, profileId }: AppSidebarProps) {
       </nav>
 
       <div className="mt-auto shrink-0 border-t border-sidebar-border p-3">
-        <Link
-          href={meHref}
-          aria-current={isMeActive ? "page" : undefined}
-          className={cn(
-            "mb-3 block rounded-md px-3 py-2.5 transition-colors hover:bg-sidebar-accent/70",
-            isMeActive && "bg-sidebar-accent text-sidebar-accent-foreground",
-          )}
-        >
-          <p className="truncate text-subheading font-medium">{user.full_name}</p>
-          <p className="truncate text-caption text-muted-foreground">
-            {user.email}
-          </p>
-          <p className="mt-1 text-caption text-interactive-primary">
-            {profileId ? "My profile" : "My account"}
-          </p>
-        </Link>
+        <Suspense fallback={<SidebarMeFallback user={user} />}>
+          <SidebarMeSection user={user} profileId={profileId} />
+        </Suspense>
         <form action={signOut}>
           <Button type="submit" variant="outline" className="w-full">
             Sign out

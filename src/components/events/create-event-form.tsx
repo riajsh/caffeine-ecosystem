@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -92,6 +93,7 @@ export function CreateEventPanel() {
   const { isOpen, close } = useCreateEventContext();
   const { isPending, run } = useAsyncAction();
   const [eventType, setEventType] = useState<string>("other");
+  const defaultEventDate = useMemo(() => defaultDateTimeLocalValue(), []);
 
   if (!isOpen) {
     return null;
@@ -152,7 +154,7 @@ export function CreateEventPanel() {
             id="event-date"
             name="eventDate"
             type="datetime-local"
-            defaultValue={defaultDateTimeLocalValue()}
+            defaultValue={defaultEventDate}
             required
           />
         </div>

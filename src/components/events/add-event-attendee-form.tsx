@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -33,6 +33,16 @@ export function AddEventAttendeeForm({
   const [selectedProfile, setSelectedProfile] =
     useState<ProfilePickerOption | null>(null);
   const searchTimeoutRef = useRef<number | null>(null);
+  const listboxId = useId();
+  const showResults = results.length > 0 && !selectedProfile;
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        window.clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   function handleQueryChange(value: string) {
     setQuery(value);
@@ -101,6 +111,10 @@ export function AddEventAttendeeForm({
         <Label htmlFor="attendee-search">Search profiles</Label>
         <Input
           id="attendee-search"
+          role="combobox"
+          aria-expanded={showResults}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
           value={query}
           onChange={(event) => handleQueryChange(event.target.value)}
           placeholder="Name, company, or email…"
@@ -118,12 +132,17 @@ export function AddEventAttendeeForm({
         </p>
       ) : null}
 
-      {results.length > 0 && !selectedProfile ? (
-        <ul className="max-h-48 overflow-auto rounded-md border border-border">
+      {showResults ? (
+        <ul
+          id={listboxId}
+          role="listbox"
+          className="max-h-48 overflow-auto rounded-md border border-border"
+        >
           {results.map((profile) => (
-            <li key={profile.id}>
+            <li key={profile.id} role="presentation">
               <button
                 type="button"
+                role="option"
                 className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-muted/50"
                 onClick={() => {
                   setSelectedProfile(profile);

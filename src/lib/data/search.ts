@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getOrgId } from "@/lib/auth/session";
-import { listProfiles } from "@/lib/data/profiles";
+import { listProfileIds } from "@/lib/data/profiles";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 
@@ -303,13 +303,13 @@ async function getAllowedProfileIds(
     return null;
   }
 
-  const profiles = await listProfiles({
+  const profileIds = await listProfileIds({
     tagId: filters.tagId,
     ownerUserId: filters.ownerUserId,
     status: filters.status,
   });
 
-  return new Set(profiles.map((profile) => profile.id));
+  return new Set(profileIds);
 }
 
 function applyProfileFilters(
@@ -396,7 +396,18 @@ export async function search(
     });
   }
 
-  const profileEnrichment = await enrichProfiles([...profileIds]);
+  const activityIds = activities.map((row) => row.id);
+  const eventIds = events.map((row) => row.id);
+  const threadIds = emailBodies.map((message) => message.thread_id);
+
+  const [profileEnrichment, activityEnrichment, eventEnrichment, threadEnrichment] =
+    await Promise.all([
+      enrichProfiles([...profileIds]),
+      enrichActivities(activityIds),
+      enrichEvents(eventIds),
+      enrichThreads(threadIds),
+    ]);
+
   for (const result of results) {
     if (result.entityType !== "profile" || !result.profileId) {
       continue;
@@ -407,9 +418,6 @@ export async function search(
       result.lastInteractionAt = enrichment.lastInteractionAt;
     }
   }
-
-  const activityIds = activities.map((row) => row.id);
-  const activityEnrichment = await enrichActivities(activityIds);
 
   for (const row of activities) {
     const enrichment = activityEnrichment.get(row.id);
@@ -427,9 +435,6 @@ export async function search(
       contextLabel: ENTITY_LABELS.activity,
     });
   }
-
-  const eventIds = events.map((row) => row.id);
-  const eventEnrichment = await enrichEvents(eventIds);
 
   for (const row of events) {
     const enrichment = eventEnrichment.get(row.id);
@@ -456,9 +461,6 @@ export async function search(
       contextLabel: ENTITY_LABELS.thread,
     });
   }
-
-  const threadIds = emailBodies.map((message) => message.thread_id);
-  const threadEnrichment = await enrichThreads(threadIds);
 
   for (const message of emailBodies) {
     const thread = threadEnrichment.get(message.thread_id);

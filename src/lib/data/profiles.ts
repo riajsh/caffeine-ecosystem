@@ -345,14 +345,26 @@ function mapProfileDetailRow(
   };
 }
 
+export const PROFILES_PAGE_SIZE = 50;
+
+export type ListProfilesResult = {
+  profiles: ProfileListItem[];
+  total: number;
+  hasMore: boolean;
+};
+
 export async function listProfiles(options?: {
   tagId?: string;
   ownerUserId?: string;
   status?: Database["public"]["Enums"]["relationship_status"];
   company?: string;
-}): Promise<ProfileListItem[]> {
+  limit?: number;
+  offset?: number;
+}): Promise<ListProfilesResult> {
   const orgId = await getOrgId();
   const supabase = await createClient();
+  const limit = options?.limit ?? PROFILES_PAGE_SIZE;
+  const offset = options?.offset ?? 0;
 
   const useRelationshipInner = Boolean(options?.ownerUserId || options?.status);
   const useOwnerInner = Boolean(options?.ownerUserId);
@@ -409,9 +421,11 @@ export async function listProfiles(options?: {
       ${relationshipSelect},
       ${profileTagsSelect}
     `,
+      { count: "exact" },
     )
     .eq("org_id", orgId)
-    .order("full_name");
+    .order("full_name")
+    .range(offset, offset + limit - 1);
 
   if (options?.tagId) {
     query = query.eq("profile_tags.tag_id", options.tagId);
@@ -429,20 +443,60 @@ export async function listProfiles(options?: {
     query = query.ilike("organisation_name", options.company);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
 
   if (error) {
     throw new Error(`Failed to list profiles: ${error.message}`);
   }
 
-  return ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
+  const profiles = ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
+  const total = count ?? profiles.length;
+
+  return {
+    profiles,
+    total,
+    hasMore: offset + profiles.length < total,
+  };
+}
+
+export async function listProfileIds(options?: {
+  tagId?: string;
+  ownerUserId?: string;
+  status?: Database["public"]["Enums"]["relationship_status"];
+  company?: string;
+}): Promise<string[]> {
+  const hasFilters = Boolean(
+    options?.tagId || options?.ownerUserId || options?.status || options?.company,
+  );
+
+  if (hasFilters) {
+    const { profiles } = await listProfiles({
+      ...options,
+      limit: 10_000,
+      offset: 0,
+    });
+    return profiles.map((profile) => profile.id);
+  }
+
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("org_id", orgId);
+
+  if (error) {
+    throw new Error(`Failed to list profile ids: ${error.message}`);
+  }
+
+  return (data ?? []).map((profile) => profile.id);
 }
 
 export async function getProfileById(id: string): Promise<ProfileDetail> {
   const orgId = await getOrgId();
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  const profileSelect = supabase
     .from("profiles")
     .select(
       `
@@ -517,15 +571,7 @@ export async function getProfileById(id: string): Promise<ProfileDetail> {
     .limit(PROFILE_ACTIVITY_LIMIT, { foreignTable: "activities" })
     .maybeSingle();
 
-  if (error) {
-    throw new Error(`Failed to load profile: ${error.message}`);
-  }
-
-  if (!data) {
-    notFound();
-  }
-
-  const { data: connections, error: connectionsError } = await supabase
+  const connectionsSelect = supabase
     .from("connections")
     .select(
       `
@@ -549,28 +595,47 @@ export async function getProfileById(id: string): Promise<ProfileDetail> {
     .eq("org_id", orgId)
     .or(`profile_a_id.eq.${id},profile_b_id.eq.${id}`);
 
+  const activityCountSelect = supabase
+    .from("activities")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("profile_id", id);
+
+  const [
+    { data, error },
+    { data: connections, error: connectionsError },
+    { count: activityCount, error: activityCountError },
+    filters,
+  ] = await Promise.all([
+    profileSelect,
+    connectionsSelect,
+    activityCountSelect,
+    loadOrgParticipantFilters(createAdminClient(), orgId),
+  ]);
+
+  if (error) {
+    throw new Error(`Failed to load profile: ${error.message}`);
+  }
+
+  if (!data) {
+    notFound();
+  }
+
   if (connectionsError) {
     throw new Error(
       `Failed to load profile connections: ${connectionsError.message}`,
     );
   }
 
-  const filters = await loadOrgParticipantFilters(createAdminClient(), orgId);
-  const isInternalProfile = data.email
-    ? isInternalParticipant(data.email, filters)
-    : false;
-
-  const { count: activityCount, error: activityCountError } = await supabase
-    .from("activities")
-    .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId)
-    .eq("profile_id", id);
-
   if (activityCountError) {
     throw new Error(
       `Failed to count profile activities: ${activityCountError.message}`,
     );
   }
+
+  const isInternalProfile = data.email
+    ? isInternalParticipant(data.email, filters)
+    : false;
 
   const loadedActivities = (data as ProfileDetailRow).activities?.length ?? 0;
 

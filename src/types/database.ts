@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       activities: {
@@ -1327,6 +1302,13 @@ export type Database = {
         Args: { p_message_id: string }
         Returns: string
       }
+      get_last_activity_per_profile: {
+        Args: { p_org_id: string }
+        Returns: {
+          activity_date: string
+          profile_id: string
+        }[]
+      }
       org_has_full_body_access: { Args: { p_org_id: string }; Returns: boolean }
       search_email_message_bodies: {
         Args: { p_limit?: number; p_query: string }
@@ -1338,6 +1320,8 @@ export type Database = {
           thread_id: string
         }[]
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       user_can_read_email_body: {
         Args: { p_org_id: string; p_thread_id: string }
         Returns: boolean
@@ -1542,9 +1526,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       activity_source: [

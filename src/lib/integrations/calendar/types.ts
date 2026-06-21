@@ -20,4 +20,5 @@ export type CalendarSyncStats = {
   activitiesCreated: number;
   reviewsQueued: number;
   errors: string[];
+  rateLimited?: boolean;
 };

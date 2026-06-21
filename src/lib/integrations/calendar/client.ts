@@ -30,7 +30,7 @@ export function getCalendarClient(account: CalendarAccountRow) {
     refresh_token: decryptToken(account.refresh_token),
   });
 
-  return google.calendar({ version: "v3", auth: oauth2 });
+  return google.calendar({ version: "v3", auth: oauth2, timeout: 30_000 });
 }
 
 export async function exchangeCodeForTokens(code: string, redirectUri: string) {

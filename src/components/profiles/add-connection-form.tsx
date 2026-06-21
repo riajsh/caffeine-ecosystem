@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { addConnectionAction } from "@/app/(app)/profiles/[id]/actions";
@@ -63,6 +63,16 @@ export function AddConnectionForm({
   const [strength, setStrength] = useState<string>("unknown");
   const [introducedBy, setIntroducedBy] = useState(currentUserId);
   const searchTimeoutRef = useRef<number | null>(null);
+  const listboxId = useId();
+  const showResults = results.length > 0 && !selectedProfile;
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        window.clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const isIntroduced = connectionType === "introduced";
 
@@ -140,6 +150,10 @@ export function AddConnectionForm({
         <Label htmlFor="connection-search">Search profiles</Label>
         <Input
           id="connection-search"
+          role="combobox"
+          aria-expanded={showResults}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
           value={query}
           onChange={(event) => handleQueryChange(event.target.value)}
           placeholder="Name…"
@@ -157,12 +171,17 @@ export function AddConnectionForm({
         </p>
       ) : null}
 
-      {results.length > 0 && !selectedProfile ? (
-        <ul className="max-h-48 overflow-auto rounded-md border border-border">
+      {showResults ? (
+        <ul
+          id={listboxId}
+          role="listbox"
+          className="max-h-48 overflow-auto rounded-md border border-border"
+        >
           {results.map((profile) => (
-            <li key={profile.id}>
+            <li key={profile.id} role="presentation">
               <button
                 type="button"
+                role="option"
                 className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-muted/50"
                 onClick={() => {
                   setSelectedProfile(profile);

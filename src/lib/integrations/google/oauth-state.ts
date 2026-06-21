@@ -61,8 +61,10 @@ export function verifyOAuthState(
   }
 
   const expected = sign(encoded);
-  const sigBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
+  // Decode from base64url before comparing so we compare the actual signature
+  // bytes, not the base64url text representation (#7).
+  const sigBuffer = Buffer.from(signature, "base64url");
+  const expectedBuffer = Buffer.from(expected, "base64url");
 
   if (
     sigBuffer.length !== expectedBuffer.length ||

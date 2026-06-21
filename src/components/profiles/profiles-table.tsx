@@ -109,7 +109,7 @@ export function ProfilesTable({
                 key={profile.id}
                 data-profile-row={profile.id}
                 tabIndex={0}
-                role="link"
+                role="button"
                 aria-label={`Open profile for ${profile.fullName}`}
                 className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 onClick={() => openProfile(profile.id)}

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef } from "react";
 
@@ -52,11 +51,10 @@ export function ProfileDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <Link
-        href={closeHref}
+      <div
         className="absolute inset-0 bg-black/40 animate-in fade-in-0 duration-200"
-        aria-label="Close profile"
-        tabIndex={-1}
+        aria-hidden="true"
+        onClick={() => router.push(closeHref)}
       />
 
       <aside

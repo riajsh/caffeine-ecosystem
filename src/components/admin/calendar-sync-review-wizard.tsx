@@ -107,7 +107,7 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   const isFirstSearch = useRef(true);
 
   const runSearch = useCallback(
-    async (query: string) => {
+    async (query: string, signal?: AbortSignal) => {
       setIsSearching(true);
       setError(null);
 
@@ -115,6 +115,10 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
         query,
         group.email,
       );
+
+      if (signal?.aborted) {
+        return;
+      }
 
       setIsSearching(false);
       setHasSearched(true);
@@ -136,14 +140,18 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   );
 
   useEffect(() => {
+    const abortController = new AbortController();
     const delay = isFirstSearch.current ? 0 : 300;
     isFirstSearch.current = false;
 
     const timer = window.setTimeout(() => {
-      void runSearch(linkQuery);
+      void runSearch(linkQuery, abortController.signal);
     }, delay);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      abortController.abort();
+    };
   }, [linkQuery, runSearch]);
 
   function runAction(

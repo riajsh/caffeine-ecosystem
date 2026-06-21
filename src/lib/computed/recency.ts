@@ -9,11 +9,9 @@ export async function getLatestActivityByProfile(
   const resolvedOrgId = orgId ?? (await getOrgId());
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("activities")
-    .select("profile_id, activity_date")
-    .eq("org_id", resolvedOrgId)
-    .order("activity_date", { ascending: false });
+  const { data, error } = await supabase.rpc("get_last_activity_per_profile", {
+    p_org_id: resolvedOrgId,
+  });
 
   if (error) {
     throw new Error(`Failed to load activity recency: ${error.message}`);
@@ -22,9 +20,7 @@ export async function getLatestActivityByProfile(
   const latest = new Map<string, string>();
 
   for (const row of data ?? []) {
-    if (!latest.has(row.profile_id)) {
-      latest.set(row.profile_id, row.activity_date);
-    }
+    latest.set(row.profile_id, row.activity_date);
   }
 
   return latest;

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import {
@@ -35,6 +35,7 @@ export function ProfileDetailTabs({
   defaultTab = "activity",
 }: ProfileDetailTabsProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabFromUrl = parseProfileTab(searchParams.get("tab") ?? undefined);
   const [activeTab, setActiveTab] = useState<ProfileTab>(
@@ -55,7 +56,9 @@ export function ProfileDetailTabs({
 
     const query = params.toString();
     const url = query ? `${pathname}?${query}` : pathname;
-    window.history.replaceState(null, "", url);
+    // Use router.replace so the Next.js router owns the history entry and
+    // the browser Back button works correctly (#25).
+    router.replace(url, { scroll: false });
   }
 
   return (

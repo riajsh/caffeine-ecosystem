@@ -5,13 +5,20 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 
+let cachedKey: Buffer | null = null;
+
 function getKey(): Buffer {
+  if (cachedKey) {
+    return cachedKey;
+  }
+
   const secret = process.env.TOKEN_ENCRYPTION_KEY?.trim();
   if (!secret) {
     throw new Error("TOKEN_ENCRYPTION_KEY is not configured");
   }
 
-  return scryptSync(secret, "ecosystem-oauth-token", 32);
+  cachedKey = scryptSync(secret, "ecosystem-oauth-token", 32);
+  return cachedKey;
 }
 
 export function encryptToken(plaintext: string): string {

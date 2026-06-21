@@ -12,7 +12,7 @@ import { ProfilesTagFilter } from "@/components/profiles/profiles-tag-filter";
 import { formatCountLabel, ListMeta } from "@/components/ui/list-meta";
 import { Button } from "@/components/ui/button";
 import { getProfileNetworkIntel } from "@/lib/computed/profile-intelligence";
-import { getProfileById, listProfiles } from "@/lib/data/profiles";
+import { getProfileById, listProfiles, PROFILES_PAGE_SIZE } from "@/lib/data/profiles";
 import { listOrgTags } from "@/lib/data/tags";
 import { listOrgUsers } from "@/lib/data/users";
 import { requireUser } from "@/lib/auth/session";
@@ -39,8 +39,26 @@ type ProfilesPageProps = {
     owner?: string;
     status?: string;
     company?: string;
+    page?: string;
   }>;
 };
+
+function buildListHref(options: {
+  tag?: string;
+  owner?: string;
+  status?: string;
+  company?: string;
+  page?: number;
+}) {
+  const params = new URLSearchParams();
+  if (options.tag) params.set("tag", options.tag);
+  if (options.owner) params.set("owner", options.owner);
+  if (options.status) params.set("status", options.status);
+  if (options.company) params.set("company", options.company);
+  if (options.page && options.page > 1) params.set("page", String(options.page));
+  const query = params.toString();
+  return query ? `/profiles?${query}` : "/profiles";
+}
 
 function buildCloseHref(options: {
   tag?: string;
@@ -65,7 +83,11 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     owner: ownerUserId,
     status,
     company,
+    page: pageParam,
   } = await searchParams;
+
+  const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
+  const listLimit = page * PROFILES_PAGE_SIZE;
 
   const defaultTab = parseProfileTabOrDefault(tab);
 
@@ -81,17 +103,20 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     notFound();
   }
 
-  const [profiles, orgTags, teamUsers, currentUser] = await Promise.all([
-    listProfiles({
-      tagId,
-      ownerUserId,
-      status: status as RelationshipStatus | undefined,
-      company: company?.trim() || undefined,
-    }),
-    listOrgTags(),
-    listOrgUsers(),
-    requireUser(),
-  ]);
+  const [{ profiles, total, hasMore }, orgTags, teamUsers, currentUser] =
+    await Promise.all([
+      listProfiles({
+        tagId,
+        ownerUserId,
+        status: status as RelationshipStatus | undefined,
+        company: company?.trim() || undefined,
+        limit: listLimit,
+        offset: 0,
+      }),
+      listOrgTags(),
+      listOrgUsers(),
+      requireUser(),
+    ]);
 
   const hasActiveFilters = Boolean(tagId || ownerUserId || status || company);
   const closeHref = buildCloseHref({
@@ -163,6 +188,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-8 pb-6 pt-4">
         <ListMeta className="mb-3">
           {formatCountLabel(profiles.length, "profile")}
+          {total > profiles.length ? ` of ${total}` : ""}
           {hasActiveFilters ? " matching filters" : ""}
         </ListMeta>
         <Suspense fallback={<div className="h-64 animate-pulse rounded-lg bg-muted/30" />}>
@@ -172,6 +198,23 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
             canImportDatasets={currentUser.role === "admin"}
           />
         </Suspense>
+        {hasMore ? (
+          <div className="mt-4 flex justify-center">
+            <Button asChild variant="outline">
+              <Link
+                href={buildListHref({
+                  tag: tagId,
+                  owner: ownerUserId,
+                  status,
+                  company,
+                  page: page + 1,
+                })}
+              >
+                Load more
+              </Link>
+            </Button>
+          </div>
+        ) : null}
       </div>
       {drawerContent}
     </div>

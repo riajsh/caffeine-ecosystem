@@ -20,7 +20,7 @@ async function getUserRow(authUserId: string): Promise<AppUser | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("users")
-    .select("*")
+    .select("id, org_id, email, full_name, role, created_at, updated_at")
     .eq("id", authUserId)
     .maybeSingle();
 

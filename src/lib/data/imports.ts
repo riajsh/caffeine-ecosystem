@@ -541,7 +541,7 @@ export async function applyColumnMappingToImport(importId: string): Promise<void
   const rows = await loadImportRows(importId, orgId);
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
 
-  for (const row of rows) {
+  await runConcurrent(rows, 10, async (row) => {
     const normalized = normalizeRowFromImport(row.raw, headers, mapping, row.normalized);
     const { error } = await supabase
       .from("import_rows")
@@ -557,7 +557,7 @@ export async function applyColumnMappingToImport(importId: string): Promise<void
     if (error) {
       throw new Error(`Failed to apply mapping to row ${row.row_number}: ${error.message}`);
     }
-  }
+  });
 
   const { error: importError } = await supabase
     .from("imports")
@@ -725,6 +725,29 @@ async function loadOrgUserRecords(orgId: string): Promise<OrgUserRecord[]> {
     email: user.email,
     fullName: user.full_name,
   }));
+}
+
+async function runConcurrentMap<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index]);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, runWorker),
+  );
+
+  return results;
 }
 
 async function runConcurrent<T>(
@@ -1088,22 +1111,29 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
 
   try {
-    await runConcurrent(commitRows, 8, async (row) => {
+    type WorkerResult = {
+      created: number;
+      updated: number;
+      ownerWarnings: number;
+    };
+
+    const workerResults = await runConcurrentMap(commitRows, 8, async (row) => {
+      const local: WorkerResult = { created: 0, updated: 0, ownerWarnings: 0 };
       const normalized = normalizeRowFromImport(row.raw, headers, mapping, row.normalized);
 
       if (row.dedup_status === "new") {
-        await createProfileFromImportRow({
+        const ownerWarnings = await createProfileFromImportRow({
           orgId,
           importId,
           userId: user.id,
           normalized,
           sourceLabel,
           orgUsers: orgUserRecords,
-          summary,
         });
-        summary.created += 1;
+        local.created = 1;
+        local.ownerWarnings = ownerWarnings;
       } else if (row.dedup_status === "matched_email" && row.matched_profile_id) {
-        await updateProfileFromImportRow({
+        const ownerWarnings = await updateProfileFromImportRow({
           orgId,
           importId,
           userId: user.id,
@@ -1111,11 +1141,26 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           normalized,
           sourceLabel,
           orgUsers: orgUserRecords,
-          summary,
         });
-        summary.updated += 1;
+        local.updated = 1;
+        local.ownerWarnings = ownerWarnings;
       }
+
+      return local;
     });
+
+    const totals = workerResults.reduce(
+      (acc, result) => ({
+        created: acc.created + result.created,
+        updated: acc.updated + result.updated,
+        ownerWarnings: acc.ownerWarnings + result.ownerWarnings,
+      }),
+      { created: 0, updated: 0, ownerWarnings: 0 },
+    );
+
+    summary.created = totals.created;
+    summary.updated = totals.updated;
+    summary.ownerWarnings = totals.ownerWarnings;
 
     const { error: completeError } = await supabase
       .from("imports")
@@ -1200,13 +1245,11 @@ type CommitContext = {
   normalized: NormalizedImportRow;
   sourceLabel: string;
   orgUsers: OrgUserRecord[];
-  summary: CommitSummary;
 };
 
-async function createProfileFromImportRow(context: CommitContext): Promise<string> {
+async function createProfileFromImportRow(context: CommitContext): Promise<number> {
   const supabase = await createClient();
-  const { orgId, normalized, importId, userId, sourceLabel, orgUsers, summary } =
-    context;
+  const { orgId, normalized, importId, userId, sourceLabel, orgUsers } = context;
 
   const organisationName = normalized.organisation_name?.trim() || null;
 
@@ -1233,7 +1276,7 @@ async function createProfileFromImportRow(context: CommitContext): Promise<strin
     throw new Error(`Failed to create profile: ${profileError.message}`);
   }
 
-  await ensureRelationshipGraph({
+  return ensureRelationshipGraph({
     orgId,
     profileId: profile.id,
     importId,
@@ -1241,15 +1284,12 @@ async function createProfileFromImportRow(context: CommitContext): Promise<strin
     normalized,
     sourceLabel,
     orgUsers,
-    summary,
   });
-
-  return profile.id;
 }
 
 async function updateProfileFromImportRow(
   context: CommitContext & { profileId: string },
-): Promise<void> {
+): Promise<number> {
   const supabase = await createClient();
   const { orgId, profileId, normalized } = context;
 
@@ -1323,7 +1363,7 @@ async function updateProfileFromImportRow(
     }
   }
 
-  await ensureRelationshipGraph({
+  return ensureRelationshipGraph({
     ...context,
     profileId,
   });
@@ -1337,8 +1377,7 @@ async function ensureRelationshipGraph(input: {
   normalized: NormalizedImportRow;
   sourceLabel: string;
   orgUsers: OrgUserRecord[];
-  summary: CommitSummary;
-}): Promise<void> {
+}): Promise<number> {
   const supabase = await createClient();
   const {
     orgId,
@@ -1348,8 +1387,8 @@ async function ensureRelationshipGraph(input: {
     normalized,
     sourceLabel,
     orgUsers,
-    summary,
   } = input;
+  let ownerWarnings = 0;
 
   const relationshipStatus = (normalized.relationship_status ??
     "prospect") as RelationshipStatus;
@@ -1422,7 +1461,7 @@ async function ensureRelationshipGraph(input: {
     const ownerUserId = resolveOrgUserId(ownerRef, orgUsers);
 
     if (!ownerUserId) {
-      summary.ownerWarnings += 1;
+      ownerWarnings += 1;
     } else {
       const ownerStrength = (normalized.owner_strength ?? "unknown") as OwnerStrength;
 
@@ -1451,7 +1490,7 @@ async function ensureRelationshipGraph(input: {
 
   const tagNames = parseTags(normalized.tags);
   if (tagNames.length === 0) {
-    return;
+    return ownerWarnings;
   }
 
   for (const tagName of tagNames) {
@@ -1499,4 +1538,6 @@ async function ensureRelationshipGraph(input: {
       throw new Error(`Failed to link tag: ${profileTagError.message}`);
     }
   }
+
+  return ownerWarnings;
 }

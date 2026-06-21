@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
@@ -6,10 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { exchangeCodeForTokens } from "@/lib/integrations/calendar/client";
 import { getCalendarEnv } from "@/lib/integrations/calendar/env";
 import { getCalendarRedirectUri } from "@/lib/integrations/calendar/redirect-uri";
-import {
-  syncCalendarAccount,
-  upsertCalendarAccount,
-} from "@/lib/integrations/calendar/sync";
+import { upsertCalendarAccount } from "@/lib/integrations/calendar/sync";
 import { encryptToken } from "@/lib/integrations/google/crypto";
 import {
   STATE_COOKIE,
@@ -49,19 +45,11 @@ export async function GET(request: Request) {
 
     const redirectUri = getCalendarRedirectUri(origin);
     const tokens = await exchangeCodeForTokens(code, redirectUri);
-    const account = await upsertCalendarAccount({
+    await upsertCalendarAccount({
       orgId: user.org_id,
       userId: user.id,
       email: tokens.email,
       encryptedRefreshToken: encryptToken(tokens.refreshToken),
-    });
-
-    after(async () => {
-      try {
-        await syncCalendarAccount(account);
-      } catch (syncError) {
-        console.error("Calendar backfill failed after connect:", syncError);
-      }
     });
 
     const response = NextResponse.redirect(
