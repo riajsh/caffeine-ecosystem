@@ -2,9 +2,33 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { normaliseEmail } from "@/lib/integrations/participant-email";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
+
+export async function loadIgnoredParticipantEmails(
+  supabase: AdminClient,
+  orgId: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("calendar_participant_reviews")
+    .select("email")
+    .eq("org_id", orgId)
+    .eq("status", "ignored");
+
+  if (error) {
+    throw new Error(
+      `Failed to load ignored calendar participants: ${error.message}`,
+    );
+  }
+
+  return new Set(
+    (data ?? [])
+      .map((row) => normaliseEmail(row.email))
+      .filter(Boolean),
+  );
+}
 
 export async function ensureRelationshipForProfile(
   supabase: AdminClient,

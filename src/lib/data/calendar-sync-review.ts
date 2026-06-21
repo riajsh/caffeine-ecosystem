@@ -3,6 +3,7 @@ import "server-only";
 import { getOrgId, requireAdmin } from "@/lib/auth/session";
 import {
   isInternalParticipant,
+  isNonPersonParticipant,
   loadOrgParticipantFilters,
   type OrgParticipantFilters,
 } from "@/lib/integrations/participant-email";
@@ -153,6 +154,10 @@ export async function getCalendarSyncReviewSummary(): Promise<CalendarSyncReview
   let internalPendingReviewCount = 0;
 
   for (const row of pendingReviews ?? []) {
+    if (isNonPersonParticipant(row.email)) {
+      continue;
+    }
+
     if (isInternalParticipant(row.email, filters)) {
       internalPendingReviewCount += 1;
     } else {
@@ -239,6 +244,10 @@ export async function listPendingCalendarReviewGroups(
   const groups = new Map<string, CalendarUnmatchedGroup>();
 
   for (const row of data ?? []) {
+    if (isNonPersonParticipant(row.email)) {
+      continue;
+    }
+
     const email = row.email.toLowerCase();
     const event = row.calendar_events;
     const existing = groups.get(email);
@@ -324,40 +333,114 @@ export async function listRecentMatchedCalendarMeetings(
   };
 }
 
+export type CalendarProfileMatch = {
+  id: string;
+  fullName: string;
+  email: string | null;
+  matchReason: "exact_email" | "name_or_email";
+};
+
 export async function searchProfilesForCalendarLink(
   query: string,
-): Promise<Array<{ id: string; fullName: string; email: string | null }>> {
+  calendarEmail?: string,
+): Promise<CalendarProfileMatch[]> {
   await requireAdmin();
   const orgId = await getOrgId();
   const supabase = await createClient();
   const trimmed = query.trim().replace(/[%_]/g, "");
-
-  if (trimmed.length < 2) {
-    return [];
-  }
+  const normalisedCalendarEmail = calendarEmail
+    ? calendarEmail.trim().toLowerCase()
+    : null;
 
   const filters = await loadReviewParticipantFilters(orgId);
+  const results: CalendarProfileMatch[] = [];
+  const seen = new Set<string>();
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, email")
-    .eq("org_id", orgId)
-    .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
-    .order("full_name")
-    .limit(12);
+  function addProfile(
+    row: { id: string; full_name: string; email: string | null },
+    matchReason: CalendarProfileMatch["matchReason"],
+  ) {
+    if (seen.has(row.id)) {
+      return;
+    }
 
-  if (error) {
-    throw new Error(`Failed to search profiles: ${error.message}`);
-  }
+    if (row.email && isInternalParticipant(row.email, filters)) {
+      return;
+    }
 
-  return (data ?? [])
-    .filter(
-      (row) => !row.email || !isInternalParticipant(row.email, filters),
-    )
-    .slice(0, 8)
-    .map((row) => ({
+    seen.add(row.id);
+    results.push({
       id: row.id,
       fullName: row.full_name,
       email: row.email,
-    }));
+      matchReason,
+    });
+  }
+
+  if (normalisedCalendarEmail) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("org_id", orgId)
+      .ilike("email", normalisedCalendarEmail)
+      .limit(1);
+
+    if (error) {
+      throw new Error(`Failed to search profiles by email: ${error.message}`);
+    }
+
+    if (data?.[0]) {
+      addProfile(data[0], "exact_email");
+    }
+  }
+
+  if (trimmed.length >= 2) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("org_id", orgId)
+      .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
+      .order("full_name")
+      .limit(12);
+
+    if (error) {
+      throw new Error(`Failed to search profiles: ${error.message}`);
+    }
+
+    for (const row of data ?? []) {
+      const isExactEmail =
+        Boolean(row.email) &&
+        Boolean(normalisedCalendarEmail) &&
+        row.email!.trim().toLowerCase() === normalisedCalendarEmail;
+
+      addProfile(row, isExactEmail ? "exact_email" : "name_or_email");
+    }
+  }
+
+  if (normalisedCalendarEmail && results.length < 8) {
+    const localPart = normalisedCalendarEmail.split("@")[0] ?? "";
+    const localPartAlreadySearched =
+      trimmed.length >= 2 &&
+      (localPart.includes(trimmed) || trimmed.includes(localPart));
+
+    if (localPart.length >= 3 && !localPartAlreadySearched) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .eq("org_id", orgId)
+        .or(`full_name.ilike.%${localPart}%,email.ilike.%${localPart}%`)
+        .order("full_name")
+        .limit(8);
+
+      if (error) {
+        throw new Error(`Failed to search profiles: ${error.message}`);
+      }
+
+      for (const row of data ?? []) {
+        addProfile(row, "name_or_email");
+      }
+    }
+  }
+
+  return results.slice(0, 8);
 }

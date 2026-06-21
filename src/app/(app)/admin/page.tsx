@@ -25,7 +25,7 @@ type AdminPageProps = {
 export default async function AdminOverviewPage({ searchParams }: AdminPageProps) {
   const user = await requireAdmin();
   const params = await searchParams;
-  const deployChecks = getDeployChecklist();
+  const deployChecks = await getDeployChecklist();
   let calendarAccounts: Awaited<ReturnType<typeof listCalendarAccountsForOrg>> =
     [];
 

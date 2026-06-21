@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isAllowedLoginEmail } from "@/lib/auth/allowed-email";
 import { getSafeRedirectPath } from "@/lib/auth/safe-redirect";
 import { ensureUserRow } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -28,6 +29,13 @@ export async function GET(request: Request) {
 
   if (!user) {
     return NextResponse.redirect(`${origin}/login?error=missing_user`);
+  }
+
+  if (user.email && !isAllowedLoginEmail(user.email)) {
+    await supabase.auth.signOut();
+    return NextResponse.redirect(
+      `${origin}/login?error=${encodeURIComponent("Sign in with your work Google account.")}`,
+    );
   }
 
   try {

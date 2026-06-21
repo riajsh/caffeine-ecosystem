@@ -14,6 +14,7 @@ import {
   processCalendarParticipants,
 } from "@/lib/integrations/calendar/match";
 import { loadOrgParticipantFilters } from "@/lib/integrations/participant-email";
+import { loadIgnoredParticipantEmails } from "@/lib/integrations/calendar/review-utils";
 import { purgeBeyondLookaheadCalendarData } from "@/lib/integrations/calendar/purge-beyond-lookahead";
 import { purgeInternalCalendarSyncData } from "@/lib/integrations/calendar/purge-internal";
 import type {
@@ -112,6 +113,7 @@ async function upsertCalendarEvent(
   account: CalendarAccount,
   parsed: ParsedCalendarEvent,
   participantFilters: Awaited<ReturnType<typeof loadOrgParticipantFilters>>,
+  ignoredParticipantEmails: ReadonlySet<string>,
 ): Promise<{ activitiesCreated: number; reviewsQueued: number }> {
 
   if (
@@ -166,6 +168,7 @@ async function upsertCalendarEvent(
     startAt: parsed.startAt,
     participants: parsed.participants,
     participantFilters,
+    ignoredParticipantEmails,
   });
 }
 
@@ -183,6 +186,10 @@ export async function syncCalendarAccount(
   const supabase = createAdminClient();
   const calendar = getCalendarClient(account);
   const participantFilters = await loadOrgParticipantFilters(
+    supabase,
+    account.org_id,
+  );
+  const ignoredParticipantEmails = await loadIgnoredParticipantEmails(
     supabase,
     account.org_id,
   );
@@ -233,6 +240,7 @@ export async function syncCalendarAccount(
             account,
             parsed,
             participantFilters,
+            ignoredParticipantEmails,
           );
           stats.eventsProcessed += 1;
           stats.activitiesCreated += result.activitiesCreated;

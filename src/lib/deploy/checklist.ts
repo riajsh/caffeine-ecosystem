@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createAdminClient } from "@/lib/supabase/admin";
+
 export type DeployCheckStatus = "ok" | "missing" | "warning" | "optional";
 
 export type DeployCheckItem = {
@@ -13,12 +15,63 @@ function envSet(name: string): boolean {
   return Boolean(process.env[name]?.trim());
 }
 
-export function getDeployChecklist(): DeployCheckItem[] {
+function resolveSiteUrl(): string {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (siteUrl) {
+    return siteUrl.replace(/\/$/, "");
+  }
+
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  if (vercelHost) {
+    const host = vercelHost.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return vercelHost.startsWith("http") ? vercelHost.replace(/\/$/, "") : `https://${host}`;
+  }
+
+  return "http://localhost:3000";
+}
+
+function supabaseProjectRef(): string | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!url) {
+    return null;
+  }
+
+  try {
+    return new URL(url).hostname.split(".")[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function migrationsApplied(): Promise<boolean> {
+  if (!envSet("NEXT_PUBLIC_SUPABASE_URL") || !envSet("SUPABASE_SERVICE_ROLE_KEY")) {
+    return false;
+  }
+
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("calendar_accounts")
+      .select("id", { head: true, count: "exact" });
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function getDeployChecklist(): Promise<DeployCheckItem[]> {
   const isVercel = Boolean(process.env.VERCEL);
   const isProduction = process.env.VERCEL_ENV === "production";
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const resolvedSiteUrl = resolveSiteUrl();
   const vercelHost =
     process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  const projectRef = supabaseProjectRef();
+  const authCallbackUrl = `${resolvedSiteUrl}/auth/callback`;
+  const authConfirmUrl = `${resolvedSiteUrl}/auth/confirm`;
+  const migrationsReady = await migrationsApplied();
 
   const siteUrlStatus: DeployCheckStatus = siteUrl
     ? "ok"
@@ -79,17 +132,17 @@ export function getDeployChecklist(): DeployCheckItem[] {
     },
     {
       id: "supabase-auth",
-      label: "Supabase Auth redirect URLs",
+      label: "Supabase Auth (Google + redirects)",
       status: "warning",
-      detail:
-        "In Supabase Dashboard → Authentication → URL configuration, allow /auth/callback on this site URL.",
+      detail: `Enable Google under Authentication → Providers, add ${authCallbackUrl} and ${authConfirmUrl} as redirect URLs, and set Site URL to ${resolvedSiteUrl}. Google OAuth redirect in Google Cloud: https://${projectRef ?? "your-project-ref"}.supabase.co/auth/v1/callback`,
     },
     {
       id: "migrations",
       label: "Database migrations",
-      status: "warning",
-      detail:
-        "Run supabase db push (or apply migrations) on the linked project before go-live.",
+      status: migrationsReady ? "ok" : "warning",
+      detail: migrationsReady
+        ? "Phase 1 schema is present on the linked Supabase project."
+        : "Run supabase db push on the linked project before go-live.",
     },
     {
       id: "calendar-cron",

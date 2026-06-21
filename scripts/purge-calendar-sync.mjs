@@ -23,6 +23,12 @@ const IGNORED_EMAIL_PATTERNS = [
   /^mailer-daemon@/i,
 ];
 
+const NON_PERSON_EMAIL_PATTERNS = [
+  ...IGNORED_EMAIL_PATTERNS,
+  /@resource\.calendar\.google\.com$/i,
+  /@group\.calendar\.google\.com$/i,
+];
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -39,8 +45,10 @@ function extractEmailDomain(email) {
   return email.slice(at + 1);
 }
 
-function isIgnoredEmail(email) {
-  return IGNORED_EMAIL_PATTERNS.some((pattern) => pattern.test(email));
+function isNonPersonParticipant(email) {
+  const normalised = normaliseEmail(email);
+  if (!normalised) return true;
+  return NON_PERSON_EMAIL_PATTERNS.some((pattern) => pattern.test(normalised));
 }
 
 function loadConfiguredInternalDomains() {
@@ -147,7 +155,7 @@ function isInternalParticipant(email, filters) {
   const domain = extractEmailDomain(normalised);
   if (domain && filters.internalDomains.has(domain)) return true;
 
-  return isIgnoredEmail(normalised);
+  return isNonPersonParticipant(normalised);
 }
 
 async function deleteActivitiesByIds(orgId, ids) {

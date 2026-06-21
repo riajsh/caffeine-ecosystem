@@ -7,6 +7,7 @@ import { backfillCalendarReviewsForProfile } from "@/lib/integrations/calendar/b
 import {
   isInternalParticipant,
   loadOrgParticipantFilters,
+  normaliseEmail,
 } from "@/lib/integrations/participant-email";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
@@ -19,12 +20,13 @@ async function resolvePendingReviewsForEmail(
   const user = await requireUser();
   const orgId = await getOrgId();
   const supabase = createAdminClient();
+  const normalisedEmail = normaliseEmail(email);
 
   const { data: pendingReviews, error: pendingError } = await supabase
     .from("calendar_participant_reviews")
     .select("id")
     .eq("org_id", orgId)
-    .eq("email", email)
+    .ilike("email", normalisedEmail)
     .eq("status", "pending");
 
   if (pendingError) {
@@ -53,7 +55,7 @@ async function resolvePendingReviewsForEmail(
       reviewed_at: new Date().toISOString(),
     })
     .eq("org_id", orgId)
-    .eq("email", email)
+    .ilike("email", normalisedEmail)
     .eq("status", "pending");
 
   if (updateError) {
@@ -249,7 +251,10 @@ export async function ignoreAllInternalCalendarReviewsAction() {
   }
 }
 
-export async function searchProfilesForCalendarLinkAction(query: string) {
+export async function searchProfilesForCalendarLinkAction(
+  query: string,
+  calendarEmail?: string,
+) {
   await requireAdmin();
 
   const { searchProfilesForCalendarLink } = await import(
@@ -257,7 +262,7 @@ export async function searchProfilesForCalendarLinkAction(query: string) {
   );
 
   try {
-    const profiles = await searchProfilesForCalendarLink(query);
+    const profiles = await searchProfilesForCalendarLink(query, calendarEmail);
     return { success: true as const, profiles };
   } catch (error) {
     return {

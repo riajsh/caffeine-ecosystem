@@ -7,6 +7,22 @@ import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
 
+const BATCH_SIZE = 1000;
+
+async function deleteInBatches(
+  ids: string[],
+  deleteBatch: (batch: string[]) => Promise<number>,
+): Promise<number> {
+  let removed = 0;
+
+  for (let index = 0; index < ids.length; index += BATCH_SIZE) {
+    const batch = ids.slice(index, index + BATCH_SIZE);
+    removed += await deleteBatch(batch);
+  }
+
+  return removed;
+}
+
 export async function purgeBeyondLookaheadCalendarData(
   supabase: AdminClient,
   orgId: string,
@@ -17,90 +33,132 @@ export async function purgeBeyondLookaheadCalendarData(
 }> {
   const cutoff = calendarLookaheadCutoff().toISOString();
 
-  const { data: deletedByDate, error: byDateError } = await supabase
-    .from("activities")
-    .delete()
-    .eq("org_id", orgId)
-    .eq("source", "calendar_sync")
-    .gt("activity_date", cutoff)
-    .select("id");
+  let activitiesRemovedByDate = 0;
 
-  if (byDateError) {
-    throw new Error(
-      `Failed to remove far-future calendar activities: ${byDateError.message}`,
-    );
-  }
+  while (true) {
+    const { data: farActivities, error: selectError } = await supabase
+      .from("activities")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("source", "calendar_sync")
+      .gt("activity_date", cutoff)
+      .limit(BATCH_SIZE);
 
-  const { data: farEvents, error: eventsError } = await supabase
-    .from("calendar_events")
-    .select("id, google_event_id")
-    .eq("org_id", orgId)
-    .gt("start_at", cutoff);
+    if (selectError) {
+      throw new Error(
+        `Failed to load far-future calendar activities: ${selectError.message}`,
+      );
+    }
 
-  if (eventsError) {
-    throw new Error(
-      `Failed to load far-future calendar events: ${eventsError.message}`,
-    );
+    if (!farActivities?.length) {
+      break;
+    }
+
+    const ids = farActivities.map((row) => row.id);
+    const removed = await deleteInBatches(ids, async (batch) => {
+      const { data, error } = await supabase
+        .from("activities")
+        .delete()
+        .eq("org_id", orgId)
+        .in("id", batch)
+        .select("id");
+
+      if (error) {
+        throw new Error(
+          `Failed to remove far-future calendar activities: ${error.message}`,
+        );
+      }
+
+      return data?.length ?? 0;
+    });
+
+    activitiesRemovedByDate += removed;
   }
 
   let activitiesFromEvents = 0;
   let sourcesRemoved = 0;
   let eventsRemoved = 0;
 
-  if (farEvents?.length) {
+  while (true) {
+    const { data: farEvents, error: eventsError } = await supabase
+      .from("calendar_events")
+      .select("id, google_event_id")
+      .eq("org_id", orgId)
+      .gt("start_at", cutoff)
+      .limit(BATCH_SIZE);
+
+    if (eventsError) {
+      throw new Error(
+        `Failed to load far-future calendar events: ${eventsError.message}`,
+      );
+    }
+
+    if (!farEvents?.length) {
+      break;
+    }
+
     const googleEventIds = farEvents.map((event) => event.google_event_id);
     const eventIds = farEvents.map((event) => event.id);
 
-    const { data: deletedByRef, error: refError } = await supabase
-      .from("activities")
-      .delete()
-      .eq("org_id", orgId)
-      .eq("source", "calendar_sync")
-      .in("source_ref", googleEventIds)
-      .select("id");
+    activitiesFromEvents += await deleteInBatches(
+      googleEventIds,
+      async (batch) => {
+        const { data, error } = await supabase
+          .from("activities")
+          .delete()
+          .eq("org_id", orgId)
+          .eq("source", "calendar_sync")
+          .in("source_ref", batch)
+          .select("id");
 
-    if (refError) {
-      throw new Error(
-        `Failed to remove activities for far-future events: ${refError.message}`,
-      );
-    }
+        if (error) {
+          throw new Error(
+            `Failed to remove activities for far-future events: ${error.message}`,
+          );
+        }
 
-    activitiesFromEvents = deletedByRef?.length ?? 0;
+        return data?.length ?? 0;
+      },
+    );
 
-    const { data: deletedSources, error: sourcesError } = await supabase
-      .from("relationship_sources")
-      .delete()
-      .eq("org_id", orgId)
-      .eq("source_type", "meeting")
-      .in("source_id", eventIds)
-      .select("id");
+    sourcesRemoved += await deleteInBatches(eventIds, async (batch) => {
+      const { data, error } = await supabase
+        .from("relationship_sources")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("source_type", "meeting")
+        .in("source_id", batch)
+        .select("id");
 
-    if (sourcesError) {
-      throw new Error(
-        `Failed to remove far-future meeting provenance: ${sourcesError.message}`,
-      );
-    }
+      if (error) {
+        throw new Error(
+          `Failed to remove far-future meeting provenance: ${error.message}`,
+        );
+      }
 
-    sourcesRemoved = deletedSources?.length ?? 0;
+      return data?.length ?? 0;
+    });
 
-    const { data: deletedEvents, error: deleteEventsError } = await supabase
-      .from("calendar_events")
-      .delete()
-      .in("id", eventIds)
-      .select("id");
+    eventsRemoved += await deleteInBatches(eventIds, async (batch) => {
+      const { data, error } = await supabase
+        .from("calendar_events")
+        .delete()
+        .in("id", batch)
+        .select("id");
 
-    if (deleteEventsError) {
-      throw new Error(
-        `Failed to remove far-future calendar events: ${deleteEventsError.message}`,
-      );
-    }
+      if (error) {
+        throw new Error(
+          `Failed to remove far-future calendar events: ${error.message}`,
+        );
+      }
 
-    eventsRemoved = deletedEvents?.length ?? 0;
+      return data?.length ?? 0;
+    });
   }
 
   return {
     eventsRemoved,
-    activitiesRemoved: (deletedByDate?.length ?? 0) + activitiesFromEvents,
+    activitiesRemoved: activitiesRemovedByDate + activitiesFromEvents,
     sourcesRemoved,
   };
 }

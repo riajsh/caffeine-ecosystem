@@ -35,6 +35,7 @@ export async function processCalendarParticipants(
     startAt: string | null;
     participants: CalendarParticipant[];
     participantFilters: OrgParticipantFilters;
+    ignoredParticipantEmails: ReadonlySet<string>;
   },
 ): Promise<{ activitiesCreated: number; reviewsQueued: number }> {
   let activitiesCreated = 0;
@@ -68,6 +69,10 @@ export async function processCalendarParticipants(
       continue;
     }
 
+    if (params.ignoredParticipantEmails.has(email)) {
+      continue;
+    }
+
     if (profile) {
       const relationshipId = await ensureRelationship(
         supabase,
@@ -75,7 +80,7 @@ export async function processCalendarParticipants(
         profile.id,
       );
 
-      const { data: existingActivity, error: activityLookupError } =
+      const { data: existingActivities, error: activityLookupError } =
         await supabase
           .from("activities")
           .select("id")
@@ -83,7 +88,9 @@ export async function processCalendarParticipants(
           .eq("profile_id", profile.id)
           .eq("source", "calendar_sync")
           .eq("source_ref", params.googleEventId)
-          .maybeSingle();
+          .limit(1);
+
+      const existingActivity = existingActivities?.[0];
 
       if (activityLookupError) {
         throw new Error(
@@ -111,13 +118,15 @@ export async function processCalendarParticipants(
         activitiesCreated += 1;
       }
 
-      const { data: existingSource, error: sourceLookupError } = await supabase
+      const { data: existingSources, error: sourceLookupError } = await supabase
         .from("relationship_sources")
         .select("id")
         .eq("relationship_id", relationshipId)
         .eq("source_type", "meeting")
         .eq("source_id", params.eventId)
-        .maybeSingle();
+        .limit(1);
+
+      const existingSource = existingSources?.[0];
 
       if (sourceLookupError) {
         throw new Error(
@@ -146,7 +155,7 @@ export async function processCalendarParticipants(
       continue;
     }
 
-    const { error: reviewError } = await supabase
+    const { data: insertedReviews, error: reviewError } = await supabase
       .from("calendar_participant_reviews")
       .upsert(
         {
@@ -156,14 +165,18 @@ export async function processCalendarParticipants(
           calendar_event_id: params.eventId,
           status: "pending",
         },
-        { onConflict: "org_id,email,calendar_event_id" },
-      );
+        {
+          onConflict: "org_id,email,calendar_event_id",
+          ignoreDuplicates: true,
+        },
+      )
+      .select("id");
 
     if (reviewError) {
       throw new Error(`Failed to queue participant review: ${reviewError.message}`);
     }
 
-    reviewsQueued += 1;
+    reviewsQueued += insertedReviews?.length ?? 0;
   }
 
   return { activitiesCreated, reviewsQueued };

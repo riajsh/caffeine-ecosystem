@@ -11,6 +11,13 @@ const IGNORED_EMAIL_PATTERNS = [
   /^mailer-daemon@/i,
 ];
 
+/** Google Workspace rooms, desks, and shared calendars — not people. */
+const NON_PERSON_EMAIL_PATTERNS = [
+  ...IGNORED_EMAIL_PATTERNS,
+  /@resource\.calendar\.google\.com$/i,
+  /@group\.calendar\.google\.com$/i,
+];
+
 type AdminClient = SupabaseClient<Database>;
 
 export type OrgParticipantFilters = {
@@ -33,6 +40,15 @@ export function extractEmailDomain(email: string): string | null {
 
 export function isIgnoredEmail(email: string): boolean {
   return IGNORED_EMAIL_PATTERNS.some((pattern) => pattern.test(email));
+}
+
+export function isNonPersonParticipant(email: string): boolean {
+  const normalised = normaliseEmail(email);
+  if (!normalised) {
+    return true;
+  }
+
+  return NON_PERSON_EMAIL_PATTERNS.some((pattern) => pattern.test(normalised));
 }
 
 function collectDomains(emails: Iterable<string>): Set<string> {
@@ -121,13 +137,13 @@ export function isInternalParticipant(
     return true;
   }
 
-  return isIgnoredEmail(normalised);
+  return isNonPersonParticipant(normalised);
 }
 
 /** Env-domain check only — for nav/account routing without a DB round-trip. */
 export function isInternalParticipantEmail(email: string): boolean {
   const normalised = normaliseEmail(email);
-  if (!normalised || isIgnoredEmail(normalised)) {
+  if (!normalised || isNonPersonParticipant(normalised)) {
     return true;
   }
 
