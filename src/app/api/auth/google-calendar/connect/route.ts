@@ -43,8 +43,9 @@ export async function GET(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Calendar connect failed";
+    const { origin } = new URL(request.url);
     return NextResponse.redirect(
-      `/admin?calendar_error=${encodeURIComponent(message)}`,
+      `${origin}/admin?calendar_error=${encodeURIComponent(message)}`,
     );
   }
 }

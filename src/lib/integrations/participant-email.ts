@@ -124,6 +124,21 @@ export function isInternalParticipant(
   return isIgnoredEmail(normalised);
 }
 
+/** Env-domain check only — for nav/account routing without a DB round-trip. */
+export function isInternalParticipantEmail(email: string): boolean {
+  const normalised = normaliseEmail(email);
+  if (!normalised || isIgnoredEmail(normalised)) {
+    return true;
+  }
+
+  const domain = extractEmailDomain(normalised);
+  if (!domain) {
+    return true;
+  }
+
+  return loadConfiguredInternalDomains().has(domain);
+}
+
 export function hasExternalParticipant(
   participants: Array<{ email: string }>,
   filters: OrgParticipantFilters,

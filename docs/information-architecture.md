@@ -32,7 +32,7 @@ If a screen invents its own data instead of reading the spine, it is wrong.
 Sidebar order, matching the validated prototype:
 
 1. **Overview** — home and landing. Defaults to Search plus a few high-signal cards (recent activity, reconnect prompts, upcoming events). Search is the centre of gravity, not an afterthought.
-2. **Watch List** — a saved set of people the user is actively tracking.
+2. **Watch List (Phase 2)** — a saved set of people the user is actively tracking.
 3. **Connect** — computed suggestions: reconnect, introduce, emerging. Phase 2.
 4. **Profiles** — the table view. Filterable, sortable, the workhorse for browsing and bulk actions.
 5. **Orbit** — the relationship radar. Strength and recency as distance from centre, owner as colour. Phase 2.
@@ -57,6 +57,9 @@ Sidebar order, matching the validated prototype:
 - Bulk: tag, add to watch list, assign owner.
 
 ### Profile (drawer or page)
+
+Spec: `docs/specs/profile-detail.md`.
+
 - Header: name, company, role, location, links, primary owner, owner list with strength, status, relationship type.
 - Tabs: Activity (timeline), Connections, Events attended, Notes.
 - Network intelligence block (Phase 2): works with N people at the same company, appears in these clusters, strongly connected to, suggested introductions. Generated, labelled as generated.
@@ -76,9 +79,9 @@ Sidebar order, matching the validated prototype:
 - Event detail: attendee list, connections that originated here, who attends often, who stopped attending.
 
 ### Admin
-- Import: upload, column mapping, dedup review.
-- Review queues: unmatched email participants, soft-match candidates.
-- Users, roles, tags.
+- Import: upload, column mapping, dedup review (`docs/specs/import-pipeline.md`, `docs/specs/admin-review.md` §5).
+- Review queues: calendar participants (shipped), unmatched email participants (planned), import soft-matches (`docs/specs/admin-review.md`).
+- Team members, tags, datasets, dedup, archived, connect settings.
 
 ## Cross-cutting UI rules
 

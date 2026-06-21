@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 
 import {
   createProfileFromCalendarReviewAction,
+  ignoreAllInternalCalendarReviewsAction,
   ignoreCalendarReviewAction,
   linkCalendarReviewAction,
   searchProfilesForCalendarLinkAction,
@@ -15,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   CalendarMatchedMeeting,
+  CalendarMatchedMeetingLists,
+  CalendarReviewGroupLists,
   CalendarSyncReviewSummary,
   CalendarUnmatchedGroup,
 } from "@/lib/data/calendar-sync-review";
@@ -22,8 +25,8 @@ import { formatInteractionDate } from "@/lib/format/date";
 
 type CalendarSyncReviewWizardProps = {
   summary: CalendarSyncReviewSummary;
-  unmatchedGroups: CalendarUnmatchedGroup[];
-  matchedMeetings: CalendarMatchedMeeting[];
+  unmatchedGroups: CalendarReviewGroupLists;
+  matchedMeetings: CalendarMatchedMeetingLists;
 };
 
 function formatMeetingContext(group: CalendarUnmatchedGroup): string {
@@ -38,6 +41,50 @@ function formatMeetingContext(group: CalendarUnmatchedGroup): string {
   return `${group.meetingCount} meetings${
     group.sampleMeetingTitle ? ` · e.g. ${group.sampleMeetingTitle}` : ""
   }`;
+}
+
+function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-muted/20 px-4 py-3">
+      <div>
+        <p className="text-body font-medium text-foreground">
+          {group.displayName ?? group.email}
+        </p>
+        <p className="text-caption text-muted-foreground">{group.email}</p>
+        <p className="text-caption text-muted-foreground">
+          {formatMeetingContext(group)}
+        </p>
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={isPending}
+        onClick={() => {
+          setError(null);
+          startTransition(async () => {
+            const formData = new FormData();
+            formData.set("email", group.email);
+            const result = await ignoreCalendarReviewAction(formData);
+            if (result.error) {
+              setError(result.error);
+              return;
+            }
+            router.refresh();
+          });
+        }}
+      >
+        Ignore
+      </Button>
+      {error ? (
+        <p className="text-body text-destructive" role="alert">{error}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
@@ -185,6 +232,99 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   );
 }
 
+function TeamReviewSection({ groups }: { groups: CalendarUnmatchedGroup[] }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  if (groups.length === 0) {
+    return null;
+  }
+
+  return (
+    <details className="rounded-lg border border-border bg-muted/20 p-4">
+      <summary className="cursor-pointer text-body font-medium text-foreground">
+        PU team ({groups.length})
+      </summary>
+      <div className="mt-4 space-y-3">
+        <p className="text-body text-muted-foreground">
+          Internal addresses from before the filter was applied. Ignore to clear
+          the queue — future syncs skip them automatically.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={() => {
+            setError(null);
+            startTransition(async () => {
+              const result = await ignoreAllInternalCalendarReviewsAction();
+              if (result.error) {
+                setError(result.error);
+                return;
+              }
+              router.refresh();
+            });
+          }}
+        >
+          Ignore all team
+        </Button>
+        <div className="space-y-2">
+          {groups.map((group) => (
+            <InternalReviewRow key={group.email} group={group} />
+          ))}
+        </div>
+        {error ? (
+          <p className="text-body text-destructive" role="alert">{error}</p>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
+function MatchedMeetingsTable({ meetings }: { meetings: CalendarMatchedMeeting[] }) {
+  if (meetings.length === 0) {
+    return (
+      <p className="text-body text-muted-foreground">
+        No meeting activities in this section.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border">
+      <table className="w-full text-left text-body">
+        <thead className="border-b border-border bg-muted/40 text-caption text-muted-foreground">
+          <tr>
+            <th className="px-4 py-3 font-medium">Meeting</th>
+            <th className="px-4 py-3 font-medium">Profile</th>
+            <th className="px-4 py-3 font-medium">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {meetings.map((meeting) => (
+            <tr key={meeting.id} className="border-b border-border last:border-0">
+              <td className="px-4 py-3">{meeting.title}</td>
+              <td className="px-4 py-3">
+                <Link
+                  href={`/profiles/${meeting.profileId}`}
+                  className="hover:underline"
+                >
+                  {meeting.profileName}
+                </Link>
+              </td>
+              <td className="px-4 py-3 text-muted-foreground">
+                {formatInteractionDate(meeting.activityDate)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function CalendarSyncReviewWizard({
   summary,
   unmatchedGroups,
@@ -228,7 +368,7 @@ export function CalendarSyncReviewWizard({
           </div>
           <div className="rounded-lg border border-border bg-card p-4">
             <dt className="text-caption text-muted-foreground">
-              Profiles matched
+              External profiles matched
             </dt>
             <dd className="text-subheading font-medium">
               {summary.matchedMeetingCount}
@@ -242,68 +382,71 @@ export function CalendarSyncReviewWizard({
           </div>
         </dl>
 
+        {summary.internalPendingReviewCount > 0 ||
+        summary.internalMatchedMeetingCount > 0 ? (
+          <p className="text-caption text-muted-foreground">
+            {summary.internalPendingReviewCount > 0
+              ? `${summary.internalPendingReviewCount} PU team addresses are in the review queue (see collapsed section on Review people). `
+              : ""}
+            {summary.internalMatchedMeetingCount > 0
+              ? `${summary.internalMatchedMeetingCount} matched meetings are on internal profiles (see Matched meetings tab).`
+              : ""}
+          </p>
+        ) : null}
+
         <p className="text-body text-muted-foreground">
           {summary.pendingReviewCount > 0
-            ? "Work through unmatched meeting attendees in the Review people tab. Create a profile, link to someone you already know, or ignore no-replies and vendors."
-            : "Everything from this sync is matched. Check matched meetings or return to Admin."}
+            ? "Work through external meeting attendees in the Review people tab. Create a profile, link to someone you already know, or ignore no-replies and vendors."
+            : "Everything external from this sync is matched. Check matched meetings or return to Admin."}
         </p>
       </TabsContent>
 
       <TabsContent value="review" id="review-tab" className="space-y-4">
-        {unmatchedGroups.length === 0 ? (
+        {unmatchedGroups.external.length === 0 ? (
           <p className="text-body text-muted-foreground">
-            No unmatched attendees left in the queue.
+            No external attendees left in the queue.
           </p>
         ) : (
           <>
             <p className="text-body text-muted-foreground">
-              Showing {unmatchedGroups.length} people grouped by email. Actions
-              apply across all their pending meetings.
+              Showing {unmatchedGroups.external.length} people grouped by email.
+              Actions apply across all their pending meetings.
             </p>
             <div className="space-y-4">
-              {unmatchedGroups.map((group) => (
+              {unmatchedGroups.external.map((group) => (
                 <UnmatchedReviewRow key={group.email} group={group} />
               ))}
             </div>
           </>
         )}
+
+        <TeamReviewSection groups={unmatchedGroups.internal} />
       </TabsContent>
 
       <TabsContent value="matched" className="space-y-4">
-        {matchedMeetings.length === 0 ? (
+        {matchedMeetings.external.length === 0 &&
+        matchedMeetings.internal.length === 0 ? (
           <p className="text-body text-muted-foreground">
             No meeting activities were created yet.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-left text-body">
-              <thead className="border-b border-border bg-muted/40 text-caption text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Meeting</th>
-                  <th className="px-4 py-3 font-medium">Profile</th>
-                  <th className="px-4 py-3 font-medium">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matchedMeetings.map((meeting) => (
-                  <tr key={meeting.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3">{meeting.title}</td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/profiles/${meeting.profileId}`}
-                        className="hover:underline"
-                      >
-                        {meeting.profileName}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {formatInteractionDate(meeting.activityDate)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <MatchedMeetingsTable meetings={matchedMeetings.external} />
+            {matchedMeetings.internal.length > 0 ? (
+              <details className="rounded-lg border border-border bg-muted/20 p-4">
+                <summary className="cursor-pointer text-body font-medium text-foreground">
+                  PU team profiles ({matchedMeetings.internal.length})
+                </summary>
+                <div className="mt-4 space-y-3">
+                  <p className="text-body text-muted-foreground">
+                    Meetings matched to internal addresses from earlier syncs.
+                    These are not part of the external relationship graph.
+                  </p>
+                  <MatchedMeetingsTable meetings={matchedMeetings.internal} />
+                </div>
+              </details>
+            ) : null}
+          </>
         )}
       </TabsContent>
     </Tabs>

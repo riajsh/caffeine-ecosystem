@@ -11,6 +11,11 @@ function isAuthRoute(pathname: string): boolean {
   );
 }
 
+/** Cron routes authenticate via CRON_SECRET in the route handler, not session cookies. */
+function isCronRoute(pathname: string): boolean {
+  return pathname.startsWith("/api/cron/");
+}
+
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -43,7 +48,7 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  if (!user && !isAuthRoute(pathname)) {
+  if (!user && !isAuthRoute(pathname) && !isCronRoute(pathname)) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);

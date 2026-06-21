@@ -1,13 +1,18 @@
 import { Badge } from "@/components/ui/badge";
 import { formatInteractionDate } from "@/lib/format/date";
 import { formatEnumLabel } from "@/lib/format/enum";
+import { PROFILE_ACTIVITY_LIMIT } from "@/lib/format/provenance";
 import type { ProfileActivity } from "@/lib/data/profiles";
 
 type ActivityTimelineProps = {
   activities: ProfileActivity[];
+  truncated?: boolean;
 };
 
-export function ActivityTimeline({ activities }: ActivityTimelineProps) {
+export function ActivityTimeline({
+  activities,
+  truncated = false,
+}: ActivityTimelineProps) {
   if (activities.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-10 text-center">
@@ -23,7 +28,13 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
   }
 
   return (
-    <ol className="space-y-4">
+    <div className="space-y-3">
+      {truncated ? (
+        <p className="text-caption text-muted-foreground">
+          Showing the {PROFILE_ACTIVITY_LIMIT} most recent activities.
+        </p>
+      ) : null}
+      <ol className="space-y-4">
       {activities.map((activity) => (
         <li
           key={activity.id}
@@ -56,6 +67,7 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
           ) : null}
         </li>
       ))}
-    </ol>
+      </ol>
+    </div>
   );
 }

@@ -2,4 +2,5 @@
 
 Relationship intelligence platform for Previously Unavailable.
 
-See [AGENTS.md](./AGENTS.md) for project conventions and the reading list before building.
+- [AGENTS.md](./AGENTS.md) — conventions and reading list for Cursor sessions
+- [docs/README.md](./docs/README.md) — full documentation index (specs, ADRs, architecture)

@@ -227,14 +227,14 @@ export const strengthBadge = cva(
   {
     variants: {
       strength: {
-        inner_circle: 'bg-[var(--color-interactive-subtle)] text-[var(--color-strength-inner-circle)]',
-        strong:       'bg-[var(--color-interactive-subtle)] text-[var(--color-strength-strong)]',
-        warm:         'bg-green-50 text-[var(--color-strength-warm)]',
-        weak:         'bg-neutral-50 text-[var(--color-strength-weak)]',
-        unknown:      'bg-neutral-50 text-[var(--color-strength-unknown)]',
+        inner_circle: 'bg-interactive-subtle text-strength-inner-circle',
+        strong:       'bg-interactive-subtle text-strength-strong',
+        warm:         'bg-interactive-subtle text-strength-warm',
+        weak:         'bg-neutral-50 text-strength-weak',
+        unknown:      'bg-neutral-50 text-strength-unknown',
       },
       inferred: {
-        true:  'border border-dashed border-[var(--color-border-default)]',
+        true:  'border border-dashed border-border-default',
         false: '',
       },
     },
@@ -253,5 +253,5 @@ These require 2–3 hero screens before they can be decided:
 
 - Motion and transition durations
 - Shadow scale (if any — prefer flat)
-- Orbit-specific visual language (node chrome, ring appearance)
+- Orbit-specific visual language (node chrome, ring appearance) — see `docs/specs/orbit-interaction.md` (expand before Phase 2 Orbit UI)
 - Dark mode overrides (shadcn handles most; Ecosystem-specific tokens may need a `.dark` override block)

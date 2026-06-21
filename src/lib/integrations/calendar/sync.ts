@@ -3,6 +3,7 @@ import "server-only";
 import type { calendar_v3 } from "googleapis";
 
 import { getCalendarClient } from "@/lib/integrations/calendar/client";
+import { removeCalendarEventDerivedData } from "@/lib/integrations/calendar/cleanup-event";
 import {
   CALENDAR_BACKFILL_MONTHS,
   calendarLookaheadCutoff,
@@ -148,6 +149,12 @@ async function upsertCalendarEvent(
   }
 
   if (parsed.isDeleted) {
+    await removeCalendarEventDerivedData(
+      supabase,
+      account.org_id,
+      eventRow.id,
+      parsed.googleEventId,
+    );
     return { activitiesCreated: 0, reviewsQueued: 0 };
   }
 
@@ -164,6 +171,7 @@ async function upsertCalendarEvent(
 
 export async function syncCalendarAccount(
   account: CalendarAccount,
+  isTokenRetry = false,
 ): Promise<CalendarSyncStats> {
   const stats: CalendarSyncStats = {
     eventsProcessed: 0,
@@ -182,20 +190,23 @@ export async function syncCalendarAccount(
   await purgeInternalCalendarSyncData(supabase, account.org_id, participantFilters);
   await purgeBeyondLookaheadCalendarData(supabase, account.org_id);
 
-  await supabase
-    .from("calendar_accounts")
-    .update({
-      metadata: {
-        syncing: true,
-        started_at: new Date().toISOString(),
-      },
-    })
-    .eq("id", account.id)
-    .eq("org_id", account.org_id);
+  if (!isTokenRetry) {
+    await supabase
+      .from("calendar_accounts")
+      .update({
+        metadata: {
+          syncing: true,
+          started_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", account.id)
+      .eq("org_id", account.org_id);
+  }
 
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
-  let syncToken = account.sync_cursor ?? undefined;
+  const syncToken = account.sync_cursor ?? undefined;
+  let retryingAfterInvalidToken = false;
 
   try {
     do {
@@ -240,46 +251,35 @@ export async function syncCalendarAccount(
     const message =
       error instanceof Error ? error.message : "Calendar sync request failed";
 
-    if (message.includes("Sync token is no longer valid")) {
-      syncToken = undefined;
-      return syncCalendarAccount({ ...account, sync_cursor: null });
+    if (message.includes("Sync token is no longer valid") && !isTokenRetry) {
+      retryingAfterInvalidToken = true;
+      return syncCalendarAccount({ ...account, sync_cursor: null }, true);
     }
 
     stats.errors.push(message);
-
-    await supabase
-      .from("calendar_accounts")
-      .update({
-        metadata: {
-          syncing: false,
-          last_run: {
-            at: new Date().toISOString(),
-            stats,
-            error: message,
-          },
-        },
-      })
-      .eq("id", account.id)
-      .eq("org_id", account.org_id);
-
     return stats;
+  } finally {
+    if (!retryingAfterInvalidToken) {
+      await supabase
+        .from("calendar_accounts")
+        .update({
+          last_sync_at: new Date().toISOString(),
+          sync_cursor: nextSyncToken ?? account.sync_cursor,
+          metadata: {
+            syncing: false,
+            last_run: {
+              at: new Date().toISOString(),
+              stats,
+              ...(stats.errors.length > 0
+                ? { error: stats.errors[stats.errors.length - 1] }
+                : {}),
+            },
+          },
+        })
+        .eq("id", account.id)
+        .eq("org_id", account.org_id);
+    }
   }
-
-  await supabase
-    .from("calendar_accounts")
-    .update({
-      last_sync_at: new Date().toISOString(),
-      sync_cursor: nextSyncToken ?? account.sync_cursor,
-      metadata: {
-        syncing: false,
-        last_run: {
-          at: new Date().toISOString(),
-          stats,
-        },
-      },
-    })
-    .eq("id", account.id)
-    .eq("org_id", account.org_id);
 
   return stats;
 }

@@ -2,7 +2,7 @@
 
 - Version: 1.0
 - Status: Accepted
-- Related: ADR 0004, domain-model-v1.md §5.3, §5.12, §5.6
+- Related: ADR 0004, domain-model-v1.md §5.3, §5.12, §5.6, `docs/specs/admin-review.md` §5
 
 Imports are the primary data ingestion path for months after launch. This spec defines the full pipeline in detail before any code is written.
 
@@ -188,7 +188,7 @@ Summary written to `imports.metadata.dedup_summary`:
 **Actor:** Admin  
 **UI:** Admin → Import → {import_id} → Review
 
-Two review types share one UI pattern:
+Combined admin patterns: `docs/specs/admin-review.md` §5.
 
 ### Soft match review (import dedup)
 
@@ -206,7 +206,7 @@ For each `soft_match` row, show:
 
 ### Email participant review
 
-Separate queue (gmail-sync spec). Same UI shell, different data source.
+Separate queue — `docs/specs/admin-review.md` §6 (planned; gmail-sync.md §11). Calendar participant review is shipped — admin-review.md §4.
 
 Import cannot commit while unresolved `soft_match` rows remain (unless admin explicitly "commit anyway" with confirmation — not recommended).
 
@@ -260,7 +260,17 @@ Every import is fully traceable:
 | Commit summary | `imports.metadata.commit_summary` |
 | Provenance | `relationship_sources` pointing to `import.id` |
 
-**Rollback (V1 manual):** Admin identifies `import.id`, lists created profile IDs from commit metadata, deletes profiles created by that import (cascade relationships). Updates from email-match path logged but not auto-reverted. Full automated rollback deferred to V1.1.
+**Rollback (V1 manual):** No automated rollback. Admin executes in this order:
+
+1. Identify `imports.id` and confirm `status = complete`.
+2. Read `imports.metadata.commit_summary` for `created_profile_ids` and `updated_profile_ids`.
+3. **Created profiles only:** delete each profile by ID. Postgres cascades `relationships`, `relationship_owners`, `activities`, `profile_tags`, and `relationship_sources` tied to those profiles. Do **not** delete profiles that existed before the import (the `updated_profile_ids` list).
+4. **Updated profiles:** field fills from email-match are logged in `commit_summary` but not auto-reverted. Revert manually if needed (rare).
+5. **Import staging:** delete `import_rows` where `import_id` matches (optional — keeps audit trail if retained).
+6. **Import record:** set `imports.status = failed` and append rollback note to `imports.metadata`, or delete the `imports` row if no audit needed.
+7. **Storage:** delete the uploaded file from Supabase Storage if reclaiming space (path in `imports.storage_path`).
+
+Full automated rollback (revert updates, undo merges, restore previous field values) deferred to Phase 1.1.
 
 ---
 

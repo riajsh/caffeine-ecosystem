@@ -202,6 +202,53 @@ export async function ignoreCalendarReviewAction(formData: FormData) {
   }
 }
 
+export async function ignoreAllInternalCalendarReviewsAction() {
+  await requireAdmin();
+
+  try {
+    const orgId = await getOrgId();
+    const supabase = createAdminClient();
+    const filters = await loadOrgParticipantFilters(supabase, orgId);
+
+    const { data: pendingReviews, error: pendingError } = await supabase
+      .from("calendar_participant_reviews")
+      .select("email")
+      .eq("org_id", orgId)
+      .eq("status", "pending");
+
+    if (pendingError) {
+      throw new Error(`Failed to load pending reviews: ${pendingError.message}`);
+    }
+
+    const internalEmails = new Set<string>();
+
+    for (const row of pendingReviews ?? []) {
+      if (isInternalParticipant(row.email, filters)) {
+        internalEmails.add(row.email.toLowerCase());
+      }
+    }
+
+    let ignoredCount = 0;
+
+    for (const email of internalEmails) {
+      const result = await resolvePendingReviewsForEmail(email, "ignored");
+      ignoredCount += result.reviewCount;
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/calendar-sync/review");
+
+    return { success: true as const, ignoredCount };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to ignore internal participants",
+    };
+  }
+}
+
 export async function searchProfilesForCalendarLinkAction(query: string) {
   await requireAdmin();
 

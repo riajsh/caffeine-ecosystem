@@ -82,9 +82,11 @@ Ecosystem/
 │   │   │       └── review/
 │   │   └── api/
 │   │       ├── cron/
-│   │       │   └── gmail-sync/    # Vercel cron target
+│   │       │   ├── gmail-sync/       # Vercel cron target (02:00 UTC)
+│   │       │   └── calendar-sync/    # Vercel cron target (03:00 UTC)
 │   │       └── oauth/
-│   │           └── gmail/         # OAuth callback
+│   │           ├── gmail/              # Gmail OAuth callback
+│   │           └── google-calendar/    # Calendar OAuth connect + callback
 │   ├── components/                # UI components (shadcn + domain)
 │   │   ├── ui/                    # shadcn primitives
 │   │   ├── profiles/
@@ -107,10 +109,15 @@ Ecosystem/
 │   │   │   ├── connect.ts
 │   │   │   └── search.ts
 │   │   ├── integrations/          # External system adapters
-│   │   │   └── gmail/
-│   │   │       ├── client.ts
-│   │   │       ├── sync.ts
-│   │   │       └── match.ts
+│   │   │   ├── gmail/
+│   │   │   │   ├── client.ts
+│   │   │   │   ├── sync.ts
+│   │   │   │   └── match.ts
+│   │   │   ├── calendar/
+│   │   │   │   ├── client.ts
+│   │   │   │   ├── sync.ts
+│   │   │   │   └── match.ts
+│   │   │   └── participant-email.ts  # shared internal/ignore filters
 │   │   └── ai/                    # Phase 3; empty until then
 │   ├── config/
 │   │   ├── owner-colours.ts           # ownerColour(userId) — keyed by users.id
@@ -217,18 +224,28 @@ Exceptions (additional policies):
 | OAuth for Ecosystem-connected inboxes | Pathway Gmail tokens |
 | Activity + relationship_source generation from threads | Pathway notification logic |
 
-Spec: `docs/specs/gmail-sync.md`.
+Spec: `docs/specs/gmail-sync.md`. Review UI: `docs/specs/admin-review.md` §6 (planned).
 
-### 6.2 CSV import
+### 6.2 Google Calendar (Phase 1.1 — shipped, ADR 0008)
+
+| Owns | Does not own |
+|---|---|
+| `calendar_accounts`, `calendar_events`, `calendar_participant_reviews` | Gmail threads or shared OAuth tokens |
+| OAuth for Ecosystem-connected calendars | Calendar write / event creation from Ecosystem |
+| Meeting activity + relationship_source generation | Auto-inferred connections from co-attendance (Phase 2 / ADR 0009) |
+
+Spec: `docs/specs/calendar-sync.md`. Review UI: `docs/specs/admin-review.md` §4.
+
+### 6.3 CSV import
 
 | Owns | Does not own |
 |---|---|
 | Upload → preview → map → dedup → review → commit pipeline | Real-time Clay/Airtable API sync (future) |
 | `imports` audit trail, soft-match review queue | Auto-merge on name |
 
-Spec: `docs/specs/import-pipeline.md`.
+Spec: `docs/specs/import-pipeline.md`. Soft-match review: `docs/specs/admin-review.md` §5.
 
-### 6.3 Search
+### 6.4 Search
 
 | Owns | Does not own |
 |---|---|
@@ -237,7 +254,7 @@ Spec: `docs/specs/import-pipeline.md`.
 
 ADR: 0006. Spec: `docs/specs/search.md`.
 
-### 6.4 Claude (Phase 3)
+### 6.5 Claude (Phase 3)
 
 | Owns | Does not own |
 |---|---|
@@ -252,12 +269,15 @@ All model calls go through a single internal AI gateway for logging, provider sw
 
 | Job | Schedule | Handler | Purpose |
 |---|---|---|---|
-| `gmail-sync` | Daily (e.g. 02:00 UTC) | `api/cron/gmail-sync` | Incremental fetch for all `sync_enabled` accounts |
+| `gmail-sync` | Daily 02:00 UTC | `api/cron/gmail-sync` | Incremental fetch for all `sync_enabled` Gmail accounts — **add to `vercel.json` when route ships** |
+| `calendar-sync` | Daily 03:00 UTC | `api/cron/calendar-sync` | Incremental fetch for all `sync_enabled` calendar accounts |
 | `refresh-search-indexes` | Optional weekly | `api/cron/search-refresh` | Reindex FTS if needed |
 
-Vercel cron config in `vercel.json`. Protected by `CRON_SECRET` header check.
+Vercel cron config in `vercel.json`. Protected by `CRON_SECRET` header check (see `src/app/api/cron/*/route.ts` — reject requests without matching `Authorization: Bearer ${CRON_SECRET}`).
 
-Sync is **incremental** using Gmail `historyId` stored on `gmail_accounts.sync_cursor`. Full backfill runs once on account connect.
+Gmail sync is **incremental** using `historyId` stored on `gmail_accounts.sync_cursor`. Full backfill runs once on account connect.
+
+Calendar sync is **incremental** using `nextSyncToken` stored on `calendar_accounts.sync_cursor`. Full backfill (12 months back, 3 months forward) runs once on account connect. See `docs/specs/calendar-sync.md`.
 
 ---
 
@@ -279,6 +299,7 @@ Sync is **incremental** using Gmail `historyId` stored on `gmail_accounts.sync_c
 | `GOOGLE_CALENDAR_REDIRECT_URI` | Calendar OAuth callback (Phase 1.1) | Server only |
 | `TOKEN_ENCRYPTION_KEY` | OAuth refresh token storage | Server only |
 | `GMAIL_SYNC_LABELS` | Gmail sync label filter | Server only; comma-separated label names/IDs |
+| `ORG_INTERNAL_EMAIL_DOMAINS` | Gmail + Calendar participant matching | Server only; comma-separated domains (e.g. `previously.co`). Addresses on these domains are team/internal — no profile, activity, or review row. Also merged with `users.email` at runtime. See `src/lib/integrations/participant-email.ts`. |
 | `ANTHROPIC_API_KEY` | Phase 3 AI | Server only |
 
 Validated at boot via Zod in `src/lib/env.ts`. Fail fast on missing required vars.
@@ -300,11 +321,13 @@ Caffeine clone: new Supabase project (or new `org_id`), same migrations, empty d
 ## 10. What not to build in Phase 1
 
 - Shared Gmail sync with Pathway PM
-- AI gateway or Claude integration
-- pgvector / semantic search
+- AI gateway or Claude integration (Phase 3)
+- pgvector / semantic search (Phase 2)
 - Real-time subscriptions (unless search demands it)
 - Microservices or separate API server
 - Custom auth beyond Supabase
+
+**Phase 1.1 (shipped):** Google Calendar sync is in scope — see §6.2 and `docs/specs/calendar-sync.md`.
 
 ---
 
@@ -313,8 +336,9 @@ Caffeine clone: new Supabase project (or new `org_id`), same migrations, empty d
 - [x] Layer boundaries agreed (§2, §3)
 - [x] Supabase client patterns agreed (§5)
 - [x] Gmail owned by Ecosystem, not Pathway (§6.1, ADR 0007)
+- [x] Calendar sync owned by Ecosystem (§6.2, ADR 0008 — shipped Phase 1.1)
 - [x] Cron approach agreed (§7)
 - [x] Env vars listed (§8)
 - [x] Domain model entity map matches this doc
 
-All items signed off 2026-06-20. See `docs/pre-migration-gate.md` for the full gate record. Generate migrations from `docs/domain-model-v1.md`.
+All items signed off 2026-06-20. Phase 1.1 calendar additions documented 2026-06-21. See `docs/pre-migration-gate.md` for the full gate record. Generate migrations from `docs/domain-model-v1.md`.

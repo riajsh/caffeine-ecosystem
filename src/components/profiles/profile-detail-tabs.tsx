@@ -45,7 +45,10 @@ export function ProfileDetailTabs({
           teamUsers={teamUsers}
           currentUserId={currentUserId}
         />
-        <ActivityTimeline activities={profile.activities} />
+        <ActivityTimeline
+          activities={profile.activities}
+          truncated={profile.activitiesTruncated}
+        />
       </TabsContent>
 
       <TabsContent value="connections">

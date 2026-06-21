@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ensureRelationshipForProfile } from "@/lib/integrations/calendar/review-utils";
+import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
@@ -47,6 +48,10 @@ export async function backfillCalendarReviewsForProfile(
   for (const review of reviews ?? []) {
     const event = review.calendar_events;
     if (!event) {
+      continue;
+    }
+
+    if (isBeyondCalendarLookahead(event.start_at)) {
       continue;
     }
 

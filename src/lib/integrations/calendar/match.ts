@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { CalendarParticipant } from "@/lib/integrations/calendar/types";
+import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
 import { ensureRelationshipForProfile } from "@/lib/integrations/calendar/review-utils";
 import {
   hasExternalParticipant,
@@ -60,6 +61,10 @@ export async function processCalendarParticipants(
       profile?.email &&
       isInternalParticipant(profile.email, params.participantFilters)
     ) {
+      continue;
+    }
+
+    if (isBeyondCalendarLookahead(params.startAt)) {
       continue;
     }
 

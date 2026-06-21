@@ -4,6 +4,8 @@ Ecosystem is a relationship intelligence platform for Previously Unavailable. It
 
 ## Read these before building
 
+Doc index: `docs/README.md`
+
 - `docs/domain-model-v1.md` — the data model and source of truth.
 - `docs/product-brief-v1.md` — what V1 is and is not.
 - `docs/information-architecture.md` — navigation and screens.
@@ -11,7 +13,10 @@ Ecosystem is a relationship intelligence platform for Previously Unavailable. It
 - `docs/technical-architecture.md` — what lives where (read before SQL).
 - `docs/ai-conventions.md` — stack, layer rules, and hard "never do" list.
 - `docs/specs/gmail-sync.md` — email ingestion (highest-risk subsystem).
+- `docs/specs/calendar-sync.md` — Google Calendar sync pipeline (Phase 1.1).
 - `docs/specs/import-pipeline.md` — CSV import flow.
+- `docs/specs/profile-detail.md` — profile page/drawer (most-used screen).
+- `docs/specs/admin-review.md` — review queue UI (calendar, import, email).
 - `docs/decisions/0008-calendar-sync.md` — Google Calendar sync design (implemented Phase 1.1).
 - `docs/specs/search.md` — FTS index design (applied in Phase 1 migrations; read before any search feature work).
 - `docs/design-tokens.md` — @theme tokens, owner palette, strength colours, CVA pattern. Read before any UI work.

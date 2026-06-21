@@ -39,7 +39,7 @@ Cron and sync jobs use service role but must still set `org_id` explicitly on ev
 
 ## Idempotency
 
-All sync and import writes use upserts on natural keys: `(org_id, gmail_thread_id)`, `(org_id, gmail_message_id)`, `(org_id, lower(email))` for profiles. Re-running must not duplicate rows.
+All sync and import writes use upserts on natural keys: `(org_id, gmail_thread_id)`, `(org_id, gmail_message_id)`, `(org_id, google_event_id)`, `(org_id, email, calendar_event_id)` for calendar reviews, `(org_id, lower(email))` for profiles. Re-running must not duplicate rows.
 
 Every ingested record carries `source` and `source_ref`. Do not omit these.
 
@@ -51,7 +51,7 @@ Never hard-code "Previously Unavailable", "PU", or any PU-specific ID outside th
 
 Once Phase 1 migrations are accepted: **do not suggest new tables, new columns, or schema changes.** If a feature cannot be built against the current schema, stop and flag it as a required discussion. Do not silently add a migration to make the feature fit.
 
-Phase 2 schema work (connections, views) re-opens the schema — but only under explicit instruction to do so.
+Phase 2 schema work (computed views: `orbit_ring_view`, `connect_suggestions_view`, `relationship_strength_view`; pgvector if needed) re-opens the schema — but only under explicit instruction to do so. Connections tables are already in Phase 1 migrations.
 
 Full conventions: `docs/ai-conventions.md`
 Architecture: `docs/technical-architecture.md`

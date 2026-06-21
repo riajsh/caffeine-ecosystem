@@ -68,3 +68,17 @@ export const TEAM_MEMBERS = [
 ] as const;
 
 export type TeamMember = (typeof TEAM_MEMBERS)[number];
+
+/** Display titles for team members (not stored in DB in V1). */
+export const TEAM_MEMBER_TITLES: Record<string, string> = {
+  "cp@previously.co": "Co-CEO",
+  "sp@previously.co": "Co-CEO",
+  "ed@previously.co": "Chief Venturing Officer",
+  "hk@previously.co": "Chief Strategy Officer",
+  "jh@previously.co": "Founding Partner",
+  "pd@previously.co": "Chief Design Officer",
+  "ps@previously.co": "Chief Impact Officer",
+  "tp@previously.co": "Chief Operating Officer",
+  "ce@previously.co": "Admin",
+  "team@previously.co": "Member",
+};

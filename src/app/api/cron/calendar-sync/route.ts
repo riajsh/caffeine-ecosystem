@@ -19,11 +19,15 @@ export async function GET(request: Request) {
 
   try {
     const result = await syncAllCalendarAccounts();
-    return NextResponse.json({
-      ok: true,
-      accountsProcessed: result.accountsProcessed,
-      stats: result.stats,
-    });
+    const hasErrors = result.stats.errors.length > 0;
+    return NextResponse.json(
+      {
+        ok: !hasErrors,
+        accountsProcessed: result.accountsProcessed,
+        stats: result.stats,
+      },
+      { status: hasErrors ? 500 : 200 },
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Calendar sync failed";

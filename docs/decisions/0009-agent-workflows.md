@@ -84,9 +84,7 @@ This closes the loop on introductions that currently disappear into email thread
 
 ## Calendar sync as prerequisite
 
-Agents 1, 2, and 3 all depend on calendar sync (ADR 0008). Agent 1 and 3 depend on it directly as their trigger. Agent 2 uses upcoming calendar events to make action suggestions specific rather than generic. The agent layer is not buildable in Phase 3 without Phase 1.1 calendar sync in place.
-
-This reinforces that calendar sync should be treated as a Phase 1.1 priority, not a nice-to-have.
+Calendar sync (ADR 0008) is a **prerequisite for the agent layer** — **shipped Phase 1.1 (2026-06-21)**. Agent 1 and 3 depend on it directly as their trigger. Agent 2 uses upcoming calendar events to make action suggestions specific rather than generic.
 
 ## Human-in-the-loop principle
 
@@ -101,8 +99,8 @@ This is not just a safety measure — it is what makes the data trustworthy. Lay
 
 ## Consequences
 
-- ADR 0008 (calendar sync) is promoted from "nice capture mechanism" to "prerequisite for the agent layer." Build it in Phase 1.1 as planned.
+- ADR 0008 (calendar sync) prerequisite is **met** — Phase 1.1 shipped 2026-06-21.
 - Phase 3 planning should start from these four workflows, not from a blank "add AI" brief.
 - The domain model §11 should be updated to reference Phase 3 agent workflows by name.
-- The event preparation agent reinforces the case for adding event_type, event_size, and event_purpose fields to the events table — context the agent needs to generate useful briefings. Add these as optional columns when the events screen is built.
+- The event preparation agent reinforces the case for `event_size` and `event_purpose` on the `events` table — documented as optional planned columns in domain-model §5.11 (not yet migrated; add when the events screen is built or Phase 3 prep begins).
 - The introduction facilitation agent validates the `introduction_outcome` enum already in the schema. No schema change needed.

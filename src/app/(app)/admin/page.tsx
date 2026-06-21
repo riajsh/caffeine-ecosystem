@@ -17,6 +17,7 @@ import { getDeployChecklist } from "@/lib/deploy/checklist";
 type AdminPageProps = {
   searchParams: Promise<{
     calendar_connected?: string;
+    connected?: string;
     calendar_error?: string;
   }>;
 };
@@ -44,35 +45,35 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         <DeployChecklist items={deployChecks} />
 
         <section className="space-y-3">
-          <h2 className="text-heading font-medium text-foreground">Import</h2>
+          <h2 className="text-heading font-medium text-foreground">Datasets</h2>
           <p className="max-w-2xl text-body text-muted-foreground">
-            Upload CSV exports from Clay, Airtable, or other tools. Map columns,
-            review dedup matches, and commit profiles into the graph.
+            Upload CSV exports, map columns, review dedup matches, and commit
+            profiles into the graph.
           </p>
           <Button asChild>
-            <Link href="/admin/import">Open import</Link>
+            <Link href="/admin/datasets">Open datasets</Link>
           </Button>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-heading font-medium text-foreground">Tags</h2>
+          <h2 className="text-heading font-medium text-foreground">Team</h2>
           <p className="max-w-2xl text-body text-muted-foreground">
-            Create sector, role, and interest labels. Assign them on profile
-            detail pages and filter the profiles list.
+            Relationship owners, tags, dedup, and archived contacts.
           </p>
-          <Button asChild>
-            <Link href="/admin/tags">Manage tags</Link>
-          </Button>
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-heading font-medium text-foreground">Users</h2>
-          <p className="max-w-2xl text-body text-muted-foreground">
-            View team members, emails, and roles for the workspace.
-          </p>
-          <Button asChild>
-            <Link href="/admin/users">View users</Link>
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="outline">
+              <Link href="/admin/team-members">Team members</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/admin/tags">Tags</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/admin/dedup">Dedup</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/admin/archived">Archived</Link>
+            </Button>
+          </div>
         </section>
 
         <section className="space-y-3">
@@ -84,10 +85,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             participants. Matched attendees become meeting activities on profile
             timelines; unmatched emails go to a review queue.
           </p>
-          {params.calendar_connected ? (
+          {(params.calendar_connected ?? params.connected) ? (
             <p className="text-body text-foreground">
-              Connected {params.calendar_connected}. Initial sync is running in
-              the background.
+              Connected {params.calendar_connected ?? params.connected}. Initial
+              sync is running in the background.
             </p>
           ) : null}
           {params.calendar_error ? (

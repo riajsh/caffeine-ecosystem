@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { formatProfileProvenance } from "@/lib/format/provenance";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { ProfileDetail } from "@/lib/data/profiles";
 
@@ -27,6 +28,13 @@ export function ProfileHeader({ profile, mode = "page" }: ProfileHeaderProps) {
             ← Back to profiles
           </Link>
         </div>
+      ) : null}
+
+      {profile.isInternalProfile ? (
+        <p className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-body text-muted-foreground">
+          PU team member — calendar sync does not track internal meetings on
+          this profile.
+        </p>
       ) : null}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -113,7 +121,7 @@ export function ProfileHeader({ profile, mode = "page" }: ProfileHeaderProps) {
             <div className="space-y-1">
               <p className="text-label text-muted-foreground">Provenance</p>
               <p className="text-caption text-muted-foreground">
-                {profile.sources.map((source) => source.sourceLabel).join(" · ")}
+                {formatProfileProvenance(profile.sources)}
               </p>
             </div>
           ) : null}

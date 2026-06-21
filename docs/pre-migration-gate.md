@@ -28,6 +28,27 @@
 
 ---
 
+## Post-gate additions (after 2026-06-20)
+
+These were accepted after the gate cleared. They do not invalidate the gate verdict for Phase 1 migrations, but any new Cursor session should treat them as closed decisions:
+
+| ADR | Decision |
+|---|---|
+| 0009 | Phase 3 agent workflows (meeting intelligence, relationship health, event prep, intro facilitation). Calendar sync is prerequisite — now shipped (Phase 1.1, 2026-06-21). |
+
+**Phase 1.1 calendar migrations** (`20260621100000_calendar.sql`) applied 2026-06-21. Tables live; cron and OAuth handlers shipped. Pipeline spec: `docs/specs/calendar-sync.md`. Review UI spec: `docs/specs/admin-review.md` §4.
+
+### calendar-sync.md (post-ship)
+
+| Item | Decision |
+|---|---|
+| Sync windows | 12 months back, 3 months forward; purge beyond lookahead each run |
+| Internal filter | `ORG_INTERNAL_EMAIL_DOMAINS` + `users.email` via `participant-email.ts` |
+| Review table | `calendar_participant_reviews` (not `email_participant_reviews`) |
+| Manual purge | `npm run purge:calendar` for dev cleanup without full sync |
+
+---
+
 ## Spec open items — all closed
 
 ### gmail-sync.md

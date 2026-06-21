@@ -35,6 +35,6 @@ Add an org-level ignore list for obvious non-people (no-reply@, calendar-notific
 
 ## Consequences
 
-- Needs `email_participant_reviews` table and Admin review surface (see `docs/specs/gmail-sync.md`).
+- Needs `email_participant_reviews` table and Admin review surface (see `docs/specs/gmail-sync.md` §11, `docs/specs/admin-review.md` §6).
 - No profile or relationship exists until a human promotes or links.
 - Slight ongoing curation effort, in exchange for a clean graph.

@@ -50,8 +50,10 @@ Mirror the three layers of truth in the folder structure and the code.
 - Phase 2 adds intelligence with deterministic queries and views, no LLMs required.
 - Phase 3 adds the AI layer over a populated graph, with logging of (context, action, outcome) for every AI call and an eval set before any AI feature ships.
 - Gmail sync is Ecosystem-owned, not shared with Pathway PM (ADR 0007). See `docs/specs/gmail-sync.md`.
+- Calendar sync (Phase 1.1) follows `docs/specs/calendar-sync.md`. Participant matching shares `ORG_INTERNAL_EMAIL_DOMAINS` with Gmail.
 - Import pipeline follows `docs/specs/import-pipeline.md`. Never auto-merge on name alone (ADR 0004).
 - Search follows `docs/specs/search.md`. Postgres FTS in Phase 1; pgvector deferred (ADR 0006).
+- Profile detail UI follows `docs/specs/profile-detail.md`. Admin review queues follow `docs/specs/admin-review.md`.
 
 ## Privacy
 

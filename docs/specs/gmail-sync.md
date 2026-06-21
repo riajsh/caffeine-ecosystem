@@ -2,7 +2,7 @@
 
 - Version: 1.0
 - Status: Accepted
-- Related: ADR 0002, ADR 0003, ADR 0007, domain-model-v1.md §5.9
+- Related: ADR 0002, ADR 0003, ADR 0007, domain-model-v1.md §5.9, `docs/specs/calendar-sync.md` (parallel calendar pipeline), `docs/specs/admin-review.md` §6
 
 The highest-risk subsystem. Privacy, permissions, and relationship attribution intersect here. **No implementation until this spec is signed off.**
 
@@ -150,11 +150,20 @@ For each external participant on a thread (not a PU team member address):
 
 ### 5.1 PU internal addresses
 
-Maintain a list of PU team emails (from `users.email`). These participants:
+Internal (team) participants are identified by:
+
+1. **`ORG_INTERNAL_EMAIL_DOMAINS`** — comma-separated domains in env (e.g. `previously.co`). Set in `.env.local` / Vercel env. Documented in `docs/technical-architecture.md` §8.
+2. **`users.email`** — all org member emails are treated as internal at runtime (loaded from DB during sync).
+
+Implementation: `src/lib/integrations/participant-email.ts` (`loadOrgParticipantFilters`, `isInternalParticipant`).
+
+These participants:
 
 - Are stored in thread `participants` jsonb for context.
-- Do **not** get profiles or activities (they are owners, not contacts).
+- Do **not** get profiles, activities, or review rows (they are owners, not contacts).
 - Used to determine **relationship owner attribution** (see §6).
+
+Threads or events with **only** internal participants: store metadata if labelled, but generate no activities and no review rows.
 
 ---
 
@@ -237,7 +246,9 @@ Cron/sync jobs use service role but still write `org_id` correctly. Service role
 
 ## 11. Review queue (ADR 0002)
 
-Admin → Review → Email participants.
+Combined admin UX: `docs/specs/admin-review.md` §6. **Not yet built** — table and RLS exist; UI pending Gmail sync route handler.
+
+Admin → Review → Email participants (planned route).
 
 | Action | Behaviour |
 |---|---|
@@ -251,11 +262,11 @@ Review list shows: email, display name, thread subject, date, account synced fro
 
 ## 12. Ignore list
 
-Org-level table or jsonb on `organisations`:
+**Phase 1.1 deferred.** No `gmail_ignore_patterns` column on `organisations` and no org-level ignore table in the current schema.
 
-- Patterns: `noreply@*`, `no-reply@*`, `calendar-notification@*`, `billing@*`, mailer-daemon
-- Admin can add custom patterns
-- Ignored addresses skip review queue entirely
+V1 uses hardcoded patterns in `src/lib/integrations/participant-email.ts` (`IGNORED_EMAIL_PATTERNS`: `noreply@`, `no-reply@`, `calendar-notification@`, `mailer-daemon@`). These skip review queue creation entirely.
+
+When org-configurable ignore patterns are needed, add `gmail_ignore_patterns jsonb default '[]'::jsonb` to `organisations` as a new migration and wire the admin "Ignore + add to list" action from §11.
 
 ---
 

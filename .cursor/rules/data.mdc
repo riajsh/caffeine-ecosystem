@@ -1,11 +1,20 @@
 ---
-description: Import pipeline, Gmail sync, search, and data integration conventions
-globs: ["src/lib/integrations/**", "src/lib/data/**", "src/lib/computed/**", "src/app/api/cron/**", "supabase/migrations/**"]
+description: Import pipeline, Gmail sync, Calendar sync, search, and data integration conventions
+globs: ["src/lib/integrations/**", "src/lib/data/**", "src/lib/computed/**", "src/app/api/cron/**", "src/app/api/auth/**", "supabase/migrations/**"]
 ---
 
 # Data integration rules
 
-These rules apply to import pipeline, Gmail sync, search, and all cron/background work.
+These rules apply to import pipeline, Gmail sync, calendar sync, search, and all cron/background work.
+
+## Participant matching (shared)
+
+Implementation: `src/lib/integrations/participant-email.ts`
+
+- **`ORG_INTERNAL_EMAIL_DOMAINS`** — comma-separated domains (e.g. `previously.co`). Team addresses are never external contacts.
+- **`users.email`** — loaded at sync start; merged with env domains for internal filter.
+- **Ignore patterns** — hardcoded noreply/mailer-daemon patterns in `participant-email.ts` (org-configurable list deferred; see gmail-sync.md §12).
+- Internal participants: no profile, activity, or review row. Internal-only threads/events: skip entirely.
 
 ## Gmail sync
 
@@ -20,6 +29,21 @@ Full spec: `docs/specs/gmail-sync.md`
 - On participant match: generate activity + append relationship_source. Skip if `source_ref` already exists.
 - On no match: create `email_participant_reviews` row with `status=pending`. Never auto-create a profile from email ingestion.
 - Backfill runs once on account connect (12 months). Incremental sync daily from `sync_cursor`.
+
+## Calendar sync (Phase 1.1 — shipped)
+
+Full spec: `docs/specs/calendar-sync.md`
+
+- Sync code lives in `src/lib/integrations/calendar/`.
+- Cron endpoint: `src/app/api/cron/calendar-sync/route.ts`. Verify `CRON_SECRET` header before processing.
+- OAuth: `api/auth/google-calendar/connect` and `callback`. Separate client from Gmail (`GOOGLE_CALENDAR_*` env vars).
+- Use `createAdminClient()` for sync writes. Set `org_id` explicitly on every insert.
+- Upsert on `(org_id, google_event_id)` for events; `(org_id, email, calendar_event_id)` for review rows.
+- Backfill: 12 months back, 3 months forward. Skip and purge beyond lookahead (`CALENDAR_LOOKAHEAD_MONTHS = 3`).
+- On participant match: `meeting` activity (`source=calendar_sync`, `source_ref=google_event_id`) + relationship_source.
+- On no match: `calendar_participant_reviews` row — **not** `email_participant_reviews`.
+- Skip internal-only meetings. Purge internal-profile calendar pollution each run.
+- Admin review: `/admin/calendar-sync/review` — see `docs/specs/admin-review.md`.
 
 ## Import pipeline
 

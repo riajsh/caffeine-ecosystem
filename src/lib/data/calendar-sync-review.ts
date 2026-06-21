@@ -1,6 +1,12 @@
 import "server-only";
 
 import { getOrgId, requireAdmin } from "@/lib/auth/session";
+import {
+  isInternalParticipant,
+  loadOrgParticipantFilters,
+  type OrgParticipantFilters,
+} from "@/lib/integrations/participant-email";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type CalendarSyncReviewSummary = {
@@ -10,8 +16,20 @@ export type CalendarSyncReviewSummary = {
   activitiesCreated: number;
   reviewsQueued: number;
   pendingReviewCount: number;
+  internalPendingReviewCount: number;
   matchedMeetingCount: number;
+  internalMatchedMeetingCount: number;
   accountEmail: string | null;
+};
+
+export type CalendarReviewGroupLists = {
+  external: CalendarUnmatchedGroup[];
+  internal: CalendarUnmatchedGroup[];
+};
+
+export type CalendarMatchedMeetingLists = {
+  external: CalendarMatchedMeeting[];
+  internal: CalendarMatchedMeeting[];
 };
 
 export type CalendarUnmatchedGroup = {
@@ -29,6 +47,7 @@ export type CalendarMatchedMeeting = {
   activityDate: string;
   profileId: string;
   profileName: string;
+  profileEmail: string | null;
 };
 
 type LastRunMetadata = {
@@ -52,6 +71,51 @@ function parseLastRun(metadata: unknown): LastRunMetadata {
   return metadata as LastRunMetadata;
 }
 
+async function loadReviewParticipantFilters(
+  orgId: string,
+): Promise<OrgParticipantFilters> {
+  return loadOrgParticipantFilters(createAdminClient(), orgId);
+}
+
+function partitionReviewGroups(
+  groups: CalendarUnmatchedGroup[],
+  filters: OrgParticipantFilters,
+): CalendarReviewGroupLists {
+  const external: CalendarUnmatchedGroup[] = [];
+  const internal: CalendarUnmatchedGroup[] = [];
+
+  for (const group of groups) {
+    if (isInternalParticipant(group.email, filters)) {
+      internal.push(group);
+    } else {
+      external.push(group);
+    }
+  }
+
+  return { external, internal };
+}
+
+function partitionMatchedMeetings(
+  meetings: CalendarMatchedMeeting[],
+  filters: OrgParticipantFilters,
+): CalendarMatchedMeetingLists {
+  const external: CalendarMatchedMeeting[] = [];
+  const internal: CalendarMatchedMeeting[] = [];
+
+  for (const meeting of meetings) {
+    if (
+      meeting.profileEmail &&
+      isInternalParticipant(meeting.profileEmail, filters)
+    ) {
+      internal.push(meeting);
+    } else {
+      external.push(meeting);
+    }
+  }
+
+  return { external, internal };
+}
+
 export async function getCalendarSyncReviewSummary(): Promise<CalendarSyncReviewSummary> {
   await requireAdmin();
   const orgId = await getOrgId();
@@ -73,9 +137,11 @@ export async function getCalendarSyncReviewSummary(): Promise<CalendarSyncReview
   const meta = parseLastRun(account?.metadata);
   const stats = meta.last_run?.stats;
 
-  const { count: pendingReviewCount, error: pendingError } = await supabase
+  const filters = await loadReviewParticipantFilters(orgId);
+
+  const { data: pendingReviews, error: pendingError } = await supabase
     .from("calendar_participant_reviews")
-    .select("id", { count: "exact", head: true })
+    .select("email")
     .eq("org_id", orgId)
     .eq("status", "pending");
 
@@ -83,9 +149,26 @@ export async function getCalendarSyncReviewSummary(): Promise<CalendarSyncReview
     throw new Error(`Failed to count pending reviews: ${pendingError.message}`);
   }
 
-  const { count: matchedMeetingCount, error: matchedError } = await supabase
+  let pendingReviewCount = 0;
+  let internalPendingReviewCount = 0;
+
+  for (const row of pendingReviews ?? []) {
+    if (isInternalParticipant(row.email, filters)) {
+      internalPendingReviewCount += 1;
+    } else {
+      pendingReviewCount += 1;
+    }
+  }
+
+  const { data: matchedActivities, error: matchedError } = await supabase
     .from("activities")
-    .select("id", { count: "exact", head: true })
+    .select(
+      `
+      profiles (
+        email
+      )
+    `,
+    )
     .eq("org_id", orgId)
     .eq("source", "calendar_sync");
 
@@ -93,24 +176,43 @@ export async function getCalendarSyncReviewSummary(): Promise<CalendarSyncReview
     throw new Error(`Failed to count matched meetings: ${matchedError.message}`);
   }
 
+  let matchedMeetingCount = 0;
+  let internalMatchedMeetingCount = 0;
+
+  for (const row of matchedActivities ?? []) {
+    const email = row.profiles?.email;
+    if (email && isInternalParticipant(email, filters)) {
+      internalMatchedMeetingCount += 1;
+    } else {
+      matchedMeetingCount += 1;
+    }
+  }
+
+  const totalMatched = matchedMeetingCount + internalMatchedMeetingCount;
+
   return {
     syncing: meta.syncing === true,
     lastRunAt: account?.last_sync_at ?? meta.last_run?.at ?? null,
     eventsProcessed: stats?.eventsProcessed ?? 0,
-    activitiesCreated: stats?.activitiesCreated ?? matchedMeetingCount ?? 0,
-    reviewsQueued: stats?.reviewsQueued ?? pendingReviewCount ?? 0,
-    pendingReviewCount: pendingReviewCount ?? 0,
-    matchedMeetingCount: matchedMeetingCount ?? 0,
+    activitiesCreated: stats?.activitiesCreated ?? totalMatched,
+    reviewsQueued:
+      stats?.reviewsQueued ??
+      pendingReviewCount + internalPendingReviewCount,
+    pendingReviewCount,
+    internalPendingReviewCount,
+    matchedMeetingCount,
+    internalMatchedMeetingCount,
     accountEmail: account?.email ?? null,
   };
 }
 
 export async function listPendingCalendarReviewGroups(
   limit = 50,
-): Promise<CalendarUnmatchedGroup[]> {
+): Promise<CalendarReviewGroupLists> {
   await requireAdmin();
   const orgId = await getOrgId();
   const supabase = await createClient();
+  const filters = await loadReviewParticipantFilters(orgId);
 
   const { data, error } = await supabase
     .from("calendar_participant_reviews")
@@ -155,21 +257,23 @@ export async function listPendingCalendarReviewGroups(
       sampleMeetingDate: event?.start_at ?? null,
       reviewIds: [row.id],
     });
-
-    if (groups.size >= limit) {
-      break;
-    }
   }
 
-  return [...groups.values()];
+  const partitioned = partitionReviewGroups([...groups.values()], filters);
+
+  return {
+    external: partitioned.external.slice(0, limit),
+    internal: partitioned.internal,
+  };
 }
 
 export async function listRecentMatchedCalendarMeetings(
   limit = 25,
-): Promise<CalendarMatchedMeeting[]> {
+): Promise<CalendarMatchedMeetingLists> {
   await requireAdmin();
   const orgId = await getOrgId();
   const supabase = await createClient();
+  const filters = await loadReviewParticipantFilters(orgId);
 
   const { data, error } = await supabase
     .from("activities")
@@ -180,20 +284,21 @@ export async function listRecentMatchedCalendarMeetings(
       activity_date,
       profile_id,
       profiles (
-        full_name
+        full_name,
+        email
       )
     `,
     )
     .eq("org_id", orgId)
     .eq("source", "calendar_sync")
     .order("activity_date", { ascending: false })
-    .limit(limit);
+    .limit(limit * 2);
 
   if (error) {
     throw new Error(`Failed to load matched meetings: ${error.message}`);
   }
 
-  return (data ?? [])
+  const meetings = (data ?? [])
     .map((row) => {
       const profile = row.profiles;
       if (!profile) {
@@ -206,9 +311,17 @@ export async function listRecentMatchedCalendarMeetings(
         activityDate: row.activity_date,
         profileId: row.profile_id,
         profileName: profile.full_name,
+        profileEmail: profile.email,
       };
     })
     .filter((row): row is CalendarMatchedMeeting => row !== null);
+
+  const partitioned = partitionMatchedMeetings(meetings, filters);
+
+  return {
+    external: partitioned.external.slice(0, limit),
+    internal: partitioned.internal.slice(0, limit),
+  };
 }
 
 export async function searchProfilesForCalendarLink(
@@ -223,21 +336,28 @@ export async function searchProfilesForCalendarLink(
     return [];
   }
 
+  const filters = await loadReviewParticipantFilters(orgId);
+
   const { data, error } = await supabase
     .from("profiles")
     .select("id, full_name, email")
     .eq("org_id", orgId)
     .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
     .order("full_name")
-    .limit(8);
+    .limit(12);
 
   if (error) {
     throw new Error(`Failed to search profiles: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    fullName: row.full_name,
-    email: row.email,
-  }));
+  return (data ?? [])
+    .filter(
+      (row) => !row.email || !isInternalParticipant(row.email, filters),
+    )
+    .slice(0, 8)
+    .map((row) => ({
+      id: row.id,
+      fullName: row.full_name,
+      email: row.email,
+    }));
 }

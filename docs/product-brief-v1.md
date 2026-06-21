@@ -46,7 +46,7 @@ Leadership
 
 Admin
 - As an admin, I want to import a CSV and have duplicates caught so that the database stays clean.
-- As an admin, I want unmatched email participants surfaced for review so that the graph grows without filling with noise.
+- As an admin, I want unmatched email and calendar participants surfaced for review so that the graph grows without filling with noise.
 
 Edge and empty states
 - As a new user opening Orbit with no activity data, I want a clear empty state that explains what populates it, not a blank canvas.
@@ -60,9 +60,10 @@ Edge and empty states
   - Given a logged-in PU user, when they query any table, then they only ever see PU rows.
 - **Profiles.** Create, read, edit, shared across the org.
 - **Relationships and owners.** One relationship per profile, multiple owners with per-owner strength and a primary owner.
-- **Activities timeline.** Per-profile chronological feed from manual entry and email sync.
-- **CSV import.** With dedup on email and a review step for soft matches (see ADR 0004).
-- **Gmail sync.** Daily cron, full project-related threads, generates activities, idempotent on re-run (see specs/gmail-sync.md).
+- **Activities timeline.** Per-profile chronological feed from manual entry, email sync, and calendar sync.
+- **CSV import.** With dedup on email and a review step for soft matches (see ADR 0004, `docs/specs/admin-review.md` §5).
+- **Gmail sync.** Daily cron, full project-related threads, generates activities, idempotent on re-run (see `docs/specs/gmail-sync.md`).
+- **Google Calendar sync (Phase 1.1).** Daily cron, external meetings → activities; unmatched attendees → review queue (see `docs/specs/calendar-sync.md`, `docs/specs/admin-review.md` §4).
 - **Events and attendance.** Events as first-class objects with attendee records.
 - **Search.** Across profiles, tags, activities, events and email subjects (see ADR 0006).
 - **Tags.** Categorised, attached to profiles.
@@ -89,6 +90,7 @@ Leading (weeks)
 - A "who do we know in X" query returns a useful, evidence-backed result in under 10 seconds.
 - Majority of the active team logs in weekly and records at least one activity or note.
 - Email sync runs daily without manual intervention and attributes activities to the right profiles.
+- Calendar sync captures external meetings and surfaces unmatched attendees for admin review.
 
 Lagging (months)
 - Leadership uses Orbit or Connect in network and opportunity decisions, not memory.
@@ -97,12 +99,13 @@ Lagging (months)
 
 ## Open questions
 
-None. All decisions closed. See `docs/decisions/` for ADRs 0001–0008 and `docs/pre-migration-gate.md` for the full pre-migration sign-off record (cleared 2026-06-20).
+None. All decisions closed through ADR 0009. See `docs/decisions/` for ADRs 0001–0009 and `docs/pre-migration-gate.md` for the full pre-migration sign-off record (cleared 2026-06-20).
 
 ## Timeline and phasing
 
 Foundation before features. See domain-model-v1.md section 12.
-- Phase 1: foundation (auth, profiles, relationships, owners, activities, events, import, sync, search).
+- Phase 1: foundation (auth, profiles, relationships, owners, activities, events, import, Gmail sync, search).
+- Phase 1.1: calendar sync (shipped 2026-06-21), admin review surfaces, optional event metadata columns.
 - Phase 2: intelligence (connections, Orbit, computed strength, Connect, watchlist).
 - Phase 3: AI reasoning over the populated graph.
 

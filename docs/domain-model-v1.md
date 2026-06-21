@@ -1,6 +1,6 @@
 # Ecosystem V1 Domain Model
 
-- Version: 1.1
+- Version: 1.2
 - Status: Accepted
 - Changelog: v1.2 adds calendar_accounts, calendar_events, calendar_participant_reviews (Phase 1.1 Google Calendar sync, ADR 0008). v1.1 adds organisation_name_normalised (profiles), introduced_by + introduction_outcome (activities), source_event_id + introduced_by (connections), calendar_sync source type. All additions are nullable and non-breaking.
 - Owner: Previously Unavailable
@@ -326,7 +326,7 @@ Queue for unmatched external attendees (ADR 0002 pattern). Not a profile until p
 
 Constraint: `unique(org_id, email, calendar_event_id)`.
 
-Resolution: match `participants[].email` to `profiles.email`. On match, generate a `meeting` activity with `source=calendar_sync` and `source_ref=google_event_id`, append `relationship_sources` with `source_type=meeting`. On no match, create `calendar_participant_reviews` row. Skip internal-only meetings (no external participants outside org team emails).
+Resolution: match `participants[].email` to `profiles.email`. On match, generate a `meeting` activity with `source=calendar_sync` and `source_ref=google_event_id`, append `relationship_sources` with `source_type=meeting`. On no match, create `calendar_participant_reviews` row. Skip internal-only meetings (no external participants outside org team emails). Full flow in `docs/specs/calendar-sync.md`.
 
 ### 5.11 events and event_attendees
 
@@ -341,6 +341,8 @@ PU community events as a first-class object. This is where a lot of the network 
 | event_type | enum | `dinner` / `roundtable` / `workshop` / `retreat` / `summit` / `other` |
 | event_date | timestamptz | |
 | location | text | |
+| event_size | text | **Planned Phase 1.1** — optional; e.g. `intimate` / `medium` / `large`. Not in schema yet. Supports event prep agent (ADR 0009). |
+| event_purpose | text | **Planned Phase 1.1** — optional free text; e.g. "founder dinner", "LP summit". Not in schema yet. Supports event prep agent (ADR 0009). |
 
 **event_attendees**
 
@@ -468,15 +470,19 @@ See ADR 0001.
 - Custom field UI.
 
 **Phase 1.1 (partially shipped):**
-- Google Calendar sync — `calendar_accounts`, `calendar_events`, `calendar_participant_reviews`; OAuth connect + daily cron; see ADR 0008.
-- Continuous dedup — `potential_duplicates` review table + background fuzzy name+company scan job.
+- Google Calendar sync — **shipped** (`calendar_accounts`, `calendar_events`, `calendar_participant_reviews`; OAuth connect + daily cron; see ADR 0008).
 - Field-level merge rules on the admin merge UI (preserve best value per field, not just "winner takes all").
+
+**Planned Phase 1.1 (not yet in schema):**
+- Continuous dedup — `potential_duplicates` review table + background fuzzy name+company scan job. No migration yet; admin dedup page is detect-only against current schema.
 
 ---
 
 ## 12. Build sequence
 
 **Phase 1, Foundation.** Org, users, auth, RLS, profiles, tags, CSV import, search, email ingestion (threads, messages, activity generation), relationships, relationship_owners, activities, events, event_attendees. No AI, no scoring, no chat.
+
+**Phase 1.1, Calendar sync (shipped 2026-06-21).** `calendar_accounts`, `calendar_events`, `calendar_participant_reviews`; OAuth connect; daily cron; admin review UI. Spec: `docs/specs/calendar-sync.md`.
 
 **Phase 2, Intelligence.** Connections graph (incl. inferred), Orbit, computed strength and last_interaction, Connect suggestions, watchlist.
 
@@ -499,6 +505,6 @@ See ADR 0001.
 | Connection inference scope | — | Accepted: manual + same-company + co-event in V1; email inference V2 |
 | Introduction attribution | — | Accepted: `introduced_by` on both `activities` and `connections`; `introduction_outcome` on introduction activities |
 | Organisation name matching | — | Accepted: `organisation_name_normalised` computed at write for inference only; company-as-entity deferred |
-| Calendar sync design intent | 0008 | Accepted: `calendar_sync` source type reserved; build in Phase 1.1 |
+| Calendar sync design intent | 0008 | Accepted; Phase 1.1 shipped 2026-06-21 |
 | Phase 3 agent workflows | 0009 | Accepted: four agents (meeting intelligence, relationship health, event prep, intro facilitation); calendar sync is prerequisite |
-| Continuous dedup | — | Accepted: `potential_duplicates` review table in Phase 1.1; field-level merge rules at that point |
+| Continuous dedup | — | Accepted: `potential_duplicates` review table planned Phase 1.1; no migration yet |

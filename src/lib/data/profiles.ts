@@ -4,7 +4,13 @@ import { notFound } from "next/navigation";
 
 import { getOrgId, requireUser } from "@/lib/auth/session";
 import { formatLocation } from "@/lib/format/location";
+import { PROFILE_ACTIVITY_LIMIT } from "@/lib/format/provenance";
+import {
+  isInternalParticipant,
+  loadOrgParticipantFilters,
+} from "@/lib/integrations/participant-email";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
   CreateProfileInput,
@@ -108,8 +114,10 @@ export type ProfileDetail = {
   sources: ProfileSource[];
   tags: Array<{ id: string; name: string; category: string }>;
   activities: ProfileActivity[];
+  activitiesTruncated: boolean;
   events: ProfileEvent[];
   connections: ProfileConnection[];
+  isInternalProfile: boolean;
 };
 
 type ProfileRow = {
@@ -260,6 +268,7 @@ function mapConnectionRow(
 function mapProfileDetailRow(
   profile: ProfileDetailRow,
   connections: ConnectionRow[],
+  options: { isInternalProfile: boolean; activitiesTruncated: boolean },
 ): ProfileDetail {
   const relationship = profile.relationships?.[0];
 
@@ -331,6 +340,8 @@ function mapProfileDetailRow(
     connections: connections.map((connection) =>
       mapConnectionRow(connection, profile.id),
     ),
+    isInternalProfile: options.isInternalProfile,
+    activitiesTruncated: options.activitiesTruncated,
   };
 }
 
@@ -503,6 +514,7 @@ export async function getProfileById(id: string): Promise<ProfileDetail> {
       foreignTable: "activities",
       ascending: false,
     })
+    .limit(PROFILE_ACTIVITY_LIMIT, { foreignTable: "activities" })
     .maybeSingle();
 
   if (error) {
@@ -543,9 +555,32 @@ export async function getProfileById(id: string): Promise<ProfileDetail> {
     );
   }
 
+  const filters = await loadOrgParticipantFilters(createAdminClient(), orgId);
+  const isInternalProfile = data.email
+    ? isInternalParticipant(data.email, filters)
+    : false;
+
+  const { count: activityCount, error: activityCountError } = await supabase
+    .from("activities")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("profile_id", id);
+
+  if (activityCountError) {
+    throw new Error(
+      `Failed to count profile activities: ${activityCountError.message}`,
+    );
+  }
+
+  const loadedActivities = (data as ProfileDetailRow).activities?.length ?? 0;
+
   return mapProfileDetailRow(
     data as ProfileDetailRow,
     (connections ?? []) as ConnectionRow[],
+    {
+      isInternalProfile,
+      activitiesTruncated: (activityCount ?? 0) > loadedActivities,
+    },
   );
 }
 

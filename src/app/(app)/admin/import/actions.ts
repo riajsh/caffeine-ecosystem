@@ -24,6 +24,7 @@ import {
 
 function revalidateImport(importId: string) {
   revalidatePath("/admin");
+  revalidatePath("/admin/datasets");
   revalidatePath("/admin/import");
   revalidatePath(`/admin/import/${importId}`);
   revalidatePath("/profiles");

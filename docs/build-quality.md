@@ -18,7 +18,9 @@ Run through `docs/design-tokens.md` and define your `@theme` block in `globals.c
 
 ### Layer 2 views as interface stubs
 
-Create stub SQL views for all Phase 2 computed concepts — `orbit_ring_view`, `connect_suggestions_view`, `relationship_strength_view` — during Phase 1 migrations. Stubs return empty result sets but define the exact column names and shapes the UI will eventually consume. Benefits: Phase 2 Cursor sessions work against a real contract (not invented schemas), naming collisions surface immediately, the architectural intent is explicit from day one.
+The Phase 1 migration set is shipped and locked — do **not** add stub views to those migrations retroactively.
+
+When Phase 2 schema work begins, add stub SQL views as the **first Phase 2 migration**: `orbit_ring_view`, `connect_suggestions_view`, `relationship_strength_view`. Stubs return empty result sets but define the exact column names and shapes the UI will consume. Benefits: Phase 2 Cursor sessions work against a real contract (not invented schemas), naming collisions surface immediately, the architectural intent is explicit from day one.
 
 ### Rich seed data
 
@@ -58,8 +60,11 @@ Rather than prompting Cursor ad hoc, use consistent session-starter templates. E
 **New migration step:**
 > Read `docs/domain-model-v1.md §[section]` and the last migration file in `supabase/migrations/`. Write the next migration for [table]. Include RLS policy. Include `updated_at` trigger if the table is mutable. Follow the naming convention in `docs/ai-conventions.md`.
 
-**UI component:**
-> Read `docs/design-tokens.md`, `docs/design-principles.md`, and `docs/information-architecture.md`. Build [component name]. Use only `@theme` tokens. Inferred data uses `--color-data-inferred`. Use CVA for any component with 3+ visual states. No arbitrary Tailwind values.
+**UI component (profile or admin):**
+> Read `docs/design-tokens.md`, `docs/design-principles.md`, `docs/information-architecture.md`, and `docs/specs/profile-detail.md` or `docs/specs/admin-review.md` as appropriate. Build [component name]. Use only `@theme` tokens. Inferred data uses `--color-data-inferred`. Use CVA for any component with 3+ visual states. No arbitrary Tailwind values.
+
+**Calendar or Gmail sync work:**
+> Read `docs/specs/calendar-sync.md` or `docs/specs/gmail-sync.md`, `docs/technical-architecture.md` §6–§7, `.cursor/rules/data.mdc`. Cron uses `createAdminClient()` + explicit `org_id`. Participant matching via `participant-email.ts` and `ORG_INTERNAL_EMAIL_DOMAINS`. Idempotent upserts only.
 
 ### Diff review after every session
 
@@ -89,7 +94,7 @@ A second AI reviewing what the first AI built catches drift that you'd never not
 
 ### Schema-locked mode after Phase 1 migrations
 
-Once the Phase 1 migration set is accepted, add this to `.cursor/rules/supabase.mdc`:
+Once the Phase 1 migration set is accepted (including Phase 1.1 calendar), add this to `.cursor/rules/supabase.mdc`:
 
 > The Phase 1 schema is locked. Do not suggest new tables, new columns, or schema changes. If a feature cannot be implemented against the current schema, stop and flag it as a required discussion before continuing.
 
@@ -132,12 +137,12 @@ Industry research: 79% of relationship-relevant data never enters CRMs due to ma
 |---|---|---|
 | Email correspondence | Gmail sync → email activities | Phase 1 |
 | Event attendance | event_attendees + activity generation | Phase 1 |
-| Calendar meetings | Google Calendar sync → meeting activities | Phase 1.1 (ADR 0008) |
+| Calendar meetings | Google Calendar sync → meeting activities | Phase 1.1 shipped (ADR 0008) |
 | Quick note | Fast note entry from profile or search | Phase 1 UX |
 | New contact from search | "Add [query] as new profile" in search empty state | Phase 1 UX |
 | Introduction facilitation | Introduction activity with `introduced_by` field | Phase 1 schema, Phase 1.1 UX |
 
-The highest-leverage item not yet built is calendar sync. Every meeting the PU team has with an external person is in Google Calendar. Without calendar sync, those meetings are only logged if someone manually creates an activity. With it, the meeting log is automatic.
+The highest-leverage automatic capture channel after email is calendar sync — now shipped in Phase 1.1. Remaining friction wins: quick-add from search, introduction UX.
 
 ### Quick-add from search
 
@@ -155,7 +160,11 @@ Write pgTAP or Supabase-native tests that verify RLS policies work correctly —
 - Non-owner cannot read `email_messages.body`
 - Admin can read all email bodies
 - Service role writes must still include `org_id`
-- Email participant review rows are not visible to non-admin members
+- Participant review rows (`email_participant_reviews`, `calendar_participant_reviews`) are org-scoped in RLS — any authenticated org member can SELECT. Admin-only access to the review **UI** is enforced in application code via `requireAdmin()` on `/admin/*` routes, not via RLS. Tests must verify org isolation; tightening review tables to admin-only RLS is deferred hardening.
+- `calendar_accounts` OAuth tokens (`refresh_token`) are not readable by non-owner users — verify owner-or-admin select policy
+- `calendar_events` metadata is org-scoped — User A cannot read User B's org events
+- `calendar_participant_reviews` respects org RLS — User A cannot read User B's org review rows
+- Cron/sync service role inserts include explicit `org_id` on all calendar table writes
 
 These are different from application tests and catch the most dangerous class of bug.
 

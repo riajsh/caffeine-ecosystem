@@ -42,7 +42,7 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
             <ImportDeleteButton importId={detail.id} filename={detail.filename} />
           ) : null}
           <Button asChild variant="outline">
-            <Link href="/admin/import">All imports</Link>
+            <Link href="/admin/datasets">All datasets</Link>
           </Button>
         </div>
       </PageHeader>
