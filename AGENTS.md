@@ -12,11 +12,13 @@ Doc index: `docs/README.md`
 - `docs/design-principles.md` — how it should feel.
 - `docs/technical-architecture.md` — what lives where (read before SQL).
 - `docs/ai-conventions.md` — stack, layer rules, and hard "never do" list.
-- `docs/specs/gmail-sync.md` — email ingestion (highest-risk subsystem).
+- `docs/specs/gmail-sync.md` — email ingestion spec (**schema ready; sync not implemented**).
 - `docs/specs/calendar-sync.md` — Google Calendar sync pipeline (Phase 1.1).
 - `docs/specs/import-pipeline.md` — CSV import flow.
 - `docs/specs/profile-detail.md` — profile page/drawer (most-used screen).
 - `docs/specs/admin-review.md` — review queue UI (calendar, import, email).
+- `docs/specs/workflows.md` — core user jobs (pre-meeting research, review, etc.).
+- `docs/specs/interaction-speed.md` — two-touch rule, inline editing, quick-log, keyboard nav, optimistic updates. **Read before any UI work — these are constraints, not suggestions.**
 - `docs/decisions/0008-calendar-sync.md` — Google Calendar sync design (implemented Phase 1.1).
 - `docs/specs/search.md` — FTS index design (applied in Phase 1 migrations; read before any search feature work).
 - `docs/design-tokens.md` — @theme tokens, owner palette, strength colours, CVA pattern. Read before any UI work.

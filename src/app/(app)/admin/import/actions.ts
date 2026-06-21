@@ -222,11 +222,6 @@ export async function backfillImportProfilesAction(formData: FormData) {
   }
 }
 
-/** @deprecated Use backfillImportProfilesAction */
-export async function backfillImportOwnersAction(formData: FormData) {
-  return backfillImportProfilesAction(formData);
-}
-
 export async function reopenImportAction(formData: FormData) {
   const parsedId = importIdSchema.safeParse(formData.get("importId"));
 

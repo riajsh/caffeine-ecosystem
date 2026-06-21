@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "purge:calendar": "node --env-file=.env.local scripts/purge-calendar-sync.mjs"
+    "purge:calendar": "node --env-file=.env.local scripts/purge-calendar-sync.mjs",
+    "sync:team": "node --env-file=.env.local scripts/sync-pu-team.mjs",
+    "backfill:import-owners": "node --env-file=.env.local scripts/backfill-import-owners.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

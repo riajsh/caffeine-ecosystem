@@ -62,7 +62,7 @@ Edge and empty states
 - **Relationships and owners.** One relationship per profile, multiple owners with per-owner strength and a primary owner.
 - **Activities timeline.** Per-profile chronological feed from manual entry, email sync, and calendar sync.
 - **CSV import.** With dedup on email and a review step for soft matches (see ADR 0004, `docs/specs/admin-review.md` §5).
-- **Gmail sync.** Daily cron, full project-related threads, generates activities, idempotent on re-run (see `docs/specs/gmail-sync.md`).
+- **Gmail sync.** Daily cron, full project-related threads, generates activities, idempotent on re-run (see `docs/specs/gmail-sync.md`). **Not yet implemented** — schema and spec ready; calendar sync is the shipped auto-capture path for meetings.
 - **Google Calendar sync (Phase 1.1).** Daily cron, external meetings → activities; unmatched attendees → review queue (see `docs/specs/calendar-sync.md`, `docs/specs/admin-review.md` §4).
 - **Events and attendance.** Events as first-class objects with attendee records.
 - **Search.** Across profiles, tags, activities, events and email subjects (see ADR 0006).

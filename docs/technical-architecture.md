@@ -61,74 +61,52 @@ Three layers of truth from the domain model, enforced in folder structure:
 ```
 Ecosystem/
 ├── AGENTS.md
-├── docs/                          # Source-of-truth documentation
+├── docs/
 ├── supabase/
-│   ├── migrations/                # Schema only; no manual dashboard edits
-│   ├── seed.sql                   # PU org, test users, sample graph
+│   ├── migrations/
+│   ├── seed.sql
 │   └── config.toml
+├── scripts/
+│   ├── purge-calendar-sync.mjs    # npm run purge:calendar
+│   ├── sync-pu-team.mjs           # npm run sync:team
+│   └── backfill-import-owners.mjs # npm run backfill:import-owners
 ├── src/
-│   ├── app/                       # Next.js App Router
-│   │   ├── (auth)/                # Login, OAuth callback
-│   │   ├── (app)/                 # Authenticated shell + sidebar
-│   │   │   ├── overview/
+│   ├── middleware.ts              # Session guard + Supabase cookie refresh
+│   ├── app/
+│   │   ├── (auth)/                # Login
+│   │   ├── auth/
+│   │   │   ├── callback/          # Google OAuth callback
+│   │   │   └── confirm/           # Supabase email OTP (optional)
+│   │   ├── (app)/                 # Authenticated shell
+│   │   │   ├── page.tsx           # Overview (/)
 │   │   │   ├── search/
 │   │   │   ├── profiles/
 │   │   │   ├── events/
-│   │   │   ├── connect/           # Phase 2
-│   │   │   ├── orbit/             # Phase 2
-│   │   │   ├── watchlist/         # Phase 2
+│   │   │   ├── connect/           # Shipped UI; intelligence layer evolving
+│   │   │   ├── orbit/
 │   │   │   └── admin/
-│   │   │       ├── import/
-│   │   │       └── review/
+│   │   │       ├── calendar-sync/review/
+│   │   │       ├── datasets/      # CSV upload list
+│   │   │       ├── import/[id]/   # Import wizard + soft-match review
+│   │   │       └── …
 │   │   └── api/
-│   │       ├── cron/
-│   │       │   ├── gmail-sync/       # Vercel cron target (02:00 UTC)
-│   │       │   └── calendar-sync/    # Vercel cron target (03:00 UTC)
-│   │       └── oauth/
-│   │           ├── gmail/              # Gmail OAuth callback
-│   │           └── google-calendar/    # Calendar OAuth connect + callback
-│   ├── components/                # UI components (shadcn + domain)
-│   │   ├── ui/                    # shadcn primitives
-│   │   ├── profiles/
-│   │   ├── search/
-│   │   └── admin/
+│   │       ├── cron/calendar-sync/
+│   │       └── auth/google-calendar/connect|callback
+│   ├── components/
 │   ├── lib/
-│   │   ├── supabase/
-│   │   │   ├── client.ts          # Browser client (anon key, RLS)
-│   │   │   ├── server.ts          # Server client (cookies)
-│   │   │   └── admin.ts           # Service role; cron/sync only
+│   │   ├── supabase/              # server.ts, admin.ts, client.ts (browser stub)
 │   │   ├── auth/
-│   │   │   └── session.ts         # getSession, getOrgId, requireUser
-│   │   ├── data/                  # Layer 1 repositories
-│   │   │   ├── profiles.ts
-│   │   │   ├── relationships.ts
-│   │   │   ├── activities.ts
-│   │   │   └── ...
-│   │   ├── computed/              # Layer 2 query functions
-│   │   │   ├── orbit.ts
-│   │   │   ├── connect.ts
-│   │   │   └── search.ts
-│   │   ├── integrations/          # External system adapters
-│   │   │   ├── gmail/
-│   │   │   │   ├── client.ts
-│   │   │   │   ├── sync.ts
-│   │   │   │   └── match.ts
-│   │   │   ├── calendar/
-│   │   │   │   ├── client.ts
-│   │   │   │   ├── sync.ts
-│   │   │   │   └── match.ts
-│   │   │   └── participant-email.ts  # shared internal/ignore filters
-│   │   └── ai/                    # Phase 3; empty until then
+│   │   ├── data/                  # Layer 1 repositories (includes search.ts)
+│   │   ├── computed/              # Layer 2 (orbit, connect, recency)
+│   │   └── integrations/
+│   │       ├── calendar/          # Shipped
+│   │       └── participant-email.ts
 │   ├── config/
-│   │   ├── owner-colours.ts           # ownerColour(userId) — keyed by users.id
-│   │   └── relationship-thresholds.ts
-│   └── types/
-│       └── database.ts            # Generated; do not hand-edit
-├── scripts/
-│   ├── gen-types.sh
-│   └── db-reset.sh
-└── vercel.json                    # Cron schedule
+│   └── types/database.ts
+└── vercel.json                    # calendar-sync cron
 ```
+
+**Not yet in repo:** `src/lib/integrations/gmail/`, `api/cron/gmail-sync/`, Gmail OAuth routes. See `docs/specs/gmail-sync.md`.
 
 ---
 
@@ -269,9 +247,9 @@ All model calls go through a single internal AI gateway for logging, provider sw
 
 | Job | Schedule | Handler | Purpose |
 |---|---|---|---|
-| `gmail-sync` | Daily 02:00 UTC | `api/cron/gmail-sync` | Incremental fetch for all `sync_enabled` Gmail accounts — **add to `vercel.json` when route ships** |
-| `calendar-sync` | Daily 03:00 UTC | `api/cron/calendar-sync` | Incremental fetch for all `sync_enabled` calendar accounts |
-| `refresh-search-indexes` | Optional weekly | `api/cron/search-refresh` | Reindex FTS if needed |
+| `gmail-sync` | Daily 02:00 UTC | `api/cron/gmail-sync` | **Not implemented** — add to `vercel.json` when route ships |
+| `calendar-sync` | Daily 03:00 UTC | `api/cron/calendar-sync` | Shipped — incremental fetch for calendar accounts |
+| `refresh-search-indexes` | Optional weekly | `api/cron/search-refresh` | Not implemented (FTS maintained inline) |
 
 Vercel cron config in `vercel.json`. Protected by `CRON_SECRET` header check (see `src/app/api/cron/*/route.ts` — reject requests without matching `Authorization: Bearer ${CRON_SECRET}`).
 
@@ -287,7 +265,7 @@ Calendar sync is **incremental** using `nextSyncToken` stored on `calendar_accou
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | App | Public |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | App | Public |
-| `NEXT_PUBLIC_SITE_URL` | Auth magic-link redirects | Public; defaults to localhost:3000 in dev |
+| `NEXT_PUBLIC_SITE_URL` | Google OAuth redirects | Public; defaults to localhost:3000 in dev |
 | `SUPABASE_SERVICE_ROLE_KEY` | Cron, import jobs | Server only |
 | `DEFAULT_ORG_SLUG` | Auth bootstrap | Server only; slug of the org to bootstrap on first sign-in |
 | `CRON_SECRET` | Cron routes | Verify Vercel cron |
@@ -302,7 +280,7 @@ Calendar sync is **incremental** using `nextSyncToken` stored on `calendar_accou
 | `ORG_INTERNAL_EMAIL_DOMAINS` | Gmail + Calendar participant matching | Server only; comma-separated domains (e.g. `previously.co`). Addresses on these domains are team/internal — no profile, activity, or review row. Also merged with `users.email` at runtime. See `src/lib/integrations/participant-email.ts`. |
 | `ANTHROPIC_API_KEY` | Phase 3 AI | Server only |
 
-Validated at boot via Zod in `src/lib/env.ts`. Fail fast on missing required vars.
+Validated at boot for core app vars (`src/lib/env/public.ts`, `src/lib/env.ts`). Calendar OAuth vars validate lazily in `getCalendarEnv()` when calendar sync runs. Gmail env vars are not validated until Gmail sync is implemented.
 
 ---
 

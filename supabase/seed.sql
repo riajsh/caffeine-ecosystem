@@ -10,7 +10,7 @@
  *   ce@previously.co / password123  (admin)
  *   jh@previously.co / password123  (admin)
  *
- * Magic-link sign-in also works for those addresses once auth.users exists.
+ * Password sign-in works for seed users once auth.users exists.
  * Bootstrap reads app_metadata.org_id — no manual users row needed on first login
  * when seed has already inserted public.users.
  *

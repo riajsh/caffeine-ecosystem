@@ -1,6 +1,8 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
+/** Supabase email OTP / invite links. Primary login is Google OAuth via /auth/callback. */
+
 import { getSafeRedirectPath } from "@/lib/auth/safe-redirect";
 import { ensureUserRow } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";

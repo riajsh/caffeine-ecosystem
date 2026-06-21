@@ -778,13 +778,6 @@ export type ImportBackfillSummary = {
   skipped: number;
 };
 
-/** @deprecated Use backfillImportProfiles */
-export type OwnerBackfillSummary = {
-  assigned: number;
-  unresolved: number;
-  skipped: number;
-};
-
 export async function backfillImportProfiles(
   importId: string,
 ): Promise<ImportBackfillSummary> {
@@ -942,17 +935,6 @@ export async function backfillImportProfiles(
     .eq("org_id", orgId);
 
   return result;
-}
-
-export async function backfillImportOwners(
-  importId: string,
-): Promise<OwnerBackfillSummary> {
-  const summary = await backfillImportProfiles(importId);
-  return {
-    assigned: summary.ownersAssigned,
-    unresolved: summary.ownersUnresolved,
-    skipped: summary.skipped,
-  };
 }
 
 export async function resolveSoftMatch(

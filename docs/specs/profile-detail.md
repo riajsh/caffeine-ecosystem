@@ -45,7 +45,9 @@ Loaded via `getProfileById(id)` in `src/lib/data/profiles.ts`. Returns `ProfileD
 
 Also loaded per request: `listOrgUsers()`, `listOrgTags()`, `getProfileNetworkIntel(id)`.
 
-**Never editable on this screen:** strength (computed Phase 2), orbit ring, last_interaction (computed), Connect suggestions.
+**Inline-editable Layer 1 fields (click to edit in place — no separate edit mode):** strength (per owner, manual enum in Phase 1 — click the badge to change), relationship status, relationship type, org-level notes, owner assignment, tags.
+
+**Never editable on this screen:** orbit ring (computed Phase 2), last_interaction_at (computed from activities in Phase 2), Connect suggestions, network intelligence counts.
 
 ---
 
@@ -81,15 +83,15 @@ Status, type, org-level relationship notes.
 
 ### 4.5 Owners (`ProfileOwnersSection`)
 
-List owners with strength, primary flag, assign/add/remove via server actions. Owner colours from `ownerColour(userId)`.
+All owners listed simultaneously — not just the primary. This is a Workflow 2 requirement: intro routing requires seeing every owner and their individual strength at a glance. Each row: owner colour dot, name, strength badge (inline-editable — click to change), last interaction date, "Make primary" control, remove control. Strength changes via optimistic update. All PU owners must be visible without expanding or scrolling within this section.
 
 ### 4.6 Tags (`ProfileTagsSection`)
 
 Add/remove tags from org tag list.
 
-### 4.7 Timeline (`ProfileDetailTabs`)
+### 4.7 Tabs (`ProfileDetailTabs`)
 
-Four tabs — see §5.
+Four tabs — see §5. Keyboard shortcuts when focus is inside the drawer or page: `1` = Activity, `2` = Connections, `3` = Events, `4` = Notes.
 
 ### 4.8 Drawer footer
 
@@ -101,8 +103,11 @@ Four tabs — see §5.
 
 ### Activity (default)
 
-1. **Log activity form** (`LogActivityForm`) — manual entry: type, title, summary, date, optional `introduced_by` for introductions.
-2. **Timeline** (`ActivityTimeline`) — chronological list, most recent first.
+1. **Quick-log input** — persistent single-line input at the top of the tab, always visible. See `docs/specs/interaction-speed.md §Quick-log`. Type and press Enter to log a note immediately. A type switcher (note / meeting / call) appears below the input. This is the primary data entry path — it must be the first element in the tab, not buried below the timeline.
+
+2. **Full log form** (`LogActivityForm`) — secondary path for when more detail is needed (title, summary, date, `introduced_by`, introduction outcome). Accessible via "Add activity" button below the quick-log input.
+
+3. **Timeline** (`ActivityTimeline`) — chronological list, most recent first.
 
 Each activity row shows: date, activity type badge, introduction outcome badge (if set), source badge (`manual`, `gmail_sync`, `calendar_sync`, `import`, `event_system`), title, summary.
 
@@ -124,24 +129,26 @@ List of PU community events this profile attended (`event_attendees.attended = t
 
 ### Notes
 
-Read-only display of `relationship.notes` from Relationship section. V1 does not duplicate a separate notes editor here — edit happens in Relationship form above. Tab exists for IA parity with Loveable prototype.
+Editable free-text notes (`relationship.notes`). Rendered as an auto-expanding textarea that saves on blur via server action. This is the same field as the org-level notes in the Relationship section (§4.4) — both surfaces edit the same column. The tab exists because longer scratchpad content benefits from full-width space.
 
-**Empty state:** "No org-level relationship notes yet."
+**Empty state:** "Use this tab for shared notes about the relationship — context, history, things to remember. Saves automatically."
 
 ---
 
 ## 6. Edit flows
 
-| Action | Pattern |
-|---|---|
-| Update profile fields | Server action → `profiles` upsert |
-| Update relationship | Server action → `relationships` update |
-| Assign owner | Server action → `relationship_owners` insert |
-| Log activity | Server action → `activities` insert, one row per profile |
-| Add connection | Server action → `connections` insert |
-| Add/remove tag | Server action → `profile_tags` |
+| Action | Pattern | Optimistic? |
+|---|---|---|
+| Update profile fields | Server action → `profiles` upsert | Yes — inline fields update immediately |
+| Update relationship status/type | Server action → `relationships` update | Yes |
+| Update owner strength | Server action → `relationship_owners` update | Yes — badge changes on click |
+| Assign / remove owner | Server action → `relationship_owners` insert/delete | Yes |
+| Quick-log activity | Server action → `activities` insert | Yes — appears at top of timeline immediately |
+| Full log activity | Server action → `activities` insert | No — form submit, navigate back |
+| Add connection | Server action → `connections` insert | Yes |
+| Add/remove tag | Server action → `profile_tags` | Yes |
 
-All mutations: `requireUser()` → Zod validate → repository write → `revalidatePath`. Never accept `org_id` from client.
+All mutations: `requireUser()` → Zod validate → repository write → `revalidatePath`. Never accept `org_id` from client. Optimistic updates roll back on error with a toast. See `docs/specs/interaction-speed.md §Optimistic updates`.
 
 ---
 

@@ -20,8 +20,10 @@ Implementation: `src/lib/integrations/participant-email.ts`
 
 Full spec: `docs/specs/gmail-sync.md`
 
+**Status: not implemented.** Schema and `email_participant_reviews` exist; sync code does not. When built:
+
 - Ecosystem owns Gmail sync. Not shared with Pathway PM (ADR 0007).
-- Sync code lives in `src/lib/integrations/gmail/`.
+- Sync code will live in `src/lib/integrations/gmail/`.
 - Cron endpoint: `src/app/api/cron/gmail-sync/route.ts`. Verify `CRON_SECRET` header before processing.
 - Use `createAdminClient()` (service role) for sync writes. Set `org_id` explicitly on every insert.
 - Label filter: read from `GMAIL_SYNC_LABELS` env var. Never hard-code label names.
@@ -65,7 +67,7 @@ Full spec: `docs/specs/search.md`
 
 - Phase 1: Postgres FTS only. No external search service, no pgvector until Phase 2.
 - Each indexed table has a generated `fts tsvector` column and a GIN index.
-- Cross-entity search: parallel queries per entity type, merged in `src/lib/computed/search.ts`.
+- Cross-entity search: parallel queries per entity type, merged in `src/lib/data/search.ts`.
 - Body search (`email_messages.fts`) is a separate query path. Never include in the general search view.
 - Use `plainto_tsquery` (AND semantics) for user input. Use `ts_rank_cd` for ranking.
 - Empty query → return nothing. Never return all rows on an empty search.

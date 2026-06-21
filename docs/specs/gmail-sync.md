@@ -1,10 +1,10 @@
 # Gmail Sync Specification
 
 - Version: 1.0
-- Status: Accepted
+- Status: Accepted — **not implemented** (schema + review table ready)
 - Related: ADR 0002, ADR 0003, ADR 0007, domain-model-v1.md §5.9, `docs/specs/calendar-sync.md` (parallel calendar pipeline), `docs/specs/admin-review.md` §6
 
-The highest-risk subsystem. Privacy, permissions, and relationship attribution intersect here. **No implementation until this spec is signed off.**
+The highest-risk subsystem. Privacy, permissions, and relationship attribution intersect here. **Calendar sync shipped first as the auto-capture path for meetings; Gmail sync remains spec + schema only until implementation starts.**
 
 ---
 

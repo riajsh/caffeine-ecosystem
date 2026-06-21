@@ -20,9 +20,11 @@ Start here for Cursor sessions and onboarding.
 | Spec | Status |
 |---|---|
 | [specs/profile-detail.md](./specs/profile-detail.md) | Accepted — most-used screen |
-| [specs/gmail-sync.md](./specs/gmail-sync.md) | Accepted — email ingestion |
+| [specs/gmail-sync.md](./specs/gmail-sync.md) | Accepted — **schema ready; sync not implemented** |
 | [specs/calendar-sync.md](./specs/calendar-sync.md) | Accepted — Phase 1.1 shipped |
 | [specs/admin-review.md](./specs/admin-review.md) | Accepted — review queue UX |
+| [specs/workflows.md](./specs/workflows.md) | Accepted — core user jobs |
+| [specs/interaction-speed.md](./specs/interaction-speed.md) | Accepted — speed patterns |
 | [specs/import-pipeline.md](./specs/import-pipeline.md) | Accepted — CSV import |
 | [specs/search.md](./specs/search.md) | Accepted — Postgres FTS |
 | [specs/orbit-interaction.md](./specs/orbit-interaction.md) | Draft — expand before Phase 2 Orbit |

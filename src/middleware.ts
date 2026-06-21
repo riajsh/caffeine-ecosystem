@@ -16,7 +16,7 @@ function isCronRoute(pathname: string): boolean {
   return pathname.startsWith("/api/cron/");
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
