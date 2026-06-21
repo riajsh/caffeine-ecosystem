@@ -22,6 +22,12 @@ import {
   parseTags,
   validateNormalizedRow,
 } from "@/lib/import/mapping";
+import { nameCompanyDedupKey } from "@/lib/dedup/name-company";
+import {
+  getInFileMatchRowNumber,
+  withMergeInFileRowNumber,
+  withInFileMatchRowNumber,
+} from "@/lib/import/in-file-dedup";
 import { resolveOrgUserId, type OrgUserRecord } from "@/lib/import/resolve-owner";
 import type {
   ColumnMapping,
@@ -91,7 +97,13 @@ function asNormalized(value: unknown): NormalizedImportRow {
   return value as NormalizedImportRow;
 }
 
-function mapImportRow(row: ImportRowRecord): ImportRowView {
+function mapImportRow(
+  row: ImportRowRecord,
+  rowsByNumber?: Map<number, ImportRowRecord>,
+): ImportRowView {
+  const inFileRowNumber = getInFileMatchRowNumber(row.normalized);
+  const inFileRow = inFileRowNumber ? rowsByNumber?.get(inFileRowNumber) : undefined;
+
   return {
     id: row.id,
     rowNumber: row.row_number,
@@ -99,8 +111,16 @@ function mapImportRow(row: ImportRowRecord): ImportRowView {
     normalized: row.normalized,
     dedupStatus: row.dedup_status,
     matchedProfileId: row.matched_profile_id,
-    matchedProfileName: row.matched_profile?.full_name ?? null,
-    matchedProfileCompany: row.matched_profile?.organisation_name ?? null,
+    matchedProfileName:
+      row.matched_profile?.full_name ??
+      inFileRow?.normalized.full_name ??
+      null,
+    matchedProfileCompany:
+      row.matched_profile?.organisation_name ??
+      inFileRow?.normalized.organisation_name ??
+      null,
+    matchedInFileRowNumber: inFileRowNumber,
+    matchedInFileRowEmail: inFileRow?.normalized.email ?? null,
     error: row.error,
   };
 }
@@ -312,7 +332,8 @@ export async function getImportDetail(importId: string): Promise<ImportDetail> {
 
   const metadata = parseMetadata(importRecord.metadata);
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
-  const mappedRows = rows.map(mapImportRow);
+  const rowsByNumber = new Map(rows.map((row) => [row.row_number, row]));
+  const mappedRows = rows.map((row) => mapImportRow(row, rowsByNumber));
   const softMatchRows = mappedRows.filter((row) => row.dedupStatus === "soft_match");
   const unresolvedSoftMatches = softMatchRows.length;
   const dedupSummary =
@@ -608,19 +629,20 @@ export async function runImportDedup(importId: string): Promise<DedupSummary> {
       emailIndex.set(profile.email.toLowerCase(), profile.id);
     }
 
-    if (profile.full_name && profile.organisation_name) {
-      const key = `${profile.full_name.trim().toLowerCase()}|${profile.organisation_name.trim().toLowerCase()}`;
+    const key = nameCompanyDedupKey(profile.full_name, profile.organisation_name);
+    if (key) {
       nameCompanyIndex.set(key, profile.id);
     }
   }
 
   const seenEmails = new Map<string, number>();
+  const seenNameCompany = new Map<string, number>();
   const summary = emptyDedupSummary();
   const mapping = metadata.column_mapping ?? {};
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
 
   for (const row of rows) {
-    const normalized = normalizeRowFromImport(row.raw, headers, mapping, row.normalized);
+    let normalized = normalizeRowFromImport(row.raw, headers, mapping, row.normalized);
     const validationError = validateNormalizedRow(normalized);
     let dedupStatus: DedupStatus = "pending";
     let matchedProfileId: string | null = null;
@@ -647,16 +669,25 @@ export async function runImportDedup(importId: string): Promise<DedupSummary> {
     }
 
     if (!error && dedupStatus === "pending") {
-      const fullName = normalized.full_name?.trim();
-      const organisationName = normalized.organisation_name?.trim();
+      const key = nameCompanyDedupKey(
+        normalized.full_name,
+        normalized.organisation_name,
+      );
 
-      if (fullName && organisationName) {
-        const key = `${fullName.toLowerCase()}|${organisationName.toLowerCase()}`;
-        const candidateId = nameCompanyIndex.get(key);
+      if (key) {
+        const firstInFileRow = seenNameCompany.get(key);
 
-        if (candidateId) {
+        if (firstInFileRow !== undefined) {
           dedupStatus = "soft_match";
-          matchedProfileId = candidateId;
+          normalized = withInFileMatchRowNumber(normalized, firstInFileRow);
+        } else {
+          seenNameCompany.set(key, row.row_number);
+          const candidateId = nameCompanyIndex.get(key);
+
+          if (candidateId) {
+            dedupStatus = "soft_match";
+            matchedProfileId = candidateId;
+          }
         }
       }
     }
@@ -970,7 +1001,7 @@ export async function resolveSoftMatch(
 
   const { data: row, error: rowError } = await supabase
     .from("import_rows")
-    .select("id, import_id, dedup_status, matched_profile_id")
+    .select("id, import_id, dedup_status, matched_profile_id, normalized")
     .eq("id", rowId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -987,17 +1018,29 @@ export async function resolveSoftMatch(
     dedup_status: DedupStatus;
     matched_profile_id: string | null;
     error: string | null;
+    normalized?: NormalizedImportRow;
   };
 
+  const normalized = asNormalized(row.normalized);
+  const inFileRowNumber = getInFileMatchRowNumber(normalized);
+
   if (action === "confirm") {
-    if (!row.matched_profile_id) {
+    if (row.matched_profile_id) {
+      update = {
+        dedup_status: "matched_email",
+        matched_profile_id: row.matched_profile_id,
+        error: null,
+      };
+    } else if (inFileRowNumber) {
+      update = {
+        dedup_status: "matched_email",
+        matched_profile_id: null,
+        error: null,
+        normalized: withMergeInFileRowNumber(normalized, inFileRowNumber),
+      };
+    } else {
       throw new Error("Missing matched profile for soft match row");
     }
-    update = {
-      dedup_status: "matched_email",
-      matched_profile_id: row.matched_profile_id,
-      error: null,
-    };
   } else if (action === "create") {
     update = {
       dedup_status: "new",
@@ -1111,18 +1154,21 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
 
   try {
-    type WorkerResult = {
-      created: number;
-      updated: number;
-      ownerWarnings: number;
-    };
+    const profileIdByRowNumber = new Map<number, string>();
+    const sortedCommitRows = [...commitRows].sort(
+      (left, right) => left.row_number - right.row_number,
+    );
 
-    const workerResults = await runConcurrentMap(commitRows, 8, async (row) => {
-      const local: WorkerResult = { created: 0, updated: 0, ownerWarnings: 0 };
-      const normalized = normalizeRowFromImport(row.raw, headers, mapping, row.normalized);
+    for (const row of sortedCommitRows) {
+      const normalized = normalizeRowFromImport(
+        row.raw,
+        headers,
+        mapping,
+        row.normalized,
+      );
 
       if (row.dedup_status === "new") {
-        const ownerWarnings = await createProfileFromImportRow({
+        const { profileId, ownerWarnings } = await createProfileFromImportRow({
           orgId,
           importId,
           userId: user.id,
@@ -1130,37 +1176,33 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           sourceLabel,
           orgUsers: orgUserRecords,
         });
-        local.created = 1;
-        local.ownerWarnings = ownerWarnings;
-      } else if (row.dedup_status === "matched_email" && row.matched_profile_id) {
+        profileIdByRowNumber.set(row.row_number, profileId);
+        summary.created += 1;
+        summary.ownerWarnings += ownerWarnings;
+      } else if (row.dedup_status === "matched_email") {
+        const profileId =
+          row.matched_profile_id ??
+          profileIdByRowNumber.get(getInFileMatchRowNumber(normalized) ?? -1);
+
+        if (!profileId) {
+          throw new Error(
+            `Could not resolve profile for import row ${row.row_number}`,
+          );
+        }
+
         const ownerWarnings = await updateProfileFromImportRow({
           orgId,
           importId,
           userId: user.id,
-          profileId: row.matched_profile_id,
+          profileId,
           normalized,
           sourceLabel,
           orgUsers: orgUserRecords,
         });
-        local.updated = 1;
-        local.ownerWarnings = ownerWarnings;
+        summary.updated += 1;
+        summary.ownerWarnings += ownerWarnings;
       }
-
-      return local;
-    });
-
-    const totals = workerResults.reduce(
-      (acc, result) => ({
-        created: acc.created + result.created,
-        updated: acc.updated + result.updated,
-        ownerWarnings: acc.ownerWarnings + result.ownerWarnings,
-      }),
-      { created: 0, updated: 0, ownerWarnings: 0 },
-    );
-
-    summary.created = totals.created;
-    summary.updated = totals.updated;
-    summary.ownerWarnings = totals.ownerWarnings;
+    }
 
     const { error: completeError } = await supabase
       .from("imports")
@@ -1247,7 +1289,9 @@ type CommitContext = {
   orgUsers: OrgUserRecord[];
 };
 
-async function createProfileFromImportRow(context: CommitContext): Promise<number> {
+async function createProfileFromImportRow(
+  context: CommitContext,
+): Promise<{ profileId: string; ownerWarnings: number }> {
   const supabase = await createClient();
   const { orgId, normalized, importId, userId, sourceLabel, orgUsers } = context;
 
@@ -1276,7 +1320,7 @@ async function createProfileFromImportRow(context: CommitContext): Promise<numbe
     throw new Error(`Failed to create profile: ${profileError.message}`);
   }
 
-  return ensureRelationshipGraph({
+  const ownerWarnings = await ensureRelationshipGraph({
     orgId,
     profileId: profile.id,
     importId,
@@ -1285,6 +1329,8 @@ async function createProfileFromImportRow(context: CommitContext): Promise<numbe
     sourceLabel,
     orgUsers,
   });
+
+  return { profileId: profile.id, ownerWarnings };
 }
 
 async function updateProfileFromImportRow(

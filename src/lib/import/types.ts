@@ -62,6 +62,8 @@ export type NormalizedImportRow = {
   owner_strength?: string;
   tags?: string;
   extended?: Record<string, string>;
+  _dedup_in_file_row_number?: number;
+  _dedup_merge_in_file_row_number?: number;
 };
 
 export type ImportListItem = {
@@ -87,6 +89,8 @@ export type ImportRowView = {
   matchedProfileId: string | null;
   matchedProfileName: string | null;
   matchedProfileCompany: string | null;
+  matchedInFileRowNumber: number | null;
+  matchedInFileRowEmail: string | null;
   error: string | null;
 };
 

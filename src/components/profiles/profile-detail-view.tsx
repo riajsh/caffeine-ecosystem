@@ -5,6 +5,7 @@ import { EditRelationshipForm } from "@/components/profiles/edit-relationship-fo
 import { ProfileDetailTabs } from "@/components/profiles/profile-detail-tabs";
 import { ProfileFullPageLink } from "@/components/profiles/profile-full-page-link";
 import { ProfileHeader } from "@/components/profiles/profile-header";
+import { DeleteProfileButton } from "@/components/profiles/delete-profile-button";
 import { ProfileNetworkIntelligence } from "@/components/profiles/profile-network-intelligence";
 import { ProfileOwnersSection } from "@/components/profiles/profile-owners-section";
 import type { ProfileNetworkIntel } from "@/lib/computed/profile-intelligence";
@@ -83,6 +84,22 @@ export function ProfileDetailView({
           />
         </Suspense>
       </section>
+
+      {mode === "page" && !profile.isInternalProfile ? (
+        <section className="space-y-3 border-t border-border pt-6">
+          <h2 className="text-heading font-medium text-foreground">Danger zone</h2>
+          <p className="text-body text-muted-foreground">
+            Remove this profile if it was created by mistake. Relationship data,
+            activities, and tags are deleted with it.
+          </p>
+          <DeleteProfileButton
+            profileId={profile.id}
+            profileName={profile.fullName}
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+          />
+        </section>
+      ) : null}
 
       {mode === "drawer" ? (
         <div className="border-t border-border pt-4">

@@ -12,10 +12,11 @@ import { ProfilesTagFilter } from "@/components/profiles/profiles-tag-filter";
 import { formatCountLabel, ListMeta } from "@/components/ui/list-meta";
 import { Button } from "@/components/ui/button";
 import { getProfileNetworkIntel } from "@/lib/computed/profile-intelligence";
-import { getProfileById, listProfiles, PROFILES_PAGE_SIZE } from "@/lib/data/profiles";
+import { getProfileById, listProfileCompanies, listProfiles, PROFILES_PAGE_SIZE } from "@/lib/data/profiles";
 import { listOrgTags } from "@/lib/data/tags";
 import { listOrgUsers } from "@/lib/data/users";
 import { requireUser } from "@/lib/auth/session";
+import { parseProfileSort, parseSortOrder } from "@/lib/profiles/list-sort";
 import { parseProfileTabOrDefault } from "@/lib/profiles/tab";
 import type { Database } from "@/types/database";
 
@@ -39,6 +40,8 @@ type ProfilesPageProps = {
     owner?: string;
     status?: string;
     company?: string;
+    sort?: string;
+    order?: string;
     page?: string;
   }>;
 };
@@ -48,6 +51,8 @@ function buildListHref(options: {
   owner?: string;
   status?: string;
   company?: string;
+  sort?: string;
+  order?: string;
   page?: number;
 }) {
   const params = new URLSearchParams();
@@ -55,6 +60,8 @@ function buildListHref(options: {
   if (options.owner) params.set("owner", options.owner);
   if (options.status) params.set("status", options.status);
   if (options.company) params.set("company", options.company);
+  if (options.sort && options.sort !== "name") params.set("sort", options.sort);
+  if (options.order && options.order !== "asc") params.set("order", options.order);
   if (options.page && options.page > 1) params.set("page", String(options.page));
   const query = params.toString();
   return query ? `/profiles?${query}` : "/profiles";
@@ -65,12 +72,16 @@ function buildCloseHref(options: {
   owner?: string;
   status?: string;
   company?: string;
+  sort?: string;
+  order?: string;
 }) {
   const params = new URLSearchParams();
   if (options.tag) params.set("tag", options.tag);
   if (options.owner) params.set("owner", options.owner);
   if (options.status) params.set("status", options.status);
   if (options.company) params.set("company", options.company);
+  if (options.sort && options.sort !== "name") params.set("sort", options.sort);
+  if (options.order && options.order !== "asc") params.set("order", options.order);
   const query = params.toString();
   return query ? `/profiles?${query}` : "/profiles";
 }
@@ -83,11 +94,15 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     owner: ownerUserId,
     status,
     company,
+    sort: sortParam,
+    order: orderParam,
     page: pageParam,
   } = await searchParams;
 
   const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
   const listLimit = page * PROFILES_PAGE_SIZE;
+  const sort = parseProfileSort(sortParam);
+  const order = parseSortOrder(orderParam);
 
   const defaultTab = parseProfileTabOrDefault(tab);
 
@@ -103,19 +118,22 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     notFound();
   }
 
-  const [{ profiles, total, hasMore }, orgTags, teamUsers, currentUser] =
+  const [{ profiles, total, hasMore }, orgTags, teamUsers, currentUser, companies] =
     await Promise.all([
       listProfiles({
         tagId,
         ownerUserId,
         status: status as RelationshipStatus | undefined,
         company: company?.trim() || undefined,
+        sort,
+        order,
         limit: listLimit,
         offset: 0,
       }),
       listOrgTags(),
       listOrgUsers(),
       requireUser(),
+      listProfileCompanies(),
     ]);
 
   const hasActiveFilters = Boolean(tagId || ownerUserId || status || company);
@@ -124,6 +142,8 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     owner: ownerUserId,
     status,
     company,
+    sort: sortParam,
+    order: orderParam,
   });
 
   let drawerContent = null;
@@ -143,6 +163,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
         profileId={profile.id}
         profileName={profile.fullName}
         closeHref={closeHref}
+        canDelete={!profile.isInternalProfile}
       >
         <ProfileDetailView
           profile={profile}
@@ -175,13 +196,18 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
             activeOwnerId={ownerUserId}
             activeStatus={status}
             activeCompany={company}
+            activeSort={sort}
+            activeOrder={order}
           />
           <ProfilesListFilters
             teamUsers={teamUsers}
+            companies={companies}
             activeTagId={tagId}
             activeOwnerId={ownerUserId}
             activeStatus={status}
             activeCompany={company}
+            activeSort={sort}
+            activeOrder={order}
           />
         </div>
       </div>
@@ -194,6 +220,8 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
         <Suspense fallback={<div className="h-64 animate-pulse rounded-lg bg-muted/30" />}>
           <ProfilesTable
             profiles={profiles}
+            sort={sort}
+            order={order}
             hasActiveFilters={hasActiveFilters}
             canImportDatasets={currentUser.role === "admin"}
           />
@@ -207,6 +235,8 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
                   owner: ownerUserId,
                   status,
                   company,
+                  sort: sortParam,
+                  order: orderParam,
                   page: page + 1,
                 })}
               >

@@ -1,13 +1,14 @@
 import "server-only";
 
 import { getOrgId, requireAdmin } from "@/lib/auth/session";
-import { normaliseOrganisationName } from "@/lib/normalise/organisation";
+import { nameCompanyDedupKey } from "@/lib/dedup/name-company";
 import { createClient } from "@/lib/supabase/server";
 
 export type DuplicateProfileGroup = {
   id: string;
   reason: "same_email" | "same_name_organisation";
   reasonLabel: string;
+  hasConflictingEmails: boolean;
   profiles: Array<{
     id: string;
     fullName: string;
@@ -15,15 +16,6 @@ export type DuplicateProfileGroup = {
     organisationName: string | null;
   }>;
 };
-
-function groupKeyNameOrganisation(
-  fullName: string,
-  organisationName: string | null,
-): string {
-  const name = fullName.trim().toLowerCase();
-  const org = normaliseOrganisationName(organisationName) ?? "";
-  return `${name}::${org}`;
-}
 
 export async function findDuplicateProfileGroups(): Promise<{
   totalProfiles: number;
@@ -62,10 +54,14 @@ export async function findDuplicateProfileGroups(): Promise<{
       emailGroups.set(emailKey, existing);
     }
 
-    const nameOrgKey = groupKeyNameOrganisation(
+    const nameOrgKey = nameCompanyDedupKey(
       profile.full_name,
       profile.organisation_name,
     );
+    if (!nameOrgKey) {
+      continue;
+    }
+
     const nameExisting = nameOrgGroups.get(nameOrgKey) ?? [];
     nameExisting.push(entry);
     nameOrgGroups.set(nameOrgKey, nameExisting);
@@ -84,6 +80,7 @@ export async function findDuplicateProfileGroups(): Promise<{
       id: `email-${groupIndex}`,
       reason: "same_email",
       reasonLabel: `Same email: ${email}`,
+      hasConflictingEmails: false,
       profiles: members,
     });
   }
@@ -96,9 +93,8 @@ export async function findDuplicateProfileGroups(): Promise<{
     const emails = new Set(
       members.map((member) => member.email?.trim().toLowerCase()).filter(Boolean),
     );
-    if (emails.size > 1 && emails.size === members.length) {
-      continue;
-    }
+    const hasConflictingEmails =
+      emails.size > 1 && emails.size === members.length;
 
     const alreadyCovered = groups.some(
       (group) =>
@@ -117,9 +113,14 @@ export async function findDuplicateProfileGroups(): Promise<{
     groups.push({
       id: `name-org-${groupIndex}`,
       reason: "same_name_organisation",
-      reasonLabel: `Same name + organisation: ${sample.fullName}${
-        sample.organisationName ? ` · ${sample.organisationName}` : ""
-      }`,
+      reasonLabel: hasConflictingEmails
+        ? `Same name + organisation (different emails — review before merge): ${sample.fullName}${
+            sample.organisationName ? ` · ${sample.organisationName}` : ""
+          }`
+        : `Same name + organisation: ${sample.fullName}${
+            sample.organisationName ? ` · ${sample.organisationName}` : ""
+          }`,
+      hasConflictingEmails,
       profiles: members,
     });
   }

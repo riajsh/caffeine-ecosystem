@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -18,18 +19,73 @@ import {
 import { formatInteractionDate } from "@/lib/format/date";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { ProfileListItem } from "@/lib/data/profiles";
+import type { ProfileSortKey, SortOrder } from "@/lib/profiles/list-sort";
+import { cn } from "@/lib/utils";
 
 import { OwnerDot } from "./owner-dot";
 import { StrengthBadge } from "./strength-badge";
 
 type ProfilesTableProps = {
   profiles: ProfileListItem[];
+  sort: ProfileSortKey;
+  order: SortOrder;
   hasActiveFilters?: boolean;
   canImportDatasets?: boolean;
 };
 
+type SortableHeadProps = {
+  label: string;
+  sortKey: ProfileSortKey;
+  currentSort: ProfileSortKey;
+  currentOrder: SortOrder;
+  searchParams: URLSearchParams;
+};
+
+function SortableTableHead({
+  label,
+  sortKey,
+  currentSort,
+  currentOrder,
+  searchParams,
+}: SortableHeadProps) {
+  const isActive = currentSort === sortKey;
+  const nextOrder = isActive && currentOrder === "asc" ? "desc" : "asc";
+  const params = new URLSearchParams(searchParams.toString());
+  params.set("sort", sortKey);
+  params.set("order", nextOrder);
+  params.delete("page");
+
+  const SortIcon = isActive
+    ? currentOrder === "asc"
+      ? ArrowUpIcon
+      : ArrowDownIcon
+    : ChevronsUpDownIcon;
+
+  return (
+    <TableHead>
+      <Link
+        href={`/profiles?${params.toString()}`}
+        className={cn(
+          "inline-flex items-center gap-1 hover:text-foreground",
+          isActive ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        <span>{label}</span>
+        <SortIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="sr-only">
+          {isActive
+            ? `Sorted ${currentOrder === "asc" ? "ascending" : "descending"}`
+            : "Sortable"}
+        </span>
+      </Link>
+    </TableHead>
+  );
+}
+
 export function ProfilesTable({
   profiles,
+  sort,
+  order,
   hasActiveFilters = false,
   canImportDatasets = false,
 }: ProfilesTableProps) {
@@ -92,14 +148,62 @@ export function ProfilesTable({
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-card [&_tr]:border-b [&_tr]:shadow-[inset_0_-1px_0_var(--color-border-default)]">
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Occupation</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Primary owner</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Strength</TableHead>
-              <TableHead>Last interaction</TableHead>
+              <SortableTableHead
+                label="Name"
+                sortKey="name"
+                currentSort={sort}
+                currentOrder={order}
+                searchParams={searchParams}
+              />
+              <SortableTableHead
+                label="Company"
+                sortKey="company"
+                currentSort={sort}
+                currentOrder={order}
+                searchParams={searchParams}
+              />
+              <SortableTableHead
+                label="Occupation"
+                sortKey="occupation"
+                currentSort={sort}
+                currentOrder={order}
+                searchParams={searchParams}
+              />
+              <SortableTableHead
+                label="Location"
+                sortKey="location"
+                currentSort={sort}
+                currentOrder={order}
+                searchParams={searchParams}
+              />
+              <SortableTableHead
+                label="Primary owner"
+                sortKey="owner"
+                currentSort={sort}
+                currentOrder={order}
+                searchParams={searchParams}
+              />
+              <SortableTableHead
+                label="Status"
+                sortKey="status"
+                currentSort={sort}
+                currentOrder={order}
+                searchParams={searchParams}
+              />
+              <SortableTableHead
+                label="Strength"
+                sortKey="strength"
+                currentSort={sort}
+                currentOrder={order}
+                searchParams={searchParams}
+              />
+              <SortableTableHead
+                label="Last interaction"
+                sortKey="last_interaction"
+                currentSort={sort}
+                currentOrder={order}
+                searchParams={searchParams}
+              />
               <TableHead>Tags</TableHead>
             </TableRow>
           </TableHeader>

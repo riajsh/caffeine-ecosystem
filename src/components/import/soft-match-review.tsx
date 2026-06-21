@@ -82,6 +82,19 @@ export function SoftMatchReview({ importId, rows }: SoftMatchReviewProps) {
                     {row.matchedProfileCompany ?? "No company"}
                   </p>
                 </>
+              ) : row.matchedInFileRowNumber ? (
+                <>
+                  <p className="text-body font-medium">{row.matchedProfileName}</p>
+                  <p className="text-body text-muted-foreground">
+                    {row.matchedProfileCompany ?? "No company"}
+                  </p>
+                  <p className="text-caption text-muted-foreground">
+                    Row {row.matchedInFileRowNumber} in this file
+                    {row.matchedInFileRowEmail
+                      ? ` · ${row.matchedInFileRowEmail}`
+                      : " · no email"}
+                  </p>
+                </>
               ) : (
                 <p className="text-body text-muted-foreground">No candidate loaded</p>
               )}

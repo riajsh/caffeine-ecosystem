@@ -10,6 +10,11 @@ import {
   loadOrgParticipantFilters,
 } from "@/lib/integrations/participant-email";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
+import {
+  sortProfiles,
+  type ProfileSortKey,
+  type SortOrder,
+} from "@/lib/profiles/list-sort";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -346,6 +351,9 @@ function mapProfileDetailRow(
 }
 
 export const PROFILES_PAGE_SIZE = 50;
+const LIST_PROFILES_MAX = 10_000;
+
+export type { ProfileSortKey, SortOrder };
 
 export type ListProfilesResult = {
   profiles: ProfileListItem[];
@@ -358,13 +366,16 @@ export async function listProfiles(options?: {
   ownerUserId?: string;
   status?: Database["public"]["Enums"]["relationship_status"];
   company?: string;
+  sort?: ProfileSortKey;
+  order?: SortOrder;
   limit?: number;
   offset?: number;
 }): Promise<ListProfilesResult> {
   const orgId = await getOrgId();
   const supabase = await createClient();
   const limit = options?.limit ?? PROFILES_PAGE_SIZE;
-  const offset = options?.offset ?? 0;
+  const sort = options?.sort ?? "name";
+  const order = options?.order ?? "asc";
 
   const useRelationshipInner = Boolean(options?.ownerUserId || options?.status);
   const useOwnerInner = Boolean(options?.ownerUserId);
@@ -424,8 +435,7 @@ export async function listProfiles(options?: {
       { count: "exact" },
     )
     .eq("org_id", orgId)
-    .order("full_name")
-    .range(offset, offset + limit - 1);
+    .range(0, LIST_PROFILES_MAX - 1);
 
   if (options?.tagId) {
     query = query.eq("profile_tags.tag_id", options.tagId);
@@ -449,14 +459,85 @@ export async function listProfiles(options?: {
     throw new Error(`Failed to list profiles: ${error.message}`);
   }
 
-  const profiles = ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
-  const total = count ?? profiles.length;
+  const mapped = ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
+  const sorted = sortProfiles(mapped, sort, order);
+  const profiles = sorted.slice(0, limit);
+  const total = count ?? sorted.length;
 
   return {
     profiles,
     total,
-    hasMore: offset + profiles.length < total,
+    hasMore: sorted.length > limit,
   };
+}
+
+export async function listProfileCompanies(): Promise<string[]> {
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("organisation_name")
+    .eq("org_id", orgId)
+    .not("organisation_name", "is", null)
+    .order("organisation_name")
+    .range(0, LIST_PROFILES_MAX - 1);
+
+  if (error) {
+    throw new Error(`Failed to list profile companies: ${error.message}`);
+  }
+
+  const companies = new Set<string>();
+
+  for (const row of data ?? []) {
+    const name = row.organisation_name?.trim();
+    if (name) {
+      companies.add(name);
+    }
+  }
+
+  return [...companies].sort((left, right) =>
+    left.localeCompare(right, undefined, { sensitivity: "base" }),
+  );
+}
+
+export async function deleteProfile(profileId: string): Promise<void> {
+  await requireUser();
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+  const participantFilters = await loadOrgParticipantFilters(
+    createAdminClient(),
+    orgId,
+  );
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, email")
+    .eq("id", profileId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(`Failed to load profile: ${profileError.message}`);
+  }
+
+  if (!profile) {
+    notFound();
+  }
+
+  if (profile.email && isInternalParticipant(profile.email, participantFilters)) {
+    throw new Error("Team member profiles cannot be deleted.");
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .delete()
+    .eq("id", profileId)
+    .eq("org_id", orgId);
+
+  if (error) {
+    throw new Error(`Failed to delete profile: ${error.message}`);
+  }
 }
 
 export async function listProfileIds(options?: {

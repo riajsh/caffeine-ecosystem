@@ -1,13 +1,15 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import {
   FilterChipLink,
   FilterChipRow,
 } from "@/components/filters/filter-chips";
-import { Badge } from "@/components/ui/badge";
+import { ProfilesCompanyFilter } from "@/components/profiles/profiles-company-filter";
 import type { OrgUser } from "@/lib/data/users";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { Database } from "@/types/database";
+import type { ProfileSortKey, SortOrder } from "@/lib/profiles/list-sort";
 
 type RelationshipStatus = Database["public"]["Enums"]["relationship_status"];
 
@@ -23,10 +25,13 @@ const STATUS_OPTIONS: RelationshipStatus[] = [
 
 type ProfilesListFiltersProps = {
   teamUsers: OrgUser[];
+  companies: string[];
   activeTagId?: string;
   activeOwnerId?: string;
   activeStatus?: string;
   activeCompany?: string;
+  activeSort?: ProfileSortKey;
+  activeOrder?: SortOrder;
 };
 
 function buildProfilesHref(options: {
@@ -34,6 +39,8 @@ function buildProfilesHref(options: {
   owner?: string;
   status?: string;
   company?: string;
+  sort?: ProfileSortKey;
+  order?: SortOrder;
 }) {
   const params = new URLSearchParams();
   if (options.tag) {
@@ -48,43 +55,52 @@ function buildProfilesHref(options: {
   if (options.company) {
     params.set("company", options.company);
   }
+  if (options.sort && options.sort !== "name") {
+    params.set("sort", options.sort);
+  }
+  if (options.order && options.order !== "asc") {
+    params.set("order", options.order);
+  }
   const query = params.toString();
   return query ? `/profiles?${query}` : "/profiles";
 }
 
 export function ProfilesListFilters({
   teamUsers,
+  companies,
   activeTagId,
   activeOwnerId,
   activeStatus,
   activeCompany,
+  activeSort = "name",
+  activeOrder = "asc",
 }: ProfilesListFiltersProps) {
+  const preserved = {
+    tag: activeTagId,
+    company: activeCompany,
+    sort: activeSort,
+    order: activeOrder,
+  };
   const hasFilters = activeOwnerId || activeStatus || activeCompany;
 
   return (
     <div className="space-y-3">
-      {activeCompany ? (
-        <FilterChipRow label="Company:">
-          <Badge variant="default">{activeCompany}</Badge>
-          <FilterChipLink
-            href={buildProfilesHref({
-              tag: activeTagId,
-              owner: activeOwnerId,
-              status: activeStatus,
-            })}
-            isActive={false}
-          >
-            Clear company
-          </FilterChipLink>
-        </FilterChipRow>
-      ) : null}
+      <Suspense
+        fallback={
+          <div className="flex items-center gap-2">
+            <span className="text-caption text-muted-foreground">Company:</span>
+            <div className="h-8 w-48 animate-pulse rounded-md bg-muted/40" />
+          </div>
+        }
+      >
+        <ProfilesCompanyFilter companies={companies} activeCompany={activeCompany} />
+      </Suspense>
 
       <FilterChipRow label="Owner:">
         <FilterChipLink
           href={buildProfilesHref({
-            tag: activeTagId,
+            ...preserved,
             status: activeStatus,
-            company: activeCompany,
           })}
           isActive={!activeOwnerId}
         >
@@ -94,10 +110,9 @@ export function ProfilesListFilters({
           <FilterChipLink
             key={user.id}
             href={buildProfilesHref({
-              tag: activeTagId,
+              ...preserved,
               owner: user.id,
               status: activeStatus,
-              company: activeCompany,
             })}
             isActive={activeOwnerId === user.id}
           >
@@ -109,9 +124,8 @@ export function ProfilesListFilters({
       <FilterChipRow label="Status:">
         <FilterChipLink
           href={buildProfilesHref({
-            tag: activeTagId,
+            ...preserved,
             owner: activeOwnerId,
-            company: activeCompany,
           })}
           isActive={!activeStatus}
         >
@@ -121,10 +135,9 @@ export function ProfilesListFilters({
           <FilterChipLink
             key={status}
             href={buildProfilesHref({
-              tag: activeTagId,
+              ...preserved,
               owner: activeOwnerId,
               status,
-              company: activeCompany,
             })}
             isActive={activeStatus === status}
           >
@@ -135,7 +148,11 @@ export function ProfilesListFilters({
 
       {hasFilters ? (
         <Link
-          href={activeTagId ? `/profiles?tag=${activeTagId}` : "/profiles"}
+          href={
+            activeTagId
+              ? buildProfilesHref({ tag: activeTagId, sort: activeSort, order: activeOrder })
+              : buildProfilesHref({ sort: activeSort, order: activeOrder })
+          }
           className="text-caption text-interactive-primary hover:underline"
         >
           Clear all filters

@@ -12,9 +12,9 @@ export default async function AppLayout({
   const profileId = await findNavProfileIdForEmail(user.email);
 
   return (
-    <div className="flex h-dvh min-h-0 flex-1 overflow-hidden bg-background">
+    <div className="fixed inset-0 flex overflow-hidden bg-background">
       <AppSidebar user={user} profileId={profileId} />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
         <AppProviders>{children}</AppProviders>
       </div>
     </div>

@@ -114,7 +114,7 @@ export function AppSidebar({ user, profileId }: AppSidebarProps) {
   const upcomingNav = visibleNav.filter((item) => item.disabled);
 
   return (
-    <aside className="flex h-dvh w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <aside className="flex h-full w-60 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="shrink-0 border-b border-sidebar-border px-4 py-5">
         <Link
           href="/"
@@ -126,7 +126,7 @@ export function AppSidebar({ user, profileId }: AppSidebarProps) {
 
       <nav
         aria-label="Main navigation"
-        className="flex shrink-0 flex-col px-3 py-4"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-4"
       >
         <ul className="flex flex-col gap-0.5">
           {activeNav.map((item) => (

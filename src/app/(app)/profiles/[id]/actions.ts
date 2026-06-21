@@ -8,6 +8,7 @@ import {
   removeManualConnection,
 } from "@/lib/data/connections";
 import {
+  deleteProfile,
   searchProfilesForPicker,
   updateProfile,
 } from "@/lib/data/profiles";
@@ -265,6 +266,24 @@ export async function searchProfilesForPickerAction(query: string) {
       error:
         error instanceof Error ? error.message : "Failed to search profiles",
       results: [],
+    };
+  }
+}
+
+export async function deleteProfileAction(formData: FormData) {
+  const profileId = String(formData.get("profileId") ?? "").trim();
+
+  if (!/^[0-9a-f-]{36}$/i.test(profileId)) {
+    return { error: "Invalid profile" };
+  }
+
+  try {
+    await deleteProfile(profileId);
+    revalidateProfile(profileId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to delete profile",
     };
   }
 }

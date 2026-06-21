@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef } from "react";
 
 import { ProfileFullPageLink } from "@/components/profiles/profile-full-page-link";
+import { DeleteProfileButton } from "@/components/profiles/delete-profile-button";
 import { Button } from "@/components/ui/button";
 import { handleFocusTrap } from "@/lib/focus-trap";
 
@@ -11,6 +12,7 @@ type ProfileDrawerProps = {
   profileId: string;
   profileName: string;
   closeHref: string;
+  canDelete?: boolean;
   children: React.ReactNode;
 };
 
@@ -18,6 +20,7 @@ export function ProfileDrawer({
   profileId,
   profileName,
   closeHref,
+  canDelete = true,
   children,
 }: ProfileDrawerProps) {
   const router = useRouter();
@@ -73,13 +76,21 @@ export function ProfileDrawer({
               {profileName}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             <ProfileFullPageLink
               profileId={profileId}
               className="text-caption text-interactive-primary hover:underline"
             >
               Open full page
             </ProfileFullPageLink>
+            {canDelete ? (
+              <DeleteProfileButton
+                profileId={profileId}
+                profileName={profileName}
+                redirectHref={closeHref}
+                className="text-destructive hover:text-destructive"
+              />
+            ) : null}
             <Button
               ref={closeButtonRef}
               type="button"

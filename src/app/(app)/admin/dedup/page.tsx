@@ -59,6 +59,12 @@ export default async function AdminDedupPage() {
                 <p className="text-caption text-muted-foreground">
                   {group.profiles.length} duplicates · {group.reasonLabel}
                 </p>
+                {group.hasConflictingEmails ? (
+                  <p className="mt-1 text-caption text-amber-700 dark:text-amber-400">
+                    These profiles have different emails. Review carefully before
+                    merging — org-wide merge is not available yet.
+                  </p>
+                ) : null}
               </div>
               <ul className="space-y-1 text-body text-muted-foreground">
                 {group.profiles.map((profile) => (

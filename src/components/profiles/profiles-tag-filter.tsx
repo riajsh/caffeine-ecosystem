@@ -3,6 +3,7 @@ import {
   FilterChipRow,
 } from "@/components/filters/filter-chips";
 import type { OrgTag } from "@/lib/data/tags";
+import type { ProfileSortKey, SortOrder } from "@/lib/profiles/list-sort";
 
 type ProfilesTagFilterProps = {
   tags: OrgTag[];
@@ -10,6 +11,8 @@ type ProfilesTagFilterProps = {
   activeOwnerId?: string;
   activeStatus?: string;
   activeCompany?: string;
+  activeSort?: ProfileSortKey;
+  activeOrder?: SortOrder;
 };
 
 function buildTagHref(
@@ -18,6 +21,8 @@ function buildTagHref(
     owner?: string;
     status?: string;
     company?: string;
+    sort?: ProfileSortKey;
+    order?: SortOrder;
   },
 ) {
   const params = new URLSearchParams();
@@ -33,6 +38,12 @@ function buildTagHref(
   if (options?.company) {
     params.set("company", options.company);
   }
+  if (options?.sort && options.sort !== "name") {
+    params.set("sort", options.sort);
+  }
+  if (options?.order && options.order !== "asc") {
+    params.set("order", options.order);
+  }
   const query = params.toString();
   return query ? `/profiles?${query}` : "/profiles";
 }
@@ -43,11 +54,15 @@ export function ProfilesTagFilter({
   activeOwnerId,
   activeStatus,
   activeCompany,
+  activeSort = "name",
+  activeOrder = "asc",
 }: ProfilesTagFilterProps) {
   const filterOptions = {
     owner: activeOwnerId,
     status: activeStatus,
     company: activeCompany,
+    sort: activeSort,
+    order: activeOrder,
   };
 
   if (tags.length === 0) {
