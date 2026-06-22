@@ -1,6 +1,7 @@
 import { AdminPage } from "@/components/admin/admin-page";
 import { CalendarSyncReviewWizard } from "@/components/admin/calendar-sync-review-wizard";
 import { requireAdmin } from "@/lib/auth/session";
+import { autoResolveNamedCalendarReviews } from "@/lib/data/calendar-sync-auto-resolve";
 import {
   getCalendarSyncReviewSummary,
   listPendingCalendarReviewGroups,
@@ -17,6 +18,8 @@ export default async function CalendarSyncReviewPage({
   await requireAdmin();
   const params = await searchParams;
 
+  await autoResolveNamedCalendarReviews();
+
   const [summary, unmatchedGroups, matchedMeetings] = await Promise.all([
     getCalendarSyncReviewSummary(),
     listPendingCalendarReviewGroups(),
@@ -26,7 +29,7 @@ export default async function CalendarSyncReviewPage({
   return (
     <AdminPage
       title="Review calendar sync"
-      description="Walk through what Google Calendar pulled in — matched meetings and people who still need a profile."
+      description="Walk through what Google Calendar pulled in — matched meetings and people who still need a profile. Attendees with a first and last name on Google Calendar are added automatically."
       contentClassName="px-8 py-6"
     >
       {params.connected ? (

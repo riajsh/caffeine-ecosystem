@@ -538,7 +538,7 @@ export function CalendarSyncReviewWizard({
 
         <p className="text-body text-muted-foreground">
           {summary.pendingReviewCount > 0
-            ? "Work through external meeting attendees in the Review people tab. Create a profile, link to someone you already know, or ignore no-replies and vendors."
+            ? "Work through external attendees who still need a decision — typically people with only a first name or no name on Google Calendar. Link to someone you already know, create a profile, or ignore no-replies and vendors."
             : "Everything external from this sync is matched. Check matched meetings or return to Admin."}
         </p>
       </TabsContent>
@@ -552,8 +552,9 @@ export function CalendarSyncReviewWizard({
           <>
             <p className="text-body text-muted-foreground">
               Each card is someone Google Calendar listed on a meeting who is not
-              yet in Ecosystem. Link them to an existing profile, create a new
-              one, or ignore vendors and no-replies.
+              yet in Ecosystem and could not be added automatically (missing a
+              full name). Link them to an existing profile, create a new one, or
+              ignore vendors and no-replies.
             </p>
             <div className="space-y-4">
               {unmatchedGroups.external.map((group) => (

@@ -3,93 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import { getOrgId, requireAdmin, requireUser } from "@/lib/auth/session";
-import { backfillCalendarReviewsForProfile } from "@/lib/integrations/calendar/backfill-review";
+import { createCalendarParticipantProfile } from "@/lib/integrations/calendar/create-participant-profile";
 import {
   isInternalParticipant,
   loadOrgParticipantFilters,
-  normaliseEmail,
 } from "@/lib/integrations/participant-email";
+import { resolveCalendarReviewsForEmail } from "@/lib/integrations/calendar/resolve-calendar-reviews";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { normaliseOrganisationName } from "@/lib/normalise/organisation";
-
-async function resolvePendingReviewsForEmail(
-  email: string,
-  status: "linked" | "created" | "ignored",
-  profileId?: string,
-) {
-  const user = await requireUser();
-  const orgId = await getOrgId();
-  const supabase = createAdminClient();
-  const normalisedEmail = normaliseEmail(email);
-
-  const { data: pendingReviews, error: pendingError } = await supabase
-    .from("calendar_participant_reviews")
-    .select("id")
-    .eq("org_id", orgId)
-    .ilike("email", normalisedEmail)
-    .eq("status", "pending");
-
-  if (pendingError) {
-    throw new Error(`Failed to load pending reviews: ${pendingError.message}`);
-  }
-
-  const reviewIds = (pendingReviews ?? []).map((row) => row.id);
-  if (reviewIds.length === 0) {
-    return { reviewCount: 0, activitiesCreated: 0, profileId: profileId ?? null };
-  }
-
-  if (status !== "ignored" && profileId) {
-    const activitiesCreated = await backfillCalendarReviewsForProfile(supabase, {
-      orgId,
-      profileId,
-      reviewIds,
-    });
-
-    const { error: updateError } = await supabase
-      .from("calendar_participant_reviews")
-      .update({
-        status,
-        profile_id: profileId,
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq("org_id", orgId)
-      .ilike("email", normalisedEmail)
-      .eq("status", "pending");
-
-    if (updateError) {
-      throw new Error(`Failed to update review rows: ${updateError.message}`);
-    }
-
-    return {
-      reviewCount: reviewIds.length,
-      activitiesCreated,
-      profileId: profileId ?? null,
-    };
-  }
-
-  const { error: updateError } = await supabase
-    .from("calendar_participant_reviews")
-    .update({
-      status,
-      profile_id: status === "ignored" ? null : profileId,
-      reviewed_by: user.id,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq("org_id", orgId)
-    .ilike("email", normalisedEmail)
-    .eq("status", "pending");
-
-  if (updateError) {
-    throw new Error(`Failed to update review rows: ${updateError.message}`);
-  }
-
-  return {
-    reviewCount: reviewIds.length,
-    activitiesCreated: 0,
-    profileId: profileId ?? null,
-  };
-}
 
 export async function createProfileFromCalendarReviewAction(formData: FormData) {
   await requireAdmin();
@@ -112,46 +32,24 @@ export async function createProfileFromCalendarReviewAction(formData: FormData) 
   }
 
   try {
+    const user = await requireUser();
     const supabase = createAdminClient();
 
-    const { data: existing, error: existingError } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("org_id", orgId)
-      .ilike("email", email)
-      .maybeSingle();
+    const profileId = await createCalendarParticipantProfile(supabase, {
+      orgId,
+      email,
+      fullName,
+      organisationName,
+      occupation,
+    });
 
-    if (existingError) {
-      throw new Error(`Failed to check existing profile: ${existingError.message}`);
-    }
-
-    let profileId = existing?.id;
-
-    if (!profileId) {
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .insert({
-          org_id: orgId,
-          full_name: fullName,
-          email,
-          occupation: occupation || null,
-          organisation_name: organisationName || null,
-          organisation_name_normalised: normaliseOrganisationName(
-            organisationName || null,
-          ),
-          source: "manual",
-        })
-        .select("id")
-        .single();
-
-      if (profileError) {
-        throw new Error(`Failed to create profile: ${profileError.message}`);
-      }
-
-      profileId = profile.id;
-    }
-
-    const result = await resolvePendingReviewsForEmail(email, "created", profileId);
+    const result = await resolveCalendarReviewsForEmail(supabase, {
+      orgId,
+      email,
+      status: "created",
+      profileId,
+      reviewedByUserId: user.id,
+    });
 
     revalidatePath("/admin");
     revalidatePath("/admin/calendar-sync/review");
@@ -177,6 +75,7 @@ export async function linkCalendarReviewAction(formData: FormData) {
   }
 
   try {
+    const user = await requireUser();
     const orgId = await getOrgId();
     const supabase = createAdminClient();
 
@@ -195,7 +94,13 @@ export async function linkCalendarReviewAction(formData: FormData) {
       return { error: "Profile not found" };
     }
 
-    const result = await resolvePendingReviewsForEmail(email, "linked", profileId);
+    const result = await resolveCalendarReviewsForEmail(supabase, {
+      orgId,
+      email,
+      status: "linked",
+      profileId,
+      reviewedByUserId: user.id,
+    });
 
     revalidatePath("/admin");
     revalidatePath("/admin/calendar-sync/review");
@@ -219,7 +124,16 @@ export async function ignoreCalendarReviewAction(formData: FormData) {
   }
 
   try {
-    const result = await resolvePendingReviewsForEmail(email, "ignored");
+    const user = await requireUser();
+    const orgId = await getOrgId();
+    const supabase = createAdminClient();
+
+    const result = await resolveCalendarReviewsForEmail(supabase, {
+      orgId,
+      email,
+      status: "ignored",
+      reviewedByUserId: user.id,
+    });
 
     revalidatePath("/admin");
     revalidatePath("/admin/calendar-sync/review");
@@ -236,6 +150,7 @@ export async function ignoreAllInternalCalendarReviewsAction() {
   await requireAdmin();
 
   try {
+    const user = await requireUser();
     const orgId = await getOrgId();
     const supabase = createAdminClient();
     const filters = await loadOrgParticipantFilters(supabase, orgId);
@@ -261,7 +176,12 @@ export async function ignoreAllInternalCalendarReviewsAction() {
     let ignoredCount = 0;
 
     for (const email of internalEmails) {
-      const result = await resolvePendingReviewsForEmail(email, "ignored");
+      const result = await resolveCalendarReviewsForEmail(supabase, {
+        orgId,
+        email,
+        status: "ignored",
+        reviewedByUserId: user.id,
+      });
       ignoredCount += result.reviewCount;
     }
 

@@ -182,7 +182,7 @@ export function AddConnectionForm({
               <button
                 type="button"
                 role="option"
-                aria-selected={selectedProfile?.id === profile.id}
+                aria-selected={false}
                 className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-muted/50"
                 onClick={() => {
                   setSelectedProfile(profile);
