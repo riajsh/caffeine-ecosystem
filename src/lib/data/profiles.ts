@@ -2,6 +2,10 @@ import "server-only";
 
 import { notFound } from "next/navigation";
 
+import {
+  isPastOrPresentActivityDate,
+  pastActivityCutoffIso,
+} from "@/lib/activities/past-only";
 import { getOrgId, requireUser } from "@/lib/auth/session";
 import { formatLocation } from "@/lib/format/location";
 import { PROFILE_ACTIVITY_LIMIT } from "@/lib/format/provenance";
@@ -10,6 +14,10 @@ import {
   loadOrgParticipantFilters,
 } from "@/lib/integrations/participant-email";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
+import {
+  applyCompletenessFilter,
+  type ProfileCompleteness,
+} from "@/lib/profiles/completeness";
 import {
   sortProfiles,
   type ProfileSortKey,
@@ -323,15 +331,17 @@ function mapProfileDetailRow(
       sourceLabel: source.source_label,
     })),
     tags: mapTags(profile.profile_tags),
-    activities: (profile.activities ?? []).map((activity) => ({
-      id: activity.id,
-      activityType: activity.activity_type,
-      title: activity.title,
-      summary: activity.summary,
-      activityDate: activity.activity_date,
-      source: activity.source,
-      introductionOutcome: activity.introduction_outcome,
-    })),
+    activities: (profile.activities ?? [])
+      .filter((activity) => isPastOrPresentActivityDate(activity.activity_date))
+      .map((activity) => ({
+        id: activity.id,
+        activityType: activity.activity_type,
+        title: activity.title,
+        summary: activity.summary,
+        activityDate: activity.activity_date,
+        source: activity.source,
+        introductionOutcome: activity.introduction_outcome,
+      })),
     events: (profile.event_attendees ?? [])
       .map((attendee) => attendee.events)
       .filter((event): event is NonNullable<typeof event> => Boolean(event))
@@ -361,11 +371,16 @@ export type ListProfilesResult = {
   hasMore: boolean;
 };
 
+export type { ProfileCompleteness };
+export { parseProfileCompleteness } from "@/lib/profiles/completeness";
+
 export async function listProfiles(options?: {
   tagId?: string;
   ownerUserId?: string;
   status?: Database["public"]["Enums"]["relationship_status"];
   company?: string;
+  city?: string;
+  complete?: ProfileCompleteness;
   sort?: ProfileSortKey;
   order?: SortOrder;
   limit?: number;
@@ -374,8 +389,10 @@ export async function listProfiles(options?: {
   const orgId = await getOrgId();
   const supabase = await createClient();
   const limit = options?.limit ?? PROFILES_PAGE_SIZE;
+  const offset = options?.offset ?? 0;
   const sort = options?.sort ?? "name";
   const order = options?.order ?? "asc";
+  const canSortInDatabase = sort === "name" || sort === "company";
 
   const useRelationshipInner = Boolean(options?.ownerUserId || options?.status);
   const useOwnerInner = Boolean(options?.ownerUserId);
@@ -434,8 +451,7 @@ export async function listProfiles(options?: {
     `,
       { count: "exact" },
     )
-    .eq("org_id", orgId)
-    .range(0, LIST_PROFILES_MAX - 1);
+    .eq("org_id", orgId);
 
   if (options?.tagId) {
     query = query.eq("profile_tags.tag_id", options.tagId);
@@ -453,6 +469,36 @@ export async function listProfiles(options?: {
     query = query.ilike("organisation_name", options.company);
   }
 
+  if (options?.city) {
+    query = query.ilike("location_city", options.city);
+  }
+
+  query = applyCompletenessFilter(query, options?.complete);
+
+  if (canSortInDatabase) {
+    query = query.order(sort === "name" ? "full_name" : "organisation_name", {
+      ascending: order === "asc",
+    });
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw new Error(`Failed to list profiles: ${error.message}`);
+    }
+
+    const profiles = ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
+    const total = count ?? profiles.length;
+
+    return {
+      profiles,
+      total,
+      hasMore: offset + profiles.length < total,
+    };
+  }
+
+  query = query.range(0, LIST_PROFILES_MAX - 1);
+
   const { data, error, count } = await query;
 
   if (error) {
@@ -461,13 +507,13 @@ export async function listProfiles(options?: {
 
   const mapped = ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
   const sorted = sortProfiles(mapped, sort, order);
-  const profiles = sorted.slice(0, limit);
+  const profiles = sorted.slice(offset, offset + limit);
   const total = count ?? sorted.length;
 
   return {
     profiles,
     total,
-    hasMore: sorted.length > limit,
+    hasMore: offset + profiles.length < total,
   };
 }
 
@@ -540,11 +586,84 @@ export async function deleteProfile(profileId: string): Promise<void> {
   }
 }
 
+export async function listProfileCities(): Promise<string[]> {
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("location_city")
+    .eq("org_id", orgId)
+    .not("location_city", "is", null)
+    .order("location_city")
+    .range(0, LIST_PROFILES_MAX - 1);
+
+  if (error) {
+    throw new Error(`Failed to list profile cities: ${error.message}`);
+  }
+
+  const cities = new Set<string>();
+
+  for (const row of data ?? []) {
+    const city = row.location_city?.trim();
+    if (city) {
+      cities.add(city);
+    }
+  }
+
+  return [...cities].sort((left, right) =>
+    left.localeCompare(right, undefined, { sensitivity: "base" }),
+  );
+}
+
+export type IncompleteProfileCounts = {
+  missingCompany: number;
+  missingRole: number;
+  missingBoth: number;
+};
+
+export async function countIncompleteProfiles(): Promise<IncompleteProfileCounts> {
+  await requireUser();
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+
+  const [missingCompany, missingRole, missingBoth] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .or("organisation_name.is.null,organisation_name.eq."),
+    supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .or("occupation.is.null,occupation.eq."),
+    supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .is("organisation_name", null)
+      .is("occupation", null),
+  ]);
+
+  if (missingCompany.error || missingRole.error || missingBoth.error) {
+    throw new Error("Failed to count incomplete profiles");
+  }
+
+  return {
+    missingCompany: missingCompany.count ?? 0,
+    missingRole: missingRole.count ?? 0,
+    missingBoth: missingBoth.count ?? 0,
+  };
+}
+
 export async function listProfileIds(options?: {
   tagId?: string;
   ownerUserId?: string;
   status?: Database["public"]["Enums"]["relationship_status"];
   company?: string;
+  city?: string;
+  complete?: ProfileCompleteness;
 }): Promise<string[]> {
   const hasFilters = Boolean(
     options?.tagId || options?.ownerUserId || options?.status || options?.company,
@@ -680,7 +799,8 @@ export async function getProfileById(id: string): Promise<ProfileDetail> {
     .from("activities")
     .select("id", { count: "exact", head: true })
     .eq("org_id", orgId)
-    .eq("profile_id", id);
+    .eq("profile_id", id)
+    .lte("activity_date", pastActivityCutoffIso());
 
   const [
     { data, error },

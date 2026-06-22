@@ -1,6 +1,5 @@
 "use server";
 
-import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 
 import { requireAdmin, requireUser } from "@/lib/auth/session";
@@ -28,17 +27,15 @@ export async function disconnectCalendarAccountAction(accountId: string) {
 export async function runCalendarSyncAction() {
   await requireAdmin();
 
-  after(async () => {
-    try {
-      await syncAllCalendarAccounts();
-      revalidatePath("/admin");
-      revalidatePath("/admin/calendar-sync/review");
-    } catch (error) {
-      console.error("Background calendar sync failed:", error);
-    }
-  });
-
-  revalidatePath("/admin");
-  revalidatePath("/admin/calendar-sync/review");
-  return { success: true as const, started: true as const };
+  try {
+    const result = await syncAllCalendarAccounts();
+    revalidatePath("/admin");
+    revalidatePath("/admin/calendar-sync/review");
+    return { success: true as const, ...result };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Calendar sync failed",
+    };
+  }
 }

@@ -42,12 +42,12 @@ export const CALENDAR_READONLY_SCOPE =
 /** How far back the initial sync pulls events (months). */
 export const CALENDAR_BACKFILL_MONTHS = 12;
 
-/** How far ahead the sync window extends (months). Cron keeps this horizon rolling. */
-export const CALENDAR_LOOKAHEAD_MONTHS = 3;
+/** How far ahead the sync window extends (weeks). Cron keeps this horizon rolling. */
+export const CALENDAR_LOOKAHEAD_WEEKS = 4;
 
 export function calendarLookaheadCutoff(): Date {
   const date = new Date();
-  date.setMonth(date.getMonth() + CALENDAR_LOOKAHEAD_MONTHS);
+  date.setDate(date.getDate() + CALENDAR_LOOKAHEAD_WEEKS * 7);
   return date;
 }
 

@@ -3,6 +3,7 @@ import "server-only";
 import { GaxiosError } from "gaxios";
 import type { calendar_v3 } from "googleapis";
 
+import { autoResolveEligibleCalendarReviews } from "@/lib/integrations/calendar/auto-resolve-reviews";
 import { getCalendarClient } from "@/lib/integrations/calendar/client";
 import { removeCalendarEventDerivedData } from "@/lib/integrations/calendar/cleanup-event";
 import {
@@ -17,7 +18,7 @@ import {
   type OrgProfileByEmail,
 } from "@/lib/integrations/calendar/match";
 import { loadOrgParticipantFilters } from "@/lib/integrations/participant-email";
-import { loadIgnoredParticipantEmails } from "@/lib/integrations/calendar/review-utils";
+import { loadIgnoredParticipantEmails, loadOrgRelationshipsByProfileId } from "@/lib/integrations/calendar/review-utils";
 import { purgeBeyondLookaheadCalendarData } from "@/lib/integrations/calendar/purge-beyond-lookahead";
 import { purgeInternalCalendarSyncData } from "@/lib/integrations/calendar/purge-internal";
 import type {
@@ -120,17 +121,24 @@ async function upsertCalendarEvent(
   participantFilters: Awaited<ReturnType<typeof loadOrgParticipantFilters>>,
   ignoredParticipantEmails: ReadonlySet<string>,
   profilesByEmail: OrgProfileByEmail,
-): Promise<{ activitiesCreated: number; reviewsQueued: number }> {
+  relationshipsByProfileId: Awaited<
+    ReturnType<typeof loadOrgRelationshipsByProfileId>
+  >,
+): Promise<{
+  activitiesCreated: number;
+  reviewsQueued: number;
+  profilesAutoCreated: number;
+}> {
 
   if (
     !parsed.isDeleted &&
     !hasExternalParticipant(parsed.participants, participantFilters)
   ) {
-    return { activitiesCreated: 0, reviewsQueued: 0 };
+    return { activitiesCreated: 0, reviewsQueued: 0, profilesAutoCreated: 0 };
   }
 
   if (!parsed.isDeleted && isBeyondCalendarLookahead(parsed.startAt)) {
-    return { activitiesCreated: 0, reviewsQueued: 0 };
+    return { activitiesCreated: 0, reviewsQueued: 0, profilesAutoCreated: 0 };
   }
 
   const { data: eventRow, error: eventError } = await supabase
@@ -163,7 +171,7 @@ async function upsertCalendarEvent(
       eventRow.id,
       parsed.googleEventId,
     );
-    return { activitiesCreated: 0, reviewsQueued: 0 };
+    return { activitiesCreated: 0, reviewsQueued: 0, profilesAutoCreated: 0 };
   }
 
   return processCalendarParticipants(supabase, {
@@ -176,6 +184,7 @@ async function upsertCalendarEvent(
     participantFilters,
     ignoredParticipantEmails,
     profilesByEmail,
+    relationshipsByProfileId,
   });
 }
 
@@ -187,6 +196,7 @@ export async function syncCalendarAccount(
     eventsProcessed: 0,
     activitiesCreated: 0,
     reviewsQueued: 0,
+    profilesAutoCreated: 0,
     errors: [],
   };
 
@@ -201,6 +211,10 @@ export async function syncCalendarAccount(
     account.org_id,
   );
   const profilesByEmail = await loadOrgProfilesByEmail(supabase, account.org_id);
+  const relationshipsByProfileId = await loadOrgRelationshipsByProfileId(
+    supabase,
+    account.org_id,
+  );
 
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
@@ -252,10 +266,12 @@ export async function syncCalendarAccount(
             participantFilters,
             ignoredParticipantEmails,
             profilesByEmail,
+            relationshipsByProfileId,
           );
           stats.eventsProcessed += 1;
           stats.activitiesCreated += result.activitiesCreated;
           stats.reviewsQueued += result.reviewsQueued;
+          stats.profilesAutoCreated += result.profilesAutoCreated;
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Unknown event sync error";
@@ -266,6 +282,14 @@ export async function syncCalendarAccount(
       pageToken = response.data.nextPageToken ?? undefined;
       nextSyncToken = response.data.nextSyncToken ?? nextSyncToken;
     } while (pageToken);
+
+    const autoResolveResult = await autoResolveEligibleCalendarReviews(supabase, {
+      orgId: account.org_id,
+      participantFilters,
+      profilesByEmail,
+    });
+    stats.profilesAutoCreated += autoResolveResult.profilesCreated;
+    stats.activitiesCreated += autoResolveResult.activitiesCreated;
   } catch (error) {
     if (error instanceof GaxiosError && error.response?.status === 429) {
       stats.errors.push(
@@ -340,6 +364,7 @@ export async function syncAllCalendarAccounts(): Promise<{
     eventsProcessed: 0,
     activitiesCreated: 0,
     reviewsQueued: 0,
+    profilesAutoCreated: 0,
     errors: [],
   };
 
@@ -348,6 +373,7 @@ export async function syncAllCalendarAccounts(): Promise<{
     aggregate.eventsProcessed += stats.eventsProcessed;
     aggregate.activitiesCreated += stats.activitiesCreated;
     aggregate.reviewsQueued += stats.reviewsQueued;
+    aggregate.profilesAutoCreated += stats.profilesAutoCreated;
     aggregate.errors.push(...stats.errors);
   }
 

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { pastActivityCutoffIso, isPastOrPresentActivityDate } from "@/lib/activities/past-only";
 import { getOrgId, requireAdmin } from "@/lib/auth/session";
 import {
   isInternalParticipant,
@@ -243,6 +244,24 @@ export async function listPendingCalendarReviewGroups(
 
   const groups = new Map<string, CalendarUnmatchedGroup>();
 
+  function updatePastSample(
+    group: CalendarUnmatchedGroup,
+    title: string | null | undefined,
+    startAt: string | null | undefined,
+  ) {
+    if (!startAt || !isPastOrPresentActivityDate(startAt)) {
+      return;
+    }
+
+    if (
+      !group.sampleMeetingDate ||
+      new Date(startAt).getTime() > new Date(group.sampleMeetingDate).getTime()
+    ) {
+      group.sampleMeetingTitle = title ?? null;
+      group.sampleMeetingDate = startAt;
+    }
+  }
+
   for (const row of data ?? []) {
     if (isNonPersonParticipant(row.email)) {
       continue;
@@ -255,17 +274,20 @@ export async function listPendingCalendarReviewGroups(
     if (existing) {
       existing.meetingCount += 1;
       existing.reviewIds.push(row.id);
+      updatePastSample(existing, event?.title, event?.start_at ?? null);
       continue;
     }
 
-    groups.set(email, {
+    const group: CalendarUnmatchedGroup = {
       email: row.email,
       displayName: row.display_name,
       meetingCount: 1,
-      sampleMeetingTitle: event?.title ?? null,
-      sampleMeetingDate: event?.start_at ?? null,
+      sampleMeetingTitle: null,
+      sampleMeetingDate: null,
       reviewIds: [row.id],
-    });
+    };
+    updatePastSample(group, event?.title, event?.start_at ?? null);
+    groups.set(email, group);
   }
 
   const partitioned = partitionReviewGroups([...groups.values()], filters);
@@ -300,6 +322,7 @@ export async function listRecentMatchedCalendarMeetings(
     )
     .eq("org_id", orgId)
     .eq("source", "calendar_sync")
+    .lte("activity_date", pastActivityCutoffIso())
     .order("activity_date", { ascending: false })
     .limit(limit * 2);
 

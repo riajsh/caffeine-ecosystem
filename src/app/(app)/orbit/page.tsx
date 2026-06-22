@@ -11,6 +11,8 @@ import { OwnerDot } from "@/components/profiles/owner-dot";
 import { formatCountLabel, ListMeta } from "@/components/ui/list-meta";
 import { getOrbitNodes } from "@/lib/computed/orbit";
 import { listOrgUsers } from "@/lib/data/users";
+import { requireUser } from "@/lib/auth/session";
+import { resolveViewAsOwnerId } from "@/lib/view-as/resolve";
 
 type OrbitPageProps = {
   searchParams: Promise<{ owner?: string; view?: string }>;
@@ -29,8 +31,12 @@ function buildOrbitHref(owner?: string, view?: string) {
 }
 
 export default async function OrbitPage({ searchParams }: OrbitPageProps) {
-  const { owner: ownerUserId, view } = await searchParams;
-  const teamUsers = await listOrgUsers();
+  const { owner: ownerParam, view } = await searchParams;
+  const [currentUser, teamUsers] = await Promise.all([
+    requireUser(),
+    listOrgUsers(),
+  ]);
+  const ownerUserId = await resolveViewAsOwnerId(ownerParam, currentUser, teamUsers);
   const listView = view === "list";
 
   if (ownerUserId && !/^[0-9a-f-]{36}$/i.test(ownerUserId)) {

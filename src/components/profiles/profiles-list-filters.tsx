@@ -5,9 +5,11 @@ import {
   FilterChipLink,
   FilterChipRow,
 } from "@/components/filters/filter-chips";
+import { ProfilesCityFilter } from "@/components/profiles/profiles-city-filter";
 import { ProfilesCompanyFilter } from "@/components/profiles/profiles-company-filter";
 import type { OrgUser } from "@/lib/data/users";
 import { formatEnumLabel } from "@/lib/format/enum";
+import type { ProfileCompleteness } from "@/lib/profiles/completeness";
 import type { Database } from "@/types/database";
 import type { ProfileSortKey, SortOrder } from "@/lib/profiles/list-sort";
 
@@ -23,13 +25,25 @@ const STATUS_OPTIONS: RelationshipStatus[] = [
   "inactive",
 ];
 
+const COMPLETENESS_OPTIONS: Array<{
+  value: ProfileCompleteness;
+  label: string;
+}> = [
+  { value: "missing-both", label: "Missing company & role" },
+  { value: "missing-company", label: "Missing company" },
+  { value: "missing-role", label: "Missing role" },
+];
+
 type ProfilesListFiltersProps = {
   teamUsers: OrgUser[];
   companies: string[];
+  cities: string[];
   activeTagId?: string;
   activeOwnerId?: string;
   activeStatus?: string;
   activeCompany?: string;
+  activeCity?: string;
+  activeComplete?: ProfileCompleteness;
   activeSort?: ProfileSortKey;
   activeOrder?: SortOrder;
 };
@@ -39,6 +53,8 @@ function buildProfilesHref(options: {
   owner?: string;
   status?: string;
   company?: string;
+  city?: string;
+  complete?: ProfileCompleteness;
   sort?: ProfileSortKey;
   order?: SortOrder;
 }) {
@@ -55,6 +71,12 @@ function buildProfilesHref(options: {
   if (options.company) {
     params.set("company", options.company);
   }
+  if (options.city) {
+    params.set("city", options.city);
+  }
+  if (options.complete) {
+    params.set("complete", options.complete);
+  }
   if (options.sort && options.sort !== "name") {
     params.set("sort", options.sort);
   }
@@ -68,20 +90,30 @@ function buildProfilesHref(options: {
 export function ProfilesListFilters({
   teamUsers,
   companies,
+  cities,
   activeTagId,
   activeOwnerId,
   activeStatus,
   activeCompany,
+  activeCity,
+  activeComplete,
   activeSort = "name",
   activeOrder = "asc",
 }: ProfilesListFiltersProps) {
   const preserved = {
     tag: activeTagId,
     company: activeCompany,
+    city: activeCity,
+    complete: activeComplete,
     sort: activeSort,
     order: activeOrder,
   };
-  const hasFilters = activeOwnerId || activeStatus || activeCompany;
+  const hasFilters =
+    activeOwnerId ||
+    activeStatus ||
+    activeCompany ||
+    activeCity ||
+    activeComplete;
 
   return (
     <div className="space-y-3">
@@ -95,6 +127,44 @@ export function ProfilesListFilters({
       >
         <ProfilesCompanyFilter companies={companies} activeCompany={activeCompany} />
       </Suspense>
+
+      <Suspense
+        fallback={
+          <div className="flex items-center gap-2">
+            <span className="text-caption text-muted-foreground">City:</span>
+            <div className="h-8 w-48 animate-pulse rounded-md bg-muted/40" />
+          </div>
+        }
+      >
+        <ProfilesCityFilter cities={cities} activeCity={activeCity} />
+      </Suspense>
+
+      <FilterChipRow label="Data gaps:">
+        <FilterChipLink
+          href={buildProfilesHref({
+            ...preserved,
+            owner: activeOwnerId,
+            status: activeStatus,
+          })}
+          isActive={!activeComplete}
+        >
+          All
+        </FilterChipLink>
+        {COMPLETENESS_OPTIONS.map((option) => (
+          <FilterChipLink
+            key={option.value}
+            href={buildProfilesHref({
+              ...preserved,
+              owner: activeOwnerId,
+              status: activeStatus,
+              complete: option.value,
+            })}
+            isActive={activeComplete === option.value}
+          >
+            {option.label}
+          </FilterChipLink>
+        ))}
+      </FilterChipRow>
 
       <FilterChipRow label="Owner:">
         <FilterChipLink

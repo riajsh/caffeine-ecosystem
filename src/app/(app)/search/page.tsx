@@ -8,6 +8,8 @@ import { SearchTagFilter } from "@/components/search/search-tag-filter";
 import { search } from "@/lib/data/search";
 import { listOrgTags } from "@/lib/data/tags";
 import { listOrgUsers } from "@/lib/data/users";
+import { requireUser } from "@/lib/auth/session";
+import { resolveViewAsOwnerId } from "@/lib/view-as/resolve";
 import type { Database } from "@/types/database";
 
 type RelationshipStatus = Database["public"]["Enums"]["relationship_status"];
@@ -35,7 +37,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const {
     q,
     tag: tagId,
-    owner: ownerUserId,
+    owner: ownerParam,
     status,
   } = await searchParams;
   const query = q?.trim() ?? "";
@@ -44,7 +46,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     notFound();
   }
 
-  if (ownerUserId && !/^[0-9a-f-]{36}$/i.test(ownerUserId)) {
+  if (ownerParam && !/^[0-9a-f-]{36}$/i.test(ownerParam)) {
     notFound();
   }
 
@@ -52,17 +54,21 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     notFound();
   }
 
-  const [results, orgTags, teamUsers] = await Promise.all([
-    query
-      ? search(query, {
-          tagId,
-          ownerUserId,
-          status: status as RelationshipStatus | undefined,
-        })
-      : Promise.resolve([]),
-    listOrgTags(),
+  const [currentUser, teamUsers, orgTags] = await Promise.all([
+    requireUser(),
     listOrgUsers(),
+    listOrgTags(),
   ]);
+
+  const ownerUserId = await resolveViewAsOwnerId(ownerParam, currentUser, teamUsers);
+
+  const results = query
+    ? await search(query, {
+        tagId,
+        ownerUserId,
+        status: status as RelationshipStatus | undefined,
+      })
+    : [];
 
   const hasProfileFilters = Boolean(tagId || ownerUserId || status);
 

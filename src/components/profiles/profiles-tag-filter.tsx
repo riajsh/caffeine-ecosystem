@@ -3,6 +3,7 @@ import {
   FilterChipRow,
 } from "@/components/filters/filter-chips";
 import type { OrgTag } from "@/lib/data/tags";
+import type { ProfileCompleteness } from "@/lib/profiles/completeness";
 import type { ProfileSortKey, SortOrder } from "@/lib/profiles/list-sort";
 
 type ProfilesTagFilterProps = {
@@ -11,6 +12,8 @@ type ProfilesTagFilterProps = {
   activeOwnerId?: string;
   activeStatus?: string;
   activeCompany?: string;
+  activeCity?: string;
+  activeComplete?: ProfileCompleteness;
   activeSort?: ProfileSortKey;
   activeOrder?: SortOrder;
 };
@@ -21,6 +24,8 @@ function buildTagHref(
     owner?: string;
     status?: string;
     company?: string;
+    city?: string;
+    complete?: ProfileCompleteness;
     sort?: ProfileSortKey;
     order?: SortOrder;
   },
@@ -38,6 +43,12 @@ function buildTagHref(
   if (options?.company) {
     params.set("company", options.company);
   }
+  if (options?.city) {
+    params.set("city", options.city);
+  }
+  if (options?.complete) {
+    params.set("complete", options.complete);
+  }
   if (options?.sort && options.sort !== "name") {
     params.set("sort", options.sort);
   }
@@ -54,6 +65,8 @@ export function ProfilesTagFilter({
   activeOwnerId,
   activeStatus,
   activeCompany,
+  activeCity,
+  activeComplete,
   activeSort = "name",
   activeOrder = "asc",
 }: ProfilesTagFilterProps) {
@@ -61,6 +74,8 @@ export function ProfilesTagFilter({
     owner: activeOwnerId,
     status: activeStatus,
     company: activeCompany,
+    city: activeCity,
+    complete: activeComplete,
     sort: activeSort,
     order: activeOrder,
   };

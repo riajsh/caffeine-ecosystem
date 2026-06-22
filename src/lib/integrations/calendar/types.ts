@@ -19,6 +19,7 @@ export type CalendarSyncStats = {
   eventsProcessed: number;
   activitiesCreated: number;
   reviewsQueued: number;
+  profilesAutoCreated: number;
   errors: string[];
   rateLimited?: boolean;
 };

@@ -7,6 +7,8 @@ import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
 
+export type OrgRelationshipsByProfileId = Map<string, string>;
+
 export async function loadIgnoredParticipantEmails(
   supabase: AdminClient,
   orgId: string,
@@ -30,34 +32,86 @@ export async function loadIgnoredParticipantEmails(
   );
 }
 
-export async function ensureRelationshipForProfile(
+export async function loadOrgRelationshipsByProfileId(
   supabase: AdminClient,
   orgId: string,
-  profileId: string,
-): Promise<string> {
-  const { data: existing, error: existingError } = await supabase
+): Promise<OrgRelationshipsByProfileId> {
+  const { data, error } = await supabase
     .from("relationships")
-    .select("id")
-    .eq("org_id", orgId)
-    .eq("profile_id", profileId)
-    .maybeSingle();
+    .select("id, profile_id")
+    .eq("org_id", orgId);
 
-  if (existingError) {
-    throw new Error(`Failed to load relationship: ${existingError.message}`);
+  if (error) {
+    throw new Error(`Failed to load org relationships: ${error.message}`);
   }
 
-  if (existing) {
-    return existing.id;
+  const relationshipsByProfileId: OrgRelationshipsByProfileId = new Map();
+
+  for (const relationship of data ?? []) {
+    relationshipsByProfileId.set(relationship.profile_id, relationship.id);
+  }
+
+  return relationshipsByProfileId;
+}
+
+export async function ensureRelationshipsForProfiles(
+  supabase: AdminClient,
+  orgId: string,
+  profileIds: string[],
+  relationshipsByProfileId: OrgRelationshipsByProfileId,
+): Promise<void> {
+  const missingProfileIds = profileIds.filter(
+    (profileId) => !relationshipsByProfileId.has(profileId),
+  );
+
+  if (missingProfileIds.length === 0) {
+    return;
   }
 
   const { data, error } = await supabase
     .from("relationships")
-    .insert({
-      org_id: orgId,
-      profile_id: profileId,
-      status: "prospect",
-      relationship_type: "other",
-    })
+    .upsert(
+      missingProfileIds.map((profileId) => ({
+        org_id: orgId,
+        profile_id: profileId,
+        status: "prospect" as const,
+        relationship_type: "other" as const,
+      })),
+      { onConflict: "org_id,profile_id" },
+    )
+    .select("id, profile_id");
+
+  if (error) {
+    throw new Error(`Failed to create relationships: ${error.message}`);
+  }
+
+  for (const relationship of data ?? []) {
+    relationshipsByProfileId.set(relationship.profile_id, relationship.id);
+  }
+}
+
+export async function ensureRelationshipForProfile(
+  supabase: AdminClient,
+  orgId: string,
+  profileId: string,
+  relationshipsByProfileId?: OrgRelationshipsByProfileId,
+): Promise<string> {
+  const cached = relationshipsByProfileId?.get(profileId);
+  if (cached) {
+    return cached;
+  }
+
+  const { data, error } = await supabase
+    .from("relationships")
+    .upsert(
+      {
+        org_id: orgId,
+        profile_id: profileId,
+        status: "prospect",
+        relationship_type: "other",
+      },
+      { onConflict: "org_id,profile_id" },
+    )
     .select("id")
     .single();
 
@@ -65,5 +119,6 @@ export async function ensureRelationshipForProfile(
     throw new Error(`Failed to create relationship: ${error.message}`);
   }
 
+  relationshipsByProfileId?.set(profileId, data.id);
   return data.id;
 }

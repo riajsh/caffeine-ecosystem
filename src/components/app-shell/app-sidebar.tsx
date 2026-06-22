@@ -5,14 +5,18 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
 import { signOut } from "@/app/(auth)/login/actions";
+import { ViewAsSelector } from "@/components/app-shell/view-as-selector";
 import { MAIN_NAV, type NavItem } from "@/config/navigation";
 import type { AppUser } from "@/lib/auth/session";
+import type { OrgUser } from "@/lib/data/users";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 type AppSidebarProps = {
   user: AppUser;
   profileId: string | null;
+  teamUsers: OrgUser[];
+  viewAsOwnerId?: string;
 };
 
 function isNavItemActive(pathname: string, item: NavItem) {
@@ -104,7 +108,12 @@ function SidebarMeFallback({ user }: { user: AppUser }) {
   );
 }
 
-export function AppSidebar({ user, profileId }: AppSidebarProps) {
+export function AppSidebar({
+  user,
+  profileId,
+  teamUsers,
+  viewAsOwnerId,
+}: AppSidebarProps) {
   const pathname = usePathname();
 
   const visibleNav = MAIN_NAV.filter(
@@ -156,6 +165,12 @@ export function AppSidebar({ user, profileId }: AppSidebarProps) {
       </nav>
 
       <div className="mt-auto shrink-0 border-t border-sidebar-border p-3">
+        {user.role === "admin" && teamUsers.length > 0 ? (
+          <ViewAsSelector
+            teamUsers={teamUsers}
+            activeOwnerId={viewAsOwnerId}
+          />
+        ) : null}
         <Suspense fallback={<SidebarMeFallback user={user} />}>
           <SidebarMeSection user={user} profileId={profileId} />
         </Suspense>

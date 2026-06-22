@@ -32,6 +32,12 @@ const TEAM = [
     role: "member",
   },
   {
+    id: "22222222-2222-2222-2222-222222222230",
+    email: "rs@previously.co",
+    fullName: "Ria",
+    role: "admin",
+  },
+  {
     id: "22222222-2222-2222-2222-222222222224",
     email: "ed@previously.co",
     fullName: "Ed",

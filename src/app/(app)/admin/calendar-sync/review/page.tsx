@@ -30,9 +30,10 @@ export default async function CalendarSyncReviewPage({
       contentClassName="px-8 py-6"
     >
       {params.connected ? (
-        <p className="mb-4 text-body text-foreground">
-          Connected {params.connected}. Initial sync is running — refresh in a
-          minute if counts are still updating.
+        <p className="mb-4 rounded-md border border-border bg-muted/40 px-4 py-3 text-body text-foreground">
+          Connected {params.connected}. Initial sync runs on the next scheduled
+          sync (usually within a few minutes) — refresh this page to see
+          meetings and people to review.
         </p>
       ) : null}
       <CalendarSyncReviewWizard

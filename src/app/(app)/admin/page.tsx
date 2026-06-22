@@ -12,6 +12,7 @@ import { RunCalendarSyncButton } from "@/components/admin/run-calendar-sync-butt
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/auth/session";
 import { listCalendarAccountsForOrg } from "@/lib/data/calendar-accounts";
+import { countIncompleteProfiles } from "@/lib/data/profiles";
 import { getDeployChecklist } from "@/lib/deploy/checklist";
 
 type AdminPageProps = {
@@ -25,7 +26,10 @@ type AdminPageProps = {
 export default async function AdminOverviewPage({ searchParams }: AdminPageProps) {
   const user = await requireAdmin();
   const params = await searchParams;
-  const deployChecks = await getDeployChecklist();
+  const [deployChecks, incompleteCounts] = await Promise.all([
+    getDeployChecklist(),
+    countIncompleteProfiles(),
+  ]);
   let calendarAccounts: Awaited<ReturnType<typeof listCalendarAccountsForOrg>> =
     [];
 
@@ -41,6 +45,41 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
       description="Import data, manage review queues, and configure the workspace."
     >
       <DeployChecklist items={deployChecks} />
+
+      <section className="space-y-3">
+        <h2 className="text-heading font-medium text-foreground">
+          Profile data gaps
+        </h2>
+        <p className="max-w-2xl text-body text-muted-foreground">
+          Profiles missing company or role — triage from the Profiles list.
+        </p>
+        <ul className="flex flex-wrap gap-3 text-body">
+          <li>
+            <Link
+              href="/profiles?complete=missing-both"
+              className="text-interactive-primary hover:underline"
+            >
+              {incompleteCounts.missingBoth} missing both
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/profiles?complete=missing-company"
+              className="text-interactive-primary hover:underline"
+            >
+              {incompleteCounts.missingCompany} missing company
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/profiles?complete=missing-role"
+              className="text-interactive-primary hover:underline"
+            >
+              {incompleteCounts.missingRole} missing role
+            </Link>
+          </li>
+        </ul>
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-heading font-medium text-foreground">Datasets</h2>

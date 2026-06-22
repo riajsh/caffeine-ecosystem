@@ -96,6 +96,8 @@ export async function createProfileFromCalendarReviewAction(formData: FormData) 
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const displayName = String(formData.get("displayName") ?? "").trim();
+  const organisationName = String(formData.get("organisationName") ?? "").trim();
+  const occupation = String(formData.get("occupation") ?? "").trim();
   const fullName =
     displayName || email.split("@")[0]?.replace(/[._]/g, " ") || email;
 
@@ -132,8 +134,12 @@ export async function createProfileFromCalendarReviewAction(formData: FormData) 
           org_id: orgId,
           full_name: fullName,
           email,
+          occupation: occupation || null,
+          organisation_name: organisationName || null,
+          organisation_name_normalised: normaliseOrganisationName(
+            organisationName || null,
+          ),
           source: "manual",
-          organisation_name_normalised: normaliseOrganisationName(null),
         })
         .select("id")
         .single();

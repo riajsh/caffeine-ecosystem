@@ -1,5 +1,6 @@
 import "server-only";
 
+import { pastActivityCutoffIso } from "@/lib/activities/past-only";
 import { getOrgId, requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { CreateManualActivityInput } from "@/lib/validators/activities";
@@ -194,6 +195,7 @@ export async function listRecentOrgActivities(
     `,
     )
     .eq("org_id", orgId)
+    .lte("activity_date", pastActivityCutoffIso())
     .order("activity_date", { ascending: false })
     .limit(limit);
 

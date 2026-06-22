@@ -12,12 +12,20 @@ import { ProfilesTagFilter } from "@/components/profiles/profiles-tag-filter";
 import { formatCountLabel, ListMeta } from "@/components/ui/list-meta";
 import { Button } from "@/components/ui/button";
 import { getProfileNetworkIntel } from "@/lib/computed/profile-intelligence";
-import { getProfileById, listProfileCompanies, listProfiles, PROFILES_PAGE_SIZE } from "@/lib/data/profiles";
+import {
+  getProfileById,
+  listProfileCities,
+  listProfileCompanies,
+  listProfiles,
+  PROFILES_PAGE_SIZE,
+} from "@/lib/data/profiles";
 import { listOrgTags } from "@/lib/data/tags";
 import { listOrgUsers } from "@/lib/data/users";
-import { requireUser } from "@/lib/auth/session";
+import { parseProfileCompleteness } from "@/lib/profiles/completeness";
 import { parseProfileSort, parseSortOrder } from "@/lib/profiles/list-sort";
 import { parseProfileTabOrDefault } from "@/lib/profiles/tab";
+import { requireUser } from "@/lib/auth/session";
+import { resolveViewAsOwnerId } from "@/lib/view-as/resolve";
 import type { Database } from "@/types/database";
 
 type RelationshipStatus = Database["public"]["Enums"]["relationship_status"];
@@ -40,6 +48,8 @@ type ProfilesPageProps = {
     owner?: string;
     status?: string;
     company?: string;
+    city?: string;
+    complete?: string;
     sort?: string;
     order?: string;
     page?: string;
@@ -51,6 +61,8 @@ function buildListHref(options: {
   owner?: string;
   status?: string;
   company?: string;
+  city?: string;
+  complete?: string;
   sort?: string;
   order?: string;
   page?: number;
@@ -60,6 +72,8 @@ function buildListHref(options: {
   if (options.owner) params.set("owner", options.owner);
   if (options.status) params.set("status", options.status);
   if (options.company) params.set("company", options.company);
+  if (options.city) params.set("city", options.city);
+  if (options.complete) params.set("complete", options.complete);
   if (options.sort && options.sort !== "name") params.set("sort", options.sort);
   if (options.order && options.order !== "asc") params.set("order", options.order);
   if (options.page && options.page > 1) params.set("page", String(options.page));
@@ -72,6 +86,8 @@ function buildCloseHref(options: {
   owner?: string;
   status?: string;
   company?: string;
+  city?: string;
+  complete?: string;
   sort?: string;
   order?: string;
 }) {
@@ -80,6 +96,8 @@ function buildCloseHref(options: {
   if (options.owner) params.set("owner", options.owner);
   if (options.status) params.set("status", options.status);
   if (options.company) params.set("company", options.company);
+  if (options.city) params.set("city", options.city);
+  if (options.complete) params.set("complete", options.complete);
   if (options.sort && options.sort !== "name") params.set("sort", options.sort);
   if (options.order && options.order !== "asc") params.set("order", options.order);
   const query = params.toString();
@@ -91,9 +109,11 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     profile: drawerProfileId,
     tag: tagId,
     tab,
-    owner: ownerUserId,
+    owner: ownerParam,
     status,
     company,
+    city,
+    complete: completeParam,
     sort: sortParam,
     order: orderParam,
     page: pageParam,
@@ -103,6 +123,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
   const listLimit = page * PROFILES_PAGE_SIZE;
   const sort = parseProfileSort(sortParam);
   const order = parseSortOrder(orderParam);
+  const complete = parseProfileCompleteness(completeParam);
 
   const defaultTab = parseProfileTabOrDefault(tab);
 
@@ -110,7 +131,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     notFound();
   }
 
-  if (ownerUserId && !/^[0-9a-f-]{36}$/i.test(ownerUserId)) {
+  if (ownerParam && !/^[0-9a-f-]{36}$/i.test(ownerParam)) {
     notFound();
   }
 
@@ -118,30 +139,46 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     notFound();
   }
 
-  const [{ profiles, total, hasMore }, orgTags, teamUsers, currentUser, companies] =
+  if (completeParam && !complete) {
+    notFound();
+  }
+
+  const [currentUser, teamUsers] = await Promise.all([
+    requireUser(),
+    listOrgUsers(),
+  ]);
+
+  const ownerUserId = await resolveViewAsOwnerId(ownerParam, currentUser, teamUsers);
+
+  const [{ profiles, total, hasMore }, orgTags, companies, cities] =
     await Promise.all([
       listProfiles({
         tagId,
         ownerUserId,
         status: status as RelationshipStatus | undefined,
         company: company?.trim() || undefined,
+        city: city?.trim() || undefined,
+        complete,
         sort,
         order,
         limit: listLimit,
         offset: 0,
       }),
       listOrgTags(),
-      listOrgUsers(),
-      requireUser(),
       listProfileCompanies(),
+      listProfileCities(),
     ]);
 
-  const hasActiveFilters = Boolean(tagId || ownerUserId || status || company);
+  const hasActiveFilters = Boolean(
+    tagId || ownerUserId || status || company || city || complete,
+  );
   const closeHref = buildCloseHref({
     tag: tagId,
     owner: ownerUserId,
     status,
     company,
+    city,
+    complete: completeParam,
     sort: sortParam,
     order: orderParam,
   });
@@ -196,16 +233,21 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
             activeOwnerId={ownerUserId}
             activeStatus={status}
             activeCompany={company}
+            activeCity={city}
+            activeComplete={complete}
             activeSort={sort}
             activeOrder={order}
           />
           <ProfilesListFilters
             teamUsers={teamUsers}
             companies={companies}
+            cities={cities}
             activeTagId={tagId}
             activeOwnerId={ownerUserId}
             activeStatus={status}
             activeCompany={company}
+            activeCity={city}
+            activeComplete={complete}
             activeSort={sort}
             activeOrder={order}
           />
@@ -235,6 +277,8 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
                   owner: ownerUserId,
                   status,
                   company,
+                  city,
+                  complete: completeParam,
                   sort: sortParam,
                   order: orderParam,
                   page: page + 1,

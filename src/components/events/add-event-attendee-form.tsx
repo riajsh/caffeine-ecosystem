@@ -143,6 +143,7 @@ export function AddEventAttendeeForm({
               <button
                 type="button"
                 role="option"
+                aria-selected={selectedProfile?.id === profile.id}
                 className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-muted/50"
                 onClick={() => {
                   setSelectedProfile(profile);

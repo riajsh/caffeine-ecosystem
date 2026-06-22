@@ -561,24 +561,29 @@ export async function applyColumnMappingToImport(importId: string): Promise<void
 
   const rows = await loadImportRows(importId, orgId);
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
+  const rowUpdates = rows.map((row) => ({
+    id: row.id,
+    org_id: orgId,
+    import_id: importId,
+    row_number: row.row_number,
+    raw: row.raw,
+    normalized: normalizeRowFromImport(row.raw, headers, mapping, row.normalized),
+    dedup_status: "pending" as const,
+    matched_profile_id: null,
+    error: null,
+  }));
 
-  await runConcurrent(rows, 10, async (row) => {
-    const normalized = normalizeRowFromImport(row.raw, headers, mapping, row.normalized);
-    const { error } = await supabase
-      .from("import_rows")
-      .update({
-        normalized,
-        dedup_status: "pending",
-        matched_profile_id: null,
-        error: null,
-      })
-      .eq("id", row.id)
-      .eq("org_id", orgId);
+  const batchSize = 200;
+  for (let index = 0; index < rowUpdates.length; index += batchSize) {
+    const batch = rowUpdates.slice(index, index + batchSize);
+    const { error } = await supabase.from("import_rows").upsert(batch, {
+      onConflict: "id",
+    });
 
     if (error) {
-      throw new Error(`Failed to apply mapping to row ${row.row_number}: ${error.message}`);
+      throw new Error(`Failed to apply column mapping: ${error.message}`);
     }
-  });
+  }
 
   const { error: importError } = await supabase
     .from("imports")
@@ -640,6 +645,17 @@ export async function runImportDedup(importId: string): Promise<DedupSummary> {
   const summary = emptyDedupSummary();
   const mapping = metadata.column_mapping ?? {};
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
+  const rowUpdates: Array<{
+    id: string;
+    org_id: string;
+    import_id: string;
+    row_number: number;
+    raw: Record<string, string>;
+    normalized: NormalizedImportRow;
+    dedup_status: DedupStatus;
+    matched_profile_id: string | null;
+    error: string | null;
+  }> = [];
 
   for (const row of rows) {
     let normalized = normalizeRowFromImport(row.raw, headers, mapping, row.normalized);
@@ -706,19 +722,28 @@ export async function runImportDedup(importId: string): Promise<DedupSummary> {
       summary.error += 1;
     }
 
-    const { error: updateError } = await supabase
-      .from("import_rows")
-      .update({
-        normalized,
-        dedup_status: dedupStatus,
-        matched_profile_id: matchedProfileId,
-        error,
-      })
-      .eq("id", row.id)
-      .eq("org_id", orgId);
+    rowUpdates.push({
+      id: row.id,
+      org_id: orgId,
+      import_id: importId,
+      row_number: row.row_number,
+      raw: row.raw,
+      normalized,
+      dedup_status: dedupStatus,
+      matched_profile_id: matchedProfileId,
+      error,
+    });
+  }
+
+  const batchSize = 200;
+  for (let index = 0; index < rowUpdates.length; index += batchSize) {
+    const batch = rowUpdates.slice(index, index + batchSize);
+    const { error: updateError } = await supabase.from("import_rows").upsert(batch, {
+      onConflict: "id",
+    });
 
     if (updateError) {
-      throw new Error(`Failed to update dedup for row ${row.row_number}: ${updateError.message}`);
+      throw new Error(`Failed to update dedup rows: ${updateError.message}`);
     }
   }
 
@@ -758,24 +783,27 @@ async function loadOrgUserRecords(orgId: string): Promise<OrgUserRecord[]> {
   }));
 }
 
-async function runConcurrent<T>(
+async function runConcurrentMap<T, R>(
   items: T[],
   concurrency: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
   let nextIndex = 0;
 
   async function runWorker() {
     while (nextIndex < items.length) {
       const index = nextIndex;
       nextIndex += 1;
-      await worker(items[index]);
+      results[index] = await worker(items[index]);
     }
   }
 
   await Promise.all(
     Array.from({ length: Math.min(concurrency, items.length) }, runWorker),
   );
+
+  return results;
 }
 
 export async function deleteImport(importId: string): Promise<void> {
@@ -843,9 +871,7 @@ export async function backfillImportProfiles(
   );
   result.skipped = rows.length - eligibleRows.length;
 
-  const partials: ImportBackfillSummary[] = [];
-
-  await runConcurrent(eligibleRows, 8, async (row) => {
+  const partials = await runConcurrentMap(eligibleRows, 8, async (row) => {
     const normalized = normalizeRowFromImport(row.raw, headers, mapping, row.normalized);
 
     const profileId = await resolveProfileIdForImportRow(
@@ -856,15 +882,14 @@ export async function backfillImportProfiles(
     );
 
     if (!profileId) {
-      partials.push({
+      return {
         profilesUpdated: 0,
         relationshipsUpdated: 0,
         ownersAssigned: 0,
         ownersUnresolved: 0,
         tagsLinked: 0,
         skipped: 1,
-      });
-      return;
+      };
     }
 
     const partial: ImportBackfillSummary = {
@@ -936,7 +961,7 @@ export async function backfillImportProfiles(
       }
     }
 
-    partials.push(partial);
+    return partial;
   });
 
   for (const partial of partials) {

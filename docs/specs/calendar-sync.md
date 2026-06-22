@@ -107,9 +107,9 @@ Manual purge without full sync: `npm run purge:calendar` (`scripts/purge-calenda
 | Constant | Value | Location |
 |---|---|---|
 | `CALENDAR_BACKFILL_MONTHS` | 12 | `src/lib/integrations/calendar/env.ts` |
-| `CALENDAR_LOOKAHEAD_MONTHS` | 3 | same |
+| `CALENDAR_LOOKAHEAD_WEEKS` | 4 | same |
 
-- **Initial connect:** `timeMin` = now − 12 months, `timeMax` = now + 3 months. Paginate with `pageToken`.
+- **Initial connect:** `timeMin` = now − 12 months, `timeMax` = now + 4 weeks. Paginate with `pageToken`.
 - **Incremental:** use stored `sync_cursor` (`nextSyncToken`). No time bounds on incremental pages.
 - **Skip on ingest:** events with `start_at` beyond lookahead are not processed for activities/reviews.
 - **Purge each run:** delete `calendar_sync` activities and meeting provenance beyond lookahead; purge internal-profile calendar data. See `purge-beyond-lookahead.ts`, `purge-internal.ts`.

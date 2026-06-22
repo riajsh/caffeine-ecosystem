@@ -2,9 +2,14 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { createCalendarParticipantProfile } from "@/lib/integrations/calendar/create-participant-profile";
 import type { CalendarParticipant } from "@/lib/integrations/calendar/types";
 import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
-import { ensureRelationshipForProfile } from "@/lib/integrations/calendar/review-utils";
+import { canAutoCreateProfileFromCalendarParticipant, parseCalendarDisplayName } from "@/lib/integrations/calendar/parse-display-name";
+import {
+  ensureRelationshipsForProfiles,
+  type OrgRelationshipsByProfileId,
+} from "@/lib/integrations/calendar/review-utils";
 import {
   hasExternalParticipant,
   isInternalParticipant,
@@ -60,11 +65,27 @@ export async function processCalendarParticipants(
     participantFilters: OrgParticipantFilters;
     ignoredParticipantEmails: ReadonlySet<string>;
     profilesByEmail: OrgProfileByEmail;
+    relationshipsByProfileId: OrgRelationshipsByProfileId;
   },
-): Promise<{ activitiesCreated: number; reviewsQueued: number }> {
-  let activitiesCreated = 0;
-  let reviewsQueued = 0;
-  const relationshipIds = new Map<string, string>();
+): Promise<{
+  activitiesCreated: number;
+  reviewsQueued: number;
+  profilesAutoCreated: number;
+}> {
+  const meetingIsPast =
+    !params.startAt || new Date(params.startAt).getTime() <= Date.now();
+  const activityDate = params.startAt ?? new Date().toISOString();
+  const activityTitle = params.title ?? "Calendar meeting";
+
+  const matchedProfileIds = new Set<string>();
+  let profilesAutoCreated = 0;
+  const reviewRows: Array<{
+    org_id: string;
+    email: string;
+    display_name: string | null;
+    calendar_event_id: string;
+    status: "pending";
+  }> = [];
 
   for (const participant of params.participants) {
     const email = normaliseEmail(participant.email);
@@ -90,93 +111,134 @@ export async function processCalendarParticipants(
     }
 
     if (profile) {
-      let relationshipId = relationshipIds.get(profile.id);
-      if (!relationshipId) {
-        relationshipId = await ensureRelationshipForProfile(
-          supabase,
-          params.orgId,
-          profile.id,
-        );
-        relationshipIds.set(profile.id, relationshipId);
+      if (!meetingIsPast) {
+        continue;
       }
 
-      const activityDate = params.startAt ?? new Date().toISOString();
-      const { data: insertedActivities, error: activityError } = await supabase
-        .from("activities")
-        .upsert(
-          {
-            org_id: params.orgId,
-            profile_id: profile.id,
-            activity_type: "meeting",
-            title: params.title ?? "Calendar meeting",
-            summary: null,
-            activity_date: activityDate,
-            source: "calendar_sync",
-            source_ref: params.googleEventId,
-          },
-          {
-            onConflict: "org_id,profile_id,source,source_ref",
-            ignoreDuplicates: true,
-          },
-        )
-        .select("id");
-
-      if (activityError) {
-        throw new Error(`Failed to create activity: ${activityError.message}`);
-      }
-
-      if ((insertedActivities?.length ?? 0) > 0) {
-        activitiesCreated += 1;
-      }
-
-      const { error: sourceError } = await supabase
-        .from("relationship_sources")
-        .upsert(
-          {
-            org_id: params.orgId,
-            relationship_id: relationshipId,
-            source_type: "meeting",
-            source_id: params.eventId,
-            source_label: params.title ?? "Calendar meeting",
-          },
-          {
-            onConflict: "relationship_id,source_type,source_id",
-            ignoreDuplicates: true,
-          },
-        );
-
-      if (sourceError) {
-        throw new Error(
-          `Failed to create relationship source: ${sourceError.message}`,
-        );
-      }
-
+      matchedProfileIds.add(profile.id);
       continue;
     }
 
-    const { data: insertedReviews, error: reviewError } = await supabase
-      .from("calendar_participant_reviews")
-      .upsert(
-        {
-          org_id: params.orgId,
+    if (canAutoCreateProfileFromCalendarParticipant(email, participant.name)) {
+      const parsedName = parseCalendarDisplayName(participant.name);
+      if (parsedName) {
+        const profileId = await createCalendarParticipantProfile(supabase, {
+          orgId: params.orgId,
           email,
-          display_name: participant.name,
-          calendar_event_id: params.eventId,
-          status: "pending",
-        },
+          fullName: parsedName.fullName,
+        });
+
+        params.profilesByEmail.set(email, { id: profileId, email });
+        profilesAutoCreated += 1;
+
+        if (meetingIsPast) {
+          matchedProfileIds.add(profileId);
+        }
+
+        continue;
+      }
+    }
+
+    reviewRows.push({
+      org_id: params.orgId,
+      email,
+      display_name: participant.name,
+      calendar_event_id: params.eventId,
+      status: "pending",
+    });
+  }
+
+  if (matchedProfileIds.size === 0 && reviewRows.length === 0) {
+    return { activitiesCreated: 0, reviewsQueued: 0, profilesAutoCreated };
+  }
+
+  let activitiesCreated = 0;
+  let reviewsQueued = 0;
+
+  if (matchedProfileIds.size > 0) {
+    const profileIds = [...matchedProfileIds];
+
+    await ensureRelationshipsForProfiles(
+      supabase,
+      params.orgId,
+      profileIds,
+      params.relationshipsByProfileId,
+    );
+
+    const { data: insertedActivities, error: activityError } = await supabase
+      .from("activities")
+      .upsert(
+        profileIds.map((profileId) => ({
+          org_id: params.orgId,
+          profile_id: profileId,
+          activity_type: "meeting" as const,
+          title: activityTitle,
+          summary: null,
+          activity_date: activityDate,
+          source: "calendar_sync" as const,
+          source_ref: params.googleEventId,
+        })),
         {
-          onConflict: "org_id,email,calendar_event_id",
+          onConflict: "org_id,profile_id,source,source_ref",
           ignoreDuplicates: true,
         },
       )
       .select("id");
 
-    if (reviewError) {
-      throw new Error(`Failed to queue participant review: ${reviewError.message}`);
+    if (activityError) {
+      throw new Error(`Failed to create activities: ${activityError.message}`);
     }
 
-    reviewsQueued += insertedReviews?.length ?? 0;
+    activitiesCreated = insertedActivities?.length ?? 0;
+
+    const relationshipSourceRows = profileIds
+      .map((profileId) => {
+        const relationshipId = params.relationshipsByProfileId.get(profileId);
+        if (!relationshipId) {
+          return null;
+        }
+
+        return {
+          org_id: params.orgId,
+          relationship_id: relationshipId,
+          source_type: "meeting" as const,
+          source_id: params.eventId,
+          source_label: activityTitle,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+    if (relationshipSourceRows.length > 0) {
+      const { error: sourceError } = await supabase
+        .from("relationship_sources")
+        .upsert(relationshipSourceRows, {
+          onConflict: "relationship_id,source_type,source_id",
+          ignoreDuplicates: true,
+        });
+
+      if (sourceError) {
+        throw new Error(
+          `Failed to create relationship sources: ${sourceError.message}`,
+        );
+      }
+    }
   }
 
-  return { activitiesCreated, reviewsQueued };
+  if (reviewRows.length > 0) {
+    const { data: insertedReviews, error: reviewError } = await supabase
+      .from("calendar_participant_reviews")
+      .upsert(reviewRows, {
+        onConflict: "org_id,email,calendar_event_id",
+        ignoreDuplicates: true,
+      })
+      .select("id");
+
+    if (reviewError) {
+      throw new Error(`Failed to queue participant reviews: ${reviewError.message}`);
+    }
+
+    reviewsQueued = insertedReviews?.length ?? 0;
+  }
+
+  return { activitiesCreated, reviewsQueued, profilesAutoCreated };
 }

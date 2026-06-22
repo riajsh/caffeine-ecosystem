@@ -98,6 +98,8 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   const [error, setError] = useState<string | null>(null);
   const initialQuery = group.displayName?.trim() || group.email;
   const [linkQuery, setLinkQuery] = useState(initialQuery);
+  const [organisationName, setOrganisationName] = useState("");
+  const [occupation, setOccupation] = useState("");
   const [candidates, setCandidates] = useState<CalendarProfileMatch[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
     null,
@@ -193,6 +195,31 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
         <p className="text-caption text-muted-foreground">
           {formatMeetingContext(group)}
         </p>
+      </div>
+
+      <div className="space-y-3 rounded-md border border-border bg-muted/20 p-4">
+        <div>
+          <p className="text-body font-medium text-foreground">
+            Create new profile
+          </p>
+          <p className="text-caption text-muted-foreground">
+            Add company and role now if you know them — saves triage later.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            value={organisationName}
+            onChange={(event) => setOrganisationName(event.target.value)}
+            placeholder="Company"
+            aria-label={`Company for ${group.email}`}
+          />
+          <Input
+            value={occupation}
+            onChange={(event) => setOccupation(event.target.value)}
+            placeholder="Role / title"
+            aria-label={`Role for ${group.email}`}
+          />
+        </div>
       </div>
 
       <div className="space-y-3 rounded-md border border-border bg-muted/20 p-4">
@@ -309,6 +336,8 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
             const formData = new FormData();
             formData.set("email", group.email);
             formData.set("displayName", group.displayName ?? "");
+            formData.set("organisationName", organisationName);
+            formData.set("occupation", occupation);
             runAction(
               () => createProfileFromCalendarReviewAction(formData),
               "Profile created",

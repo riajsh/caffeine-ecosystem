@@ -34,7 +34,7 @@ export const TEAM_MEMBERS = [
     id: "22222222-2222-2222-2222-222222222230",
     email: "rs@previously.co",
     fullName: "Ria",
-    role: "member" as const,
+    role: "admin" as const,
     colourToken: "var(--color-owner-ria)",
   },
   {
@@ -87,5 +87,6 @@ export const TEAM_MEMBER_TITLES: Record<string, string> = {
   "ps@previously.co": "Chief Impact Officer",
   "tp@previously.co": "Chief Operating Officer",
   "ce@previously.co": "Admin",
+  "rs@previously.co": "Admin",
   "team@previously.co": "Member",
 };
