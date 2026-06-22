@@ -6,6 +6,8 @@ import { createCalendarParticipantProfile } from "@/lib/integrations/calendar/cr
 import type { CalendarParticipant } from "@/lib/integrations/calendar/types";
 import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
 import { canAutoCreateProfileFromCalendarParticipant, parseCalendarDisplayName } from "@/lib/integrations/calendar/parse-display-name";
+import { isPostgresUniqueViolation } from "@/lib/integrations/calendar/idempotent-insert";
+import { resolveCalendarReviewsForEmail } from "@/lib/integrations/calendar/resolve-calendar-reviews";
 import {
   ensureRelationshipsForProfiles,
   type OrgRelationshipsByProfileId,
@@ -131,6 +133,14 @@ export async function processCalendarParticipants(
         params.profilesByEmail.set(email, { id: profileId, email });
         profilesAutoCreated += 1;
 
+        await resolveCalendarReviewsForEmail(supabase, {
+          orgId: params.orgId,
+          email,
+          status: "created",
+          profileId,
+          reviewedByUserId: null,
+        });
+
         if (meetingIsPast) {
           matchedProfileIds.add(profileId);
         }
@@ -165,58 +175,44 @@ export async function processCalendarParticipants(
       params.relationshipsByProfileId,
     );
 
-    const { data: insertedActivities, error: activityError } = await supabase
-      .from("activities")
-      .upsert(
-        profileIds.map((profileId) => ({
-          org_id: params.orgId,
-          profile_id: profileId,
-          activity_type: "meeting" as const,
-          title: activityTitle,
-          summary: null,
-          activity_date: activityDate,
-          source: "calendar_sync" as const,
-          source_ref: params.googleEventId,
-        })),
-        {
-          onConflict: "org_id,profile_id,source,source_ref",
-          ignoreDuplicates: true,
-        },
-      )
-      .select("id");
+    for (const profileId of profileIds) {
+      const { error: activityError } = await supabase.from("activities").insert({
+        org_id: params.orgId,
+        profile_id: profileId,
+        activity_type: "meeting" as const,
+        title: activityTitle,
+        summary: null,
+        activity_date: activityDate,
+        source: "calendar_sync" as const,
+        source_ref: params.googleEventId,
+      });
 
-    if (activityError) {
-      throw new Error(`Failed to create activities: ${activityError.message}`);
+      if (activityError) {
+        if (!isPostgresUniqueViolation(activityError)) {
+          throw new Error(`Failed to create activities: ${activityError.message}`);
+        }
+      } else {
+        activitiesCreated += 1;
+      }
     }
 
-    activitiesCreated = insertedActivities?.length ?? 0;
+    for (const profileId of profileIds) {
+      const relationshipId = params.relationshipsByProfileId.get(profileId);
+      if (!relationshipId) {
+        continue;
+      }
 
-    const relationshipSourceRows = profileIds
-      .map((profileId) => {
-        const relationshipId = params.relationshipsByProfileId.get(profileId);
-        if (!relationshipId) {
-          return null;
-        }
-
-        return {
+      const { error: sourceError } = await supabase
+        .from("relationship_sources")
+        .insert({
           org_id: params.orgId,
           relationship_id: relationshipId,
           source_type: "meeting" as const,
           source_id: params.eventId,
           source_label: activityTitle,
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => Boolean(row));
-
-    if (relationshipSourceRows.length > 0) {
-      const { error: sourceError } = await supabase
-        .from("relationship_sources")
-        .upsert(relationshipSourceRows, {
-          onConflict: "relationship_id,source_type,source_id",
-          ignoreDuplicates: true,
         });
 
-      if (sourceError) {
+      if (sourceError && !isPostgresUniqueViolation(sourceError)) {
         throw new Error(
           `Failed to create relationship sources: ${sourceError.message}`,
         );

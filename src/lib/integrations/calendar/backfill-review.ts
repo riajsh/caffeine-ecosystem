@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ensureRelationshipForProfile } from "@/lib/integrations/calendar/review-utils";
 import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
+import { isPostgresUniqueViolation } from "@/lib/integrations/calendar/idempotent-insert";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
@@ -55,51 +56,43 @@ export async function backfillCalendarReviewsForProfile(
       continue;
     }
 
-    const { data: insertedActivities, error: activityError } = await supabase
-      .from("activities")
-      .upsert(
-        {
-          org_id: params.orgId,
-          profile_id: params.profileId,
-          activity_type: "meeting",
-          title: event.title ?? "Calendar meeting",
-          summary: null,
-          activity_date: event.start_at ?? new Date().toISOString(),
-          source: "calendar_sync",
-          source_ref: event.google_event_id,
-        },
-        {
-          onConflict: "org_id,profile_id,source,source_ref",
-          ignoreDuplicates: true,
-        },
-      )
-      .select("id");
+    const meetingIsPast =
+      !event.start_at || new Date(event.start_at).getTime() <= Date.now();
 
-    if (activityError) {
-      throw new Error(`Failed to create activity: ${activityError.message}`);
+    if (!meetingIsPast) {
+      continue;
     }
 
-    if (insertedActivities && insertedActivities.length > 0) {
+    const { error: activityError } = await supabase.from("activities").insert({
+      org_id: params.orgId,
+      profile_id: params.profileId,
+      activity_type: "meeting",
+      title: event.title ?? "Calendar meeting",
+      summary: null,
+      activity_date: event.start_at ?? new Date().toISOString(),
+      source: "calendar_sync",
+      source_ref: event.google_event_id,
+    });
+
+    if (activityError) {
+      if (!isPostgresUniqueViolation(activityError)) {
+        throw new Error(`Failed to create activity: ${activityError.message}`);
+      }
+    } else {
       activitiesCreated += 1;
     }
 
     const { error: insertSourceError } = await supabase
       .from("relationship_sources")
-      .upsert(
-        {
-          org_id: params.orgId,
-          relationship_id: relationshipId,
-          source_type: "meeting",
-          source_id: event.id,
-          source_label: event.title ?? "Calendar meeting",
-        },
-        {
-          onConflict: "relationship_id,source_type,source_id",
-          ignoreDuplicates: true,
-        },
-      );
+      .insert({
+        org_id: params.orgId,
+        relationship_id: relationshipId,
+        source_type: "meeting",
+        source_id: event.id,
+        source_label: event.title ?? "Calendar meeting",
+      });
 
-    if (insertSourceError) {
+    if (insertSourceError && !isPostgresUniqueViolation(insertSourceError)) {
       throw new Error(
         `Failed to create relationship source: ${insertSourceError.message}`,
       );

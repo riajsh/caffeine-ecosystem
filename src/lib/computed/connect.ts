@@ -46,6 +46,7 @@ type ProfileSpineRow = {
   organisation_name: string | null;
   relationships: Array<{
     relationship_owners: Array<{
+      user_id: string;
       strength: OwnerStrength;
       is_primary: boolean;
       last_interaction_at: string | null;
@@ -82,19 +83,24 @@ function getPrimaryOwner(row: ProfileSpineRow) {
   return primary ?? null;
 }
 
-async function loadProfileSpine(): Promise<ProfileSpineRow[]> {
+async function loadProfileSpine(options?: {
+  ownerUserId?: string;
+}): Promise<ProfileSpineRow[]> {
   const orgId = await getOrgId();
   const supabase = await createClient();
+  const ownerUserId = options?.ownerUserId;
+  const useOwnerInner = Boolean(ownerUserId);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("profiles")
     .select(
       `
       id,
       full_name,
       organisation_name,
-      relationships (
-        relationship_owners (
+      relationships${useOwnerInner ? "!inner" : ""} (
+        relationship_owners${useOwnerInner ? "!inner" : ""} (
+          user_id,
           strength,
           is_primary,
           last_interaction_at,
@@ -107,6 +113,12 @@ async function loadProfileSpine(): Promise<ProfileSpineRow[]> {
     )
     .eq("org_id", orgId);
 
+  if (ownerUserId) {
+    query = query.eq("relationships.relationship_owners.user_id", ownerUserId);
+  }
+
+  const { data, error } = await query;
+
   if (error) {
     throw new Error(`Failed to load profiles for connect: ${error.message}`);
   }
@@ -116,10 +128,11 @@ async function loadProfileSpine(): Promise<ProfileSpineRow[]> {
 
 export async function getReconnectSuggestions(
   limit = 20,
+  options?: { ownerUserId?: string },
 ): Promise<ReconnectSuggestion[]> {
   const orgId = await getOrgId();
   const [profiles, latestActivity] = await Promise.all([
-    loadProfileSpine(),
+    loadProfileSpine(options),
     getLatestActivityByProfile(orgId),
   ]);
 

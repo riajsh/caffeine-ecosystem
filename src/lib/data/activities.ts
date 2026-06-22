@@ -1,6 +1,9 @@
 import "server-only";
 
-import { pastActivityCutoffIso } from "@/lib/activities/past-only";
+import {
+  OVERVIEW_RECENT_ACTIVITY_SOURCES,
+  pastActivityCutoffIso,
+} from "@/lib/activities/past-only";
 import { getOrgId, requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { CreateManualActivityInput } from "@/lib/validators/activities";
@@ -175,11 +178,28 @@ export async function createManualActivity(
 
 export async function listRecentOrgActivities(
   limit = 10,
+  options?: { ownerUserId?: string },
 ): Promise<RecentActivityItem[]> {
   const orgId = await getOrgId();
   const supabase = await createClient();
+  const ownerUserId = options?.ownerUserId;
 
-  const { data, error } = await supabase
+  const profileSelect = ownerUserId
+    ? `profiles!inner (
+        id,
+        full_name,
+        relationships!inner (
+          relationship_owners!inner (
+            user_id
+          )
+        )
+      )`
+    : `profiles (
+        id,
+        full_name
+      )`;
+
+  let query = supabase
     .from("activities")
     .select(
       `
@@ -188,14 +208,21 @@ export async function listRecentOrgActivities(
       title,
       activity_date,
       source,
-      profiles (
-        id,
-        full_name
-      )
+      ${profileSelect}
     `,
     )
     .eq("org_id", orgId)
-    .lte("activity_date", pastActivityCutoffIso())
+    .in("source", OVERVIEW_RECENT_ACTIVITY_SOURCES)
+    .lte("activity_date", pastActivityCutoffIso());
+
+  if (ownerUserId) {
+    query = query.eq(
+      "profiles.relationships.relationship_owners.user_id",
+      ownerUserId,
+    );
+  }
+
+  const { data, error } = await query
     .order("activity_date", { ascending: false })
     .limit(limit);
 

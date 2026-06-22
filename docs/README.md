@@ -31,7 +31,7 @@ Start here for Cursor sessions and onboarding.
 
 ## Decisions (ADRs)
 
-Accepted decisions in [decisions/](./decisions/) — 0001 through 0009.
+Accepted decisions in [decisions/](./decisions/) — 0001 through 0010.
 
 | ADR | Topic |
 |---|---|
@@ -44,6 +44,7 @@ Accepted decisions in [decisions/](./decisions/) — 0001 through 0009.
 | 0007 | Gmail sync ownership |
 | 0008 | Google Calendar sync (Phase 1.1 shipped) |
 | 0009 | Phase 3 agent workflows |
+| 0010 | Automation boundaries (Tier A–D write policy) |
 
 ## Gate and history
 

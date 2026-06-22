@@ -486,7 +486,7 @@ See ADR 0001.
 
 **Phase 2, Intelligence.** Connections graph (incl. inferred), Orbit, computed strength and last_interaction, Connect suggestions, watchlist.
 
-**Phase 3, AI.** Only once the graph holds real data. Four agent workflows: meeting intelligence (calendar-triggered participant matching and connection inference), relationship health (weekly proactive action suggestions), event preparation (per-attendee briefings), and introduction facilitation (draft → outcome tracking). See ADR 0009. Human confirms all writes; agents never write Layer 1 directly.
+**Phase 3, AI.** Only once the graph holds real data. Four agent workflows: meeting intelligence (calendar-triggered participant matching and connection inference), relationship health (weekly proactive action suggestions), event preparation (per-attendee briefings), and introduction facilitation (draft → outcome tracking). See ADR 0009. **Write policy:** ADR 0010 — sync facts auto-write; humans confirm identity, linking, connections, and enrichment.
 
 ---
 
@@ -507,4 +507,5 @@ See ADR 0001.
 | Organisation name matching | — | Accepted: `organisation_name_normalised` computed at write for inference only; company-as-entity deferred |
 | Calendar sync design intent | 0008 | Accepted; Phase 1.1 shipped 2026-06-21 |
 | Phase 3 agent workflows | 0009 | Accepted: four agents (meeting intelligence, relationship health, event prep, intro facilitation); calendar sync is prerequisite |
+| Automation boundaries (Tier A–D writes) | 0010 | Accepted: sync facts auto-write; humans for identity, linking, connections, enrichment |
 | Continuous dedup | — | Accepted: `potential_duplicates` review table planned Phase 1.1; no migration yet |

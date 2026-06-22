@@ -3,11 +3,11 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createCalendarParticipantProfile } from "@/lib/integrations/calendar/create-participant-profile";
+import type { OrgProfileByEmail } from "@/lib/integrations/calendar/match";
 import {
   canAutoCreateProfileFromCalendarParticipant,
   parseCalendarDisplayName,
 } from "@/lib/integrations/calendar/parse-display-name";
-import type { OrgProfileByEmail } from "@/lib/integrations/calendar/match";
 import { resolveCalendarReviewsForEmail } from "@/lib/integrations/calendar/resolve-calendar-reviews";
 import {
   isInternalParticipant,
@@ -25,6 +25,13 @@ type PendingReviewGroup = {
   reviewIds: string[];
 };
 
+export type AutoResolveCalendarReviewsResult = {
+  profilesCreated: number;
+  profilesLinked: number;
+  reviewsResolved: number;
+  activitiesCreated: number;
+};
+
 export async function autoResolveEligibleCalendarReviews(
   supabase: AdminClient,
   params: {
@@ -32,11 +39,7 @@ export async function autoResolveEligibleCalendarReviews(
     participantFilters: OrgParticipantFilters;
     profilesByEmail: OrgProfileByEmail;
   },
-): Promise<{
-  profilesCreated: number;
-  reviewsResolved: number;
-  activitiesCreated: number;
-}> {
+): Promise<AutoResolveCalendarReviewsResult> {
   const { data, error } = await supabase
     .from("calendar_participant_reviews")
     .select("id, email, display_name")
@@ -55,11 +58,7 @@ export async function autoResolveEligibleCalendarReviews(
     }
 
     const email = normaliseEmail(row.email);
-    if (
-      !email ||
-      isInternalParticipant(email, params.participantFilters) ||
-      params.profilesByEmail.has(email)
-    ) {
+    if (!email || isInternalParticipant(email, params.participantFilters)) {
       continue;
     }
 
@@ -80,10 +79,32 @@ export async function autoResolveEligibleCalendarReviews(
   }
 
   let profilesCreated = 0;
+  let profilesLinked = 0;
   let reviewsResolved = 0;
   let activitiesCreated = 0;
 
   for (const group of groups.values()) {
+    const email = normaliseEmail(group.email);
+    const existingProfile = params.profilesByEmail.get(email);
+
+    if (existingProfile) {
+      const result = await resolveCalendarReviewsForEmail(supabase, {
+        orgId: params.orgId,
+        email,
+        status: "linked",
+        profileId: existingProfile.id,
+        reviewedByUserId: null,
+      });
+
+      if (result.reviewCount > 0) {
+        profilesLinked += 1;
+        reviewsResolved += result.reviewCount;
+        activitiesCreated += result.activitiesCreated;
+      }
+
+      continue;
+    }
+
     if (!canAutoCreateProfileFromCalendarParticipant(group.email, group.displayName)) {
       continue;
     }
@@ -93,7 +114,6 @@ export async function autoResolveEligibleCalendarReviews(
       continue;
     }
 
-    const email = normaliseEmail(group.email);
     const profileId = await createCalendarParticipantProfile(supabase, {
       orgId: params.orgId,
       email,
@@ -115,5 +135,10 @@ export async function autoResolveEligibleCalendarReviews(
     activitiesCreated += result.activitiesCreated;
   }
 
-  return { profilesCreated, reviewsResolved, activitiesCreated };
+  return {
+    profilesCreated,
+    profilesLinked,
+    reviewsResolved,
+    activitiesCreated,
+  };
 }

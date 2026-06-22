@@ -1,10 +1,11 @@
 import { AdminPage } from "@/components/admin/admin-page";
+import { AutomationTierReference } from "@/components/admin/automation-tier-reference";
 import { CalendarSyncReviewWizard } from "@/components/admin/calendar-sync-review-wizard";
 import { requireAdmin } from "@/lib/auth/session";
 import { autoResolveNamedCalendarReviews } from "@/lib/data/calendar-sync-auto-resolve";
 import {
   getCalendarSyncReviewSummary,
-  listPendingCalendarReviewGroups,
+  listPendingCalendarReviewGroupsWithSuggestions,
   listRecentMatchedCalendarMeetings,
 } from "@/lib/data/calendar-sync-review";
 
@@ -18,11 +19,15 @@ export default async function CalendarSyncReviewPage({
   await requireAdmin();
   const params = await searchParams;
 
-  await autoResolveNamedCalendarReviews();
+  try {
+    await autoResolveNamedCalendarReviews();
+  } catch {
+    // Review list still loads if auto-resolve fails; admin can triage manually.
+  }
 
   const [summary, unmatchedGroups, matchedMeetings] = await Promise.all([
     getCalendarSyncReviewSummary(),
-    listPendingCalendarReviewGroups(),
+    listPendingCalendarReviewGroupsWithSuggestions(),
     listRecentMatchedCalendarMeetings(),
   ]);
 
@@ -39,6 +44,9 @@ export default async function CalendarSyncReviewPage({
           meetings and people to review.
         </p>
       ) : null}
+      <div className="mb-4">
+        <AutomationTierReference />
+      </div>
       <CalendarSyncReviewWizard
         summary={summary}
         unmatchedGroups={unmatchedGroups}

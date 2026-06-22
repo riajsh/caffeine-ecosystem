@@ -8,15 +8,23 @@ import type { ReconnectSuggestion } from "@/lib/computed/connect";
 
 type ReconnectPromptsCardProps = {
   suggestions: ReconnectSuggestion[];
+  ownerName?: string;
 };
 
-export function ReconnectPromptsCard({ suggestions }: ReconnectPromptsCardProps) {
+export function ReconnectPromptsCard({
+  suggestions,
+  ownerName,
+}: ReconnectPromptsCardProps) {
   if (suggestions.length === 0) {
     return (
       <EmptyState
         variant="dashed"
         title="Reconnect prompts"
-        description="Strong relationships going quiet will surface here once activity ages past six months."
+        description={
+          ownerName
+            ? `No reconnect candidates in ${ownerName}'s portfolio right now.`
+            : "Strong relationships going quiet will surface here once activity ages past six months."
+        }
       >
         <Link
           href="/connect"
@@ -33,6 +41,9 @@ export function ReconnectPromptsCard({ suggestions }: ReconnectPromptsCardProps)
       <div className="flex items-center justify-between gap-3">
         <p className="text-subheading font-medium text-foreground">
           Reconnect prompts
+          {ownerName ? (
+            <span className="text-muted-foreground"> · {ownerName}</span>
+          ) : null}
         </p>
         <Link href="/connect" className="text-caption text-interactive-primary hover:underline">
           View Connect

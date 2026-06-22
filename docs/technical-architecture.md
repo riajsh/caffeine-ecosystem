@@ -52,7 +52,7 @@ Three layers of truth from the domain model, enforced in folder structure:
 | **2 — Inference** | Computed strength, Orbit rings, Connect, last_interaction | `src/lib/computed/` + SQL views | Views only; no user-editable columns |
 | **3 — AI** | Claude reasoning over graph | `src/lib/ai/` | `ai_interactions` log table (Phase 3) |
 
-**Rule:** Layer 2 never writes Layer 1. Layer 3 never writes Layer 1 without explicit human confirmation.
+**Rule:** Layer 2 never writes Layer 1. Layer 3 write policy: ADR 0010 — Tier A sync facts auto-write with provenance; Tier C/D (identity, connections, enrichment) require human action.
 
 ---
 

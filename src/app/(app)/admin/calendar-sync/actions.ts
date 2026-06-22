@@ -210,12 +210,13 @@ export async function searchProfilesForCalendarLinkAction(
   );
 
   try {
-    const profiles = await searchProfilesForCalendarLink(query, calendarEmail);
-    return { success: true as const, profiles };
+    const result = await searchProfilesForCalendarLink(query, calendarEmail);
+    return { success: true as const, ...result };
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Search failed",
       profiles: [],
+      exactEmailMatch: false,
     };
   }
 }

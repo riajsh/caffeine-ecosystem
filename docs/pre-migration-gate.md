@@ -35,6 +35,7 @@ These were accepted after the gate cleared. They do not invalidate the gate verd
 | ADR | Decision |
 |---|---|
 | 0009 | Phase 3 agent workflows (meeting intelligence, relationship health, event prep, intro facilitation). Calendar sync is prerequisite — now shipped (Phase 1.1, 2026-06-21). |
+| 0010 | Automation boundaries — Tier A–D write policy (auto sync facts; async human triage for identity/judgment). Amends 0009 write rules. |
 
 **Phase 1.1 calendar migrations** (`20260621100000_calendar.sql`) applied 2026-06-21. Tables live; cron and OAuth handlers shipped. Pipeline spec: `docs/specs/calendar-sync.md`. Review UI spec: `docs/specs/admin-review.md` §4.
 

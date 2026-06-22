@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-06-21
 - Deciders: PU team (Chris)
+- **Write policy amended by [0010-automation-boundaries.md](./0010-automation-boundaries.md)** (2026-06-22): Tier A sync facts auto-write; human confirmation required for identity, linking, connections, and profile enrichment — not for every calendar meeting activity.
 
 ## Context
 
@@ -16,7 +17,7 @@ Two observations led to this decision:
 
 ## Decision
 
-Design the Phase 3 agent layer around four workflows. All agents operate on Layer 1 (user-entered facts) and Layer 2 (computed views) as read-only inputs. **No agent writes to Layer 1 without explicit human confirmation.** The agent surfaces and drafts; the human confirms.
+Design the Phase 3 agent layer around four workflows. All agents operate on Layer 1 (user-entered facts) and Layer 2 (computed views) as read-only inputs by default. **Write policy:** see ADR 0010 — sync-fact activities auto-write (Tier A); agents surface and draft for judgment calls; humans confirm identity, linking, connections, and enrichment — not every calendar meeting.
 
 ---
 
@@ -28,7 +29,7 @@ Design the Phase 3 agent layer around four workflows. All agents operate on Laye
 
 1. Matches participants against Ecosystem profiles by email.
 2. Flags any participants not yet in Ecosystem: "You've met with Sarah Chen 3 times this month. She's not in Ecosystem. Want to add her?" Pre-fills name, company, and email from the calendar invite. One-click confirm.
-3. Drafts an activity note for each matched profile: "You met with Aaron Croft on Tuesday at Drumbeat. Confirm to add to timeline?" Human confirms or edits before anything is written.
+3. Logs past meetings on exact email match as Tier A activities (Phase 1.1, shipped). Optionally enriches `summary` from calendar metadata (Tier B, ADR 0010). Unmatched participants go to review queue — human creates or links profile.
 4. Infers person-to-person connections from multi-party meetings. If James, Aaron, and Priya were all in the same calendar meeting, that's a `connection` signal between Aaron and Priya (source=`calendar_sync`, type=`met_at_event`). Queued for human confirmation before the connection row is written.
 
 **Why this matters:** Email threads tell you who you talked to. Calendar meetings tell you who knows each other. This is the primary mechanism by which the connections graph populates itself from real evidence rather than manual entry.
@@ -88,14 +89,15 @@ Calendar sync (ADR 0008) is a **prerequisite for the agent layer** — **shipped
 
 ## Human-in-the-loop principle
 
-All four agents follow the same rule: **agents surface and draft; humans confirm.** Specifically:
+**Amended by ADR 0010.** Agents surface and draft; humans confirm **judgment writes** — not sync facts.
 
-- No profile is created without a human clicking confirm
-- No activity is written to the timeline without a human confirming
-- No connection is created without a human approving the inference
-- No introduction outcome is updated without a human marking it
+- No profile is created without a human clicking confirm (Tier C)
+- **Past meeting activities on exact email match auto-write** (Tier A — calendar sync, shipped)
+- No connection is created without a human approving the inference (Tier C)
+- No introduction outcome is updated without a human marking it (Tier C)
+- No subjective profile enrichment or ownership change from sync or AI (Tier D)
 
-This is not just a safety measure — it is what makes the data trustworthy. Layer 1 facts are things humans have confirmed. Layer 2 inferences are computed from those facts. Layer 3 agents reason over both. None of this works if Layer 3 silently contaminates Layer 1 with its guesses.
+Layer 1 facts are either **provenance-tagged sync evidence** (Tier A) or **human-confirmed judgments** (Tier C). Tier B enrichment is append-only and labelled. Layer 3 must not silently overwrite human-entered fields or invent identity.
 
 ## Consequences
 

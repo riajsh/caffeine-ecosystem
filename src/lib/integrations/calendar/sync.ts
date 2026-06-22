@@ -283,13 +283,24 @@ export async function syncCalendarAccount(
       nextSyncToken = response.data.nextSyncToken ?? nextSyncToken;
     } while (pageToken);
 
-    const autoResolveResult = await autoResolveEligibleCalendarReviews(supabase, {
-      orgId: account.org_id,
-      participantFilters,
-      profilesByEmail,
-    });
-    stats.profilesAutoCreated += autoResolveResult.profilesCreated;
-    stats.activitiesCreated += autoResolveResult.activitiesCreated;
+    try {
+      const autoResolveResult = await autoResolveEligibleCalendarReviews(
+        supabase,
+        {
+          orgId: account.org_id,
+          participantFilters,
+          profilesByEmail,
+        },
+      );
+      stats.profilesAutoCreated += autoResolveResult.profilesCreated;
+      stats.activitiesCreated += autoResolveResult.activitiesCreated;
+    } catch (autoResolveError) {
+      const message =
+        autoResolveError instanceof Error
+          ? autoResolveError.message
+          : "Calendar review auto-resolve failed";
+      stats.errors.push(message);
+    }
   } catch (error) {
     if (error instanceof GaxiosError && error.response?.status === 429) {
       stats.errors.push(

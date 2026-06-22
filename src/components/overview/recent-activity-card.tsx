@@ -8,21 +8,33 @@ import type { RecentActivityItem } from "@/lib/data/activities";
 
 type RecentActivityCardProps = {
   activities: RecentActivityItem[];
+  ownerUserId?: string;
+  ownerName?: string;
 };
 
-export function RecentActivityCard({ activities }: RecentActivityCardProps) {
+export function RecentActivityCard({
+  activities,
+  ownerUserId,
+  ownerName,
+}: RecentActivityCardProps) {
+  const profilesHref = ownerUserId ? `/profiles?owner=${ownerUserId}` : "/profiles";
+
   if (activities.length === 0) {
     return (
       <EmptyState
         variant="dashed"
         title="Recent activity"
-        description="Log notes and meetings on profiles, or add event attendance — activity will show up here."
+        description={
+          ownerName
+            ? `No recent updates on ${ownerName}'s profiles yet. Log notes, calls, and event attendance from profile detail.`
+            : "Manual notes, calls, introductions, and event attendance show here — not calendar invites."
+        }
       >
         <Link
-          href="/profiles"
+          href={profilesHref}
           className="text-caption text-interactive-primary hover:underline"
         >
-          Browse profiles →
+          {ownerName ? `${ownerName}'s profiles →` : "Browse profiles →"}
         </Link>
       </EmptyState>
     );
@@ -33,12 +45,15 @@ export function RecentActivityCard({ activities }: RecentActivityCardProps) {
       <div className="flex items-center justify-between gap-3">
         <p className="text-subheading font-medium text-foreground">
           Recent activity
+          {ownerName ? (
+            <span className="text-muted-foreground"> · {ownerName}</span>
+          ) : null}
         </p>
         <Link
-          href="/profiles"
+          href={profilesHref}
           className="text-caption text-interactive-primary hover:underline"
         >
-          All profiles
+          {ownerName ? "Their profiles" : "All profiles"}
         </Link>
       </div>
       <ul className="mt-4 space-y-3">

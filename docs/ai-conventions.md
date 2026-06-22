@@ -25,7 +25,7 @@ Mirror the three layers of truth in the folder structure and the code.
 
 - Layer 1 Reality: user-entered data. Plain tables, normal writes.
 - Layer 2 Inference: computed values (strength, Orbit ring, last_interaction, Connect suggestions). Implemented as SQL views or query-time computation. Never user-editable columns. Changing a formula must not require a migration or rewrite history.
-- Layer 3 AI: reasoning over Layers 1 and 2. Phase 3 only. Must never write into Layer 1 without explicit human confirmation.
+- Layer 3 AI: reasoning over Layers 1 and 2. Phase 3 only. **Write policy (ADR 0010):** Tier A sync facts (e.g. calendar `meeting` activities on exact email match) auto-write with `source` + `source_ref`. Tier C/D writes (identity, linking, connections, enrichment, ownership) require human action. Tier B AI enrichment is append-only and UI-labelled — never overwrites human-entered fields.
 
 ## Hard rules (never do)
 

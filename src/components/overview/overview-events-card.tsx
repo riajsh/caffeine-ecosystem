@@ -9,11 +9,13 @@ import type { EventListItem } from "@/lib/data/events";
 type OverviewEventsCardProps = {
   upcomingEvents: EventListItem[];
   recentEvents: EventListItem[];
+  ownerName?: string;
 };
 
 export function OverviewEventsCard({
   upcomingEvents,
   recentEvents,
+  ownerName,
 }: OverviewEventsCardProps) {
   const events =
     upcomingEvents.length > 0 ? upcomingEvents : recentEvents.slice(0, 5);
@@ -25,7 +27,11 @@ export function OverviewEventsCard({
       <EmptyState
         variant="dashed"
         title="Events"
-        description="Create PU dinners and roundtables to build the attendance graph."
+        description={
+          ownerName
+            ? `No events where ${ownerName}'s profiles are attending yet.`
+            : "Create PU dinners and roundtables to build the attendance graph."
+        }
       >
         <Link href="/events" className="text-body text-interactive-primary hover:underline">
           Go to Events →
@@ -37,7 +43,12 @@ export function OverviewEventsCard({
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-subheading font-medium text-foreground">{title}</p>
+        <p className="text-subheading font-medium text-foreground">
+          {title}
+          {ownerName ? (
+            <span className="text-muted-foreground"> · {ownerName}</span>
+          ) : null}
+        </p>
         <Link href="/events" className="text-caption text-interactive-primary hover:underline">
           View all
         </Link>

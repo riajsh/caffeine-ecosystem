@@ -23,14 +23,14 @@ Doc index: `docs/README.md`
 - `docs/specs/search.md` — FTS index design (applied in Phase 1 migrations; read before any search feature work).
 - `docs/design-tokens.md` — @theme tokens, owner palette, strength colours, CVA pattern. Read before any UI work.
 - `docs/build-quality.md` — session discipline, AI red team, Caffeine canary, schema-locked mode.
-- `docs/decisions/` — accepted ADRs (0001–0009).
+- `docs/decisions/` — accepted ADRs (0001–0010). **Before Phase 3 / agent work:** read 0009 (workflows) and 0010 (automation boundaries).
 
 ## Core rules
 
 - Relationships are primary, not contacts.
 - Schema is the source of truth. Generate types from it.
 - RLS on every table. `org_id` comes from the session, never the client.
-- Three layers stay separate: user-entered, computed (views), AI (Phase 3). AI never writes Layer 1 without human confirmation.
+- Three layers stay separate: user-entered, computed (views), AI (Phase 3). Write policy ADR 0010: sync facts auto-write; humans for identity, linking, connections, enrichment.
 - No subjective scoring fields, no AI chat, no scoring in V1.
 - Never hard-code PU anywhere except the `organisations` row. The platform gets cloned for Caffeine.
 - Imports and syncs are idempotent.

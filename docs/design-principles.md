@@ -27,7 +27,7 @@ Especially for Orbit and any graph view. Default to a filtered, legible state. F
 
 ## 6. Computed truth stays computed
 
-Layer 1 (what people enter), Layer 2 (what the system derives) and Layer 3 (what AI reasons) stay separate. Derived values are views, not editable columns. AI never writes back into Layer 1 without explicit human confirmation.
+Layer 1 (what people enter), Layer 2 (what the system derives) and Layer 3 (what AI reasons) stay separate. Derived values are views, not editable columns. AI and sync follow ADR 0010: provenance-tagged sync facts may auto-write; identity, connections, and enrichment require human action; AI enrichment is labelled, never silent overwrite.
 
 ## What world-class means here
 

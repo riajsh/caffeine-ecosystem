@@ -255,6 +255,36 @@ function mapEventRow(
   };
 }
 
+async function listEventIdsForOwner(
+  orgId: string,
+  ownerUserId: string,
+): Promise<string[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("event_attendees")
+    .select(
+      `
+      event_id,
+      profiles!inner (
+        relationships!inner (
+          relationship_owners!inner (
+            user_id
+          )
+        )
+      )
+    `,
+    )
+    .eq("org_id", orgId)
+    .eq("profiles.relationships.relationship_owners.user_id", ownerUserId);
+
+  if (error) {
+    throw new Error(`Failed to list owner events: ${error.message}`);
+  }
+
+  return [...new Set((data ?? []).map((row) => row.event_id))];
+}
+
 export async function listEvents(): Promise<EventListItem[]> {
   const orgId = await getOrgId();
   const supabase = await createClient();
@@ -458,11 +488,15 @@ export async function deleteEvent(eventId: string): Promise<void> {
   }
 }
 
-export async function listUpcomingEvents(limit = 5): Promise<EventListItem[]> {
+export async function listUpcomingEvents(
+  limit = 5,
+  options?: { ownerUserId?: string },
+): Promise<EventListItem[]> {
   const orgId = await getOrgId();
   const supabase = await createClient();
+  const ownerUserId = options?.ownerUserId;
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("events")
     .select(
       `
@@ -476,7 +510,17 @@ export async function listUpcomingEvents(limit = 5): Promise<EventListItem[]> {
     `,
     )
     .eq("org_id", orgId)
-    .gte("event_date", new Date().toISOString())
+    .gte("event_date", new Date().toISOString());
+
+  if (ownerUserId) {
+    const eventIds = await listEventIdsForOwner(orgId, ownerUserId);
+    if (eventIds.length === 0) {
+      return [];
+    }
+    query = query.in("id", eventIds);
+  }
+
+  const { data, error } = await query
     .order("event_date", { ascending: true })
     .limit(limit);
 
@@ -487,11 +531,15 @@ export async function listUpcomingEvents(limit = 5): Promise<EventListItem[]> {
   return (data ?? []).map(mapEventRow);
 }
 
-export async function listRecentPastEvents(limit = 5): Promise<EventListItem[]> {
+export async function listRecentPastEvents(
+  limit = 5,
+  options?: { ownerUserId?: string },
+): Promise<EventListItem[]> {
   const orgId = await getOrgId();
   const supabase = await createClient();
+  const ownerUserId = options?.ownerUserId;
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("events")
     .select(
       `
@@ -505,7 +553,17 @@ export async function listRecentPastEvents(limit = 5): Promise<EventListItem[]> 
     `,
     )
     .eq("org_id", orgId)
-    .lt("event_date", new Date().toISOString())
+    .lt("event_date", new Date().toISOString());
+
+  if (ownerUserId) {
+    const eventIds = await listEventIdsForOwner(orgId, ownerUserId);
+    if (eventIds.length === 0) {
+      return [];
+    }
+    query = query.in("id", eventIds);
+  }
+
+  const { data, error } = await query
     .order("event_date", { ascending: false })
     .limit(limit);
 

@@ -5,6 +5,7 @@ import {
   InferSameCompanyButton,
 } from "@/components/admin/infer-all-co-attendance-button";
 import { AdminPage } from "@/components/admin/admin-page";
+import { AutomationTierReference } from "@/components/admin/automation-tier-reference";
 import { CalendarAccountRow } from "@/components/admin/calendar-account-row";
 import { CalendarConnectButton } from "@/components/admin/calendar-connect-button";
 import { DeployChecklist } from "@/components/admin/deploy-checklist";
@@ -122,6 +123,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           participants. Matched attendees become meeting activities on profile
           timelines; unmatched emails go to a review queue.
         </p>
+        <AutomationTierReference variant="compact" />
         {(params.calendar_connected ?? params.connected) ? (
           <p className="text-body text-foreground">
             Connected {params.calendar_connected ?? params.connected}. Initial

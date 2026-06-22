@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   createProfileFromCalendarReviewAction,
@@ -14,6 +14,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   CalendarMatchedMeeting,
@@ -45,6 +52,15 @@ function formatMeetingContext(group: CalendarUnmatchedGroup): string {
   return `${group.meetingCount} meetings${
     group.sampleMeetingTitle ? ` · e.g. ${group.sampleMeetingTitle}` : ""
   }`;
+}
+
+function defaultLinkSearchQuery(group: CalendarUnmatchedGroup): string {
+  if (group.displayName?.trim()) {
+    return group.displayName.trim();
+  }
+
+  const localPart = group.email.split("@")[0] ?? "";
+  return localPart.length >= 2 ? localPart : "";
 }
 
 function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
@@ -96,20 +112,20 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   const router = useRouter();
   const { isPending, run } = useAsyncAction();
   const [error, setError] = useState<string | null>(null);
-  const initialQuery = group.displayName?.trim() || group.email;
+  const initialQuery = defaultLinkSearchQuery(group);
   const [linkQuery, setLinkQuery] = useState(initialQuery);
+  const [linkExpanded, setLinkExpanded] = useState(false);
   const [organisationName, setOrganisationName] = useState("");
   const [occupation, setOccupation] = useState("");
   const [candidates, setCandidates] = useState<CalendarProfileMatch[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
     null,
   );
-  const [isSearching, setIsSearching] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const isFirstSearch = useRef(true);
 
   const runSearch = useCallback(
-    async (query: string, signal?: AbortSignal) => {
+    async (query: string) => {
       setIsSearching(true);
       setError(null);
 
@@ -117,10 +133,6 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
         query,
         group.email,
       );
-
-      if (signal?.aborted) {
-        return;
-      }
 
       setIsSearching(false);
       setHasSearched(true);
@@ -142,19 +154,18 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   );
 
   useEffect(() => {
-    const abortController = new AbortController();
-    const delay = isFirstSearch.current ? 0 : 300;
-    isFirstSearch.current = false;
+    if (!linkExpanded) {
+      return;
+    }
 
     const timer = window.setTimeout(() => {
-      void runSearch(linkQuery, abortController.signal);
-    }, delay);
+      void runSearch(linkQuery);
+    }, 300);
 
     return () => {
       window.clearTimeout(timer);
-      abortController.abort();
     };
-  }, [linkQuery, runSearch]);
+  }, [linkExpanded, linkQuery, runSearch]);
 
   function runAction(
     action: () => Promise<{ error?: string }>,
@@ -175,6 +186,11 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   const selectedProfile = candidates.find(
     (candidate) => candidate.id === selectedProfileId,
   );
+  const suggestedCompanyValue =
+    organisationName &&
+    group.suggestedCompanies.includes(organisationName)
+      ? organisationName
+      : "";
 
   return (
     <div className="space-y-4 rounded-lg border border-border p-4">
@@ -207,12 +223,38 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            value={organisationName}
-            onChange={(event) => setOrganisationName(event.target.value)}
-            placeholder="Company"
-            aria-label={`Company for ${group.email}`}
-          />
+          <div className="space-y-2">
+            {group.suggestedCompanies.length > 0 ? (
+              <>
+                <Select
+                  value={suggestedCompanyValue}
+                  onValueChange={setOrganisationName}
+                >
+                  <SelectTrigger
+                    aria-label={`Suggested companies for ${group.email}`}
+                  >
+                    <SelectValue placeholder="Suggested from email domain" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {group.suggestedCompanies.map((company) => (
+                      <SelectItem key={company} value={company}>
+                        {company}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-caption text-muted-foreground">
+                  From other profiles with @{group.email.split("@")[1]} emails.
+                </p>
+              </>
+            ) : null}
+            <Input
+              value={organisationName}
+              onChange={(event) => setOrganisationName(event.target.value)}
+              placeholder="Company"
+              aria-label={`Company for ${group.email}`}
+            />
+          </div>
           <Input
             value={occupation}
             onChange={(event) => setOccupation(event.target.value)}
@@ -222,110 +264,117 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
         </div>
       </div>
 
-      <div className="space-y-3 rounded-md border border-border bg-muted/20 p-4">
-        <div>
-          <p className="text-body font-medium text-foreground">
-            Link to an existing profile
-          </p>
+      <details
+        className="rounded-md border border-border bg-muted/20 p-4"
+        onToggle={(event) => {
+          setLinkExpanded((event.currentTarget as HTMLDetailsElement).open);
+        }}
+      >
+        <summary className="cursor-pointer text-body font-medium text-foreground">
+          Link to someone already in Ecosystem
+        </summary>
+        <div className="mt-4 space-y-3">
           <p className="text-caption text-muted-foreground">
-            Search by name or email. We check for an exact email match
-            automatically.
+            Only needed if this person uses a different email in Ecosystem.
+            Sync already checked {group.email} — no match on file.
           </p>
-        </div>
 
-        <Input
-          value={linkQuery}
-          onChange={(event) => setLinkQuery(event.target.value)}
-          placeholder="Search profiles…"
-          aria-label={`Search profiles to link ${group.email}`}
-        />
+          <Input
+            value={linkQuery}
+            onChange={(event) => setLinkQuery(event.target.value)}
+            placeholder="Search by name…"
+            aria-label={`Search profiles to link ${group.email}`}
+          />
 
-        {isSearching ? (
-          <p className="text-caption text-muted-foreground">Searching…</p>
-        ) : null}
+          {isSearching ? (
+            <p className="text-caption text-muted-foreground">Searching…</p>
+          ) : null}
 
-        {!isSearching && candidates.length > 0 ? (
-          <div className="space-y-2">
-            <p className="text-caption font-medium text-muted-foreground">
-              {candidates.some((c) => c.matchReason === "exact_email")
-                ? "Suggested match"
-                : "Possible matches"}
-            </p>
+          {!isSearching && hasSearched && candidates.length > 0 ? (
             <div className="space-y-2">
-              {candidates.map((candidate) => {
-                const isSelected = selectedProfileId === candidate.id;
+              <p className="text-caption font-medium text-muted-foreground">
+                Possible matches
+              </p>
+              <div className="space-y-2">
+                {candidates.map((candidate) => {
+                  const isSelected = selectedProfileId === candidate.id;
 
-                return (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    onClick={() => setSelectedProfileId(candidate.id)}
-                    className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
-                      isSelected
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-card hover:bg-muted/40"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-body font-medium text-foreground">
-                        {candidate.fullName}
-                      </p>
-                      {candidate.matchReason === "exact_email" ? (
-                        <Badge variant="secondary">Same email</Badge>
-                      ) : null}
-                    </div>
-                    {candidate.email ? (
-                      <p className="text-caption text-muted-foreground">
-                        {candidate.email}
-                      </p>
-                    ) : (
-                      <p className="text-caption text-muted-foreground">
-                        No email on profile
-                      </p>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button
-                type="button"
-                size="sm"
-                disabled={isPending || !selectedProfileId}
-                onClick={() => {
-                  if (!selectedProfileId) {
-                    return;
-                  }
-                  const formData = new FormData();
-                  formData.set("email", group.email);
-                  formData.set("profileId", selectedProfileId);
-                  runAction(
-                    () => linkCalendarReviewAction(formData),
-                    `Linked to ${selectedProfile?.fullName ?? "profile"}`,
+                  return (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      onClick={() => setSelectedProfileId(candidate.id)}
+                      className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-card hover:bg-muted/40"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-body font-medium text-foreground">
+                          {candidate.fullName}
+                        </p>
+                        {candidate.matchReason === "exact_email" ? (
+                          <Badge variant="secondary">Same email</Badge>
+                        ) : null}
+                      </div>
+                      {candidate.email ? (
+                        <p className="text-caption text-muted-foreground">
+                          {candidate.email}
+                        </p>
+                      ) : (
+                        <p className="text-caption text-muted-foreground">
+                          No email on profile
+                        </p>
+                      )}
+                    </button>
                   );
-                }}
-              >
-                Link to {selectedProfile?.fullName ?? "selected profile"}
-              </Button>
-              {selectedProfile ? (
-                <Button type="button" size="sm" variant="outline" asChild>
-                  <Link href={`/profiles/${selectedProfile.id}`} target="_blank">
-                    Preview profile
-                  </Link>
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
+                })}
+              </div>
 
-        {!isSearching && hasSearched && candidates.length === 0 ? (
-          <p className="text-body text-muted-foreground">
-            No matching profiles found. Create a new profile below, or refine
-            your search.
-          </p>
-        ) : null}
-      </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isPending || !selectedProfileId}
+                  onClick={() => {
+                    if (!selectedProfileId) {
+                      return;
+                    }
+                    const formData = new FormData();
+                    formData.set("email", group.email);
+                    formData.set("profileId", selectedProfileId);
+                    runAction(
+                      () => linkCalendarReviewAction(formData),
+                      `Linked to ${selectedProfile?.fullName ?? "profile"}`,
+                    );
+                  }}
+                >
+                  Link to {selectedProfile?.fullName ?? "selected profile"}
+                </Button>
+                {selectedProfile ? (
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link
+                      href={`/profiles/${selectedProfile.id}`}
+                      target="_blank"
+                    >
+                      Preview profile
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {!isSearching && hasSearched && candidates.length === 0 ? (
+            <p className="text-body text-muted-foreground">
+              {linkQuery.trim() || initialQuery
+                ? `No profiles matched “${linkQuery.trim() || initialQuery}”.`
+                : "Enter a name to search."}
+            </p>
+          ) : null}
+        </div>
+      </details>
 
       <div className="flex flex-wrap gap-2 border-t border-border pt-4">
         <Button
@@ -551,10 +600,9 @@ export function CalendarSyncReviewWizard({
         ) : (
           <>
             <p className="text-body text-muted-foreground">
-              Each card is someone Google Calendar listed on a meeting who is not
-              yet in Ecosystem and could not be added automatically (missing a
-              full name). Link them to an existing profile, create a new one, or
-              ignore vendors and no-replies.
+              Each card is someone not yet in Ecosystem. Create a profile, expand
+              “Link to someone already in Ecosystem” only if they might exist under
+              a different email, or ignore vendors and no-replies.
             </p>
             <div className="space-y-4">
               {unmatchedGroups.external.map((group) => (

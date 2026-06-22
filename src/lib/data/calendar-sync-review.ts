@@ -8,6 +8,10 @@ import {
   loadOrgParticipantFilters,
   type OrgParticipantFilters,
 } from "@/lib/integrations/participant-email";
+import {
+  groupEmailsByWorkDomain,
+  workEmailDomain,
+} from "@/lib/integrations/calendar/company-suggestions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -41,6 +45,7 @@ export type CalendarUnmatchedGroup = {
   sampleMeetingTitle: string | null;
   sampleMeetingDate: string | null;
   reviewIds: string[];
+  suggestedCompanies: string[];
 };
 
 export type CalendarMatchedMeeting = {
@@ -285,6 +290,7 @@ export async function listPendingCalendarReviewGroups(
       sampleMeetingTitle: null,
       sampleMeetingDate: null,
       reviewIds: [row.id],
+      suggestedCompanies: [],
     };
     updatePastSample(group, event?.title, event?.start_at ?? null);
     groups.set(email, group);
@@ -296,6 +302,84 @@ export async function listPendingCalendarReviewGroups(
     external: partitioned.external.slice(0, limit),
     internal: partitioned.internal,
   };
+}
+
+async function loadCompaniesForEmailDomain(
+  orgId: string,
+  domain: string,
+): Promise<string[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("organisation_name")
+    .eq("org_id", orgId)
+    .ilike("email", `%@${domain}`)
+    .not("organisation_name", "is", null);
+
+  if (error) {
+    throw new Error(`Failed to load company suggestions: ${error.message}`);
+  }
+
+  const counts = new Map<string, number>();
+
+  for (const row of data ?? []) {
+    const name = row.organisation_name?.trim();
+    if (!name) {
+      continue;
+    }
+
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort(
+      ([leftName, leftCount], [rightName, rightCount]) =>
+        rightCount - leftCount ||
+        leftName.localeCompare(rightName, undefined, { sensitivity: "base" }),
+    )
+    .map(([name]) => name)
+    .slice(0, 8);
+}
+
+async function attachCompanySuggestions(
+  orgId: string,
+  groups: CalendarUnmatchedGroup[],
+): Promise<void> {
+  const emailsByDomain = groupEmailsByWorkDomain(groups.map((group) => group.email));
+  if (emailsByDomain.size === 0) {
+    for (const group of groups) {
+      group.suggestedCompanies = [];
+    }
+    return;
+  }
+
+  const companiesByDomain = new Map<string, string[]>();
+
+  await Promise.all(
+    [...emailsByDomain.keys()].map(async (domain) => {
+      const companies = await loadCompaniesForEmailDomain(orgId, domain);
+      companiesByDomain.set(domain, companies);
+    }),
+  );
+
+  for (const group of groups) {
+    const domain = workEmailDomain(group.email);
+    group.suggestedCompanies = domain
+      ? (companiesByDomain.get(domain) ?? [])
+      : [];
+  }
+}
+
+export async function listPendingCalendarReviewGroupsWithSuggestions(
+  limit = 50,
+): Promise<CalendarReviewGroupLists> {
+  const groups = await listPendingCalendarReviewGroups(limit);
+  const orgId = await getOrgId();
+
+  await attachCompanySuggestions(orgId, groups.external);
+  await attachCompanySuggestions(orgId, groups.internal);
+
+  return groups;
 }
 
 export async function listRecentMatchedCalendarMeetings(
@@ -363,10 +447,15 @@ export type CalendarProfileMatch = {
   matchReason: "exact_email" | "name_or_email";
 };
 
+export type CalendarProfileSearchResult = {
+  profiles: CalendarProfileMatch[];
+  exactEmailMatch: boolean;
+};
+
 export async function searchProfilesForCalendarLink(
   query: string,
   calendarEmail?: string,
-): Promise<CalendarProfileMatch[]> {
+): Promise<CalendarProfileSearchResult> {
   await requireAdmin();
   const orgId = await getOrgId();
   const supabase = await createClient();
@@ -378,6 +467,7 @@ export async function searchProfilesForCalendarLink(
   const filters = await loadReviewParticipantFilters(orgId);
   const results: CalendarProfileMatch[] = [];
   const seen = new Set<string>();
+  let exactEmailMatch = false;
 
   function addProfile(
     row: { id: string; full_name: string; email: string | null },
@@ -413,16 +503,33 @@ export async function searchProfilesForCalendarLink(
     }
 
     if (data?.[0]) {
+      exactEmailMatch = true;
       addProfile(data[0], "exact_email");
     }
   }
 
-  if (trimmed.length >= 2) {
+  const normalisedQuery = trimmed.toLowerCase();
+  const queryIsCalendarEmail =
+    Boolean(normalisedCalendarEmail) &&
+    normalisedQuery === normalisedCalendarEmail;
+
+  let nameSearchTerm = queryIsCalendarEmail ? "" : trimmed;
+
+  if (!nameSearchTerm && normalisedCalendarEmail) {
+    const localPart = normalisedCalendarEmail.split("@")[0] ?? "";
+    if (localPart.length >= 2) {
+      nameSearchTerm = localPart;
+    }
+  }
+
+  if (nameSearchTerm.length >= 2) {
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name, email")
       .eq("org_id", orgId)
-      .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
+      .or(
+        `full_name.ilike.%${nameSearchTerm}%,email.ilike.%${nameSearchTerm}%`,
+      )
       .order("full_name")
       .limit(12);
 
@@ -443,8 +550,9 @@ export async function searchProfilesForCalendarLink(
   if (normalisedCalendarEmail && results.length < 8) {
     const localPart = normalisedCalendarEmail.split("@")[0] ?? "";
     const localPartAlreadySearched =
-      trimmed.length >= 2 &&
-      (localPart.includes(trimmed) || trimmed.includes(localPart));
+      nameSearchTerm.length >= 2 &&
+      (localPart.includes(nameSearchTerm.toLowerCase()) ||
+        nameSearchTerm.toLowerCase().includes(localPart));
 
     if (localPart.length >= 3 && !localPartAlreadySearched) {
       const { data, error } = await supabase
@@ -465,5 +573,8 @@ export async function searchProfilesForCalendarLink(
     }
   }
 
-  return results.slice(0, 8);
+  return {
+    profiles: results.slice(0, 8),
+    exactEmailMatch,
+  };
 }

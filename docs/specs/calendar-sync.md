@@ -2,7 +2,7 @@
 
 - Version: 1.0
 - Status: Accepted — **Phase 1.1 shipped 2026-06-21**
-- Related: ADR 0008, domain-model-v1.md §5.10, `docs/specs/gmail-sync.md` (participant matching pattern), `src/lib/integrations/calendar/`
+- Related: ADR 0008, ADR 0010 (Tier A auto-writes), domain-model-v1.md §5.10, `docs/specs/gmail-sync.md` (participant matching pattern), `src/lib/integrations/calendar/`
 
 Daily incremental sync of Google Calendar events for connected PU team accounts. Store event metadata, match external participants to profiles, generate meeting activities, record provenance, and queue unmatched participants for admin review.
 
@@ -25,7 +25,7 @@ Ecosystem owns this entirely (ADR 0007 pattern). Separate OAuth client and token
 - Initial backfill: **12 months back**, **3 months forward**
 - Ongoing cron keeps the forward window rolling; events beyond lookahead are skipped and purged
 - External participant → profile matching by `lower(email)`
-- `meeting` activity generation per matched profile per event
+- `meeting` activity generation per matched profile per **past** event (Tier A, ADR 0010 — no human confirm step)
 - `relationship_sources` append with `source_type=meeting`
 - Unmatched participant review queue (`calendar_participant_reviews`, ADR 0002 pattern)
 - Internal participant filtering (`ORG_INTERNAL_EMAIL_DOMAINS` + `users.email`)

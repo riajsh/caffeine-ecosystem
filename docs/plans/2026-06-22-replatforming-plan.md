@@ -183,7 +183,7 @@ Deferred design session. Ria mentioned automating what "in a circle" means (e.g.
 | New contacts | Calendar review → create with company; event CSV with required columns |
 | Relational fields | Trust, influence, notes — enrich only when Ria/chiefs are actively working that person |
 | LinkedIn | Manual lookup for high-priority gaps only; no scraping |
-| Agent cleanup | Phase 3 — infer company from email domain, suggest role from meeting title (human confirm) |
+| Agent cleanup | Phase 3 — Tier B suggestions only (company from domain, role from title); never overwrite; see ADR 0010 |
 
 **Target:** ≥80% of active-circle profiles have company + role within 4 weeks of Phase 2 shipping.
 
@@ -191,7 +191,7 @@ Deferred design session. Ria mentioned automating what "in a circle" means (e.g.
 
 ## Phase 5 — Stretch goals (Phase 3)
 
-**Not V1.** Track in [ADR 0009](../decisions/0009-agent-workflows.md).
+**Not V1.** Workflows in [ADR 0009](../decisions/0009-agent-workflows.md); **write policy** in [ADR 0010](../decisions/0010-automation-boundaries.md) — auto capture, async human triage for identity/judgment only.
 
 | Capability | Trigger data needed |
 |---|---|
