@@ -27,6 +27,10 @@ import { LastMeetingCell } from "./last-meeting-cell";
 import { OwnerDot } from "./owner-dot";
 import { ProfilesBulkActions } from "./profiles-bulk-actions";
 import { StrengthBadge } from "./strength-badge";
+import { SuggestedCompanyField } from "./suggested-company-field";
+import { SuggestedOwnerField } from "./suggested-owner-field";
+import type { ProfileEnrichmentSuggestions } from "@/lib/enrichment/profile-enrichment";
+import type { OrgUser } from "@/lib/data/users";
 
 type ProfilesTableProps = {
   profiles: ProfileListItem[];
@@ -34,6 +38,9 @@ type ProfilesTableProps = {
   order: SortOrder;
   hasActiveFilters?: boolean;
   canImportDatasets?: boolean;
+  enrichMode?: boolean;
+  enrichmentByProfileId?: Map<string, ProfileEnrichmentSuggestions>;
+  teamUsers?: OrgUser[];
 };
 
 type SortableHeadProps = {
@@ -91,6 +98,9 @@ export function ProfilesTable({
   order,
   hasActiveFilters = false,
   canImportDatasets = false,
+  enrichMode = false,
+  enrichmentByProfileId,
+  teamUsers = [],
 }: ProfilesTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -296,6 +306,13 @@ export function ProfilesTable({
             <TableBody>
               {profiles.map((profile) => {
                 const isSelected = selectedIds.has(profile.id);
+                const suggestions = enrichmentByProfileId?.get(profile.id);
+                const showSuggestedCompany =
+                  enrichMode &&
+                  !profile.organisationName?.trim() &&
+                  suggestions?.company;
+                const showSuggestedOwner =
+                  enrichMode && !profile.primaryOwner && suggestions?.owner;
 
                 return (
                   <TableRow
@@ -343,7 +360,15 @@ export function ProfilesTable({
                       {profile.fullName}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {profile.organisationName ?? "—"}
+                      {showSuggestedCompany ? (
+                        <SuggestedCompanyField
+                          profileId={profile.id}
+                          suggestion={suggestions.company!}
+                          variant="table"
+                        />
+                      ) : (
+                        profile.organisationName ?? "—"
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {profile.occupation ?? "—"}
@@ -352,7 +377,14 @@ export function ProfilesTable({
                       {profile.location ?? "—"}
                     </TableCell>
                     <TableCell>
-                      {profile.primaryOwner ? (
+                      {showSuggestedOwner ? (
+                        <SuggestedOwnerField
+                          profileId={profile.id}
+                          suggestion={suggestions.owner!}
+                          teamUsers={teamUsers}
+                          variant="table"
+                        />
+                      ) : profile.primaryOwner ? (
                         <span className="inline-flex items-center gap-2">
                           <OwnerDot userId={profile.primaryOwner.userId} />
                           <span>{profile.primaryOwner.fullName}</span>

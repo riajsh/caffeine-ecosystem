@@ -5,18 +5,22 @@ import { useState } from "react";
 
 import { updateProfileAction } from "@/app/(app)/profiles/[id]/actions";
 import { ProfileDetailField } from "@/components/profiles/profile-detail-field";
+import { SuggestedCompanyField } from "@/components/profiles/suggested-company-field";
 import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ProfileDetail } from "@/lib/data/profiles";
+import type { CompanySuggestion } from "@/lib/enrichment/company-from-email";
 import { formatLocation } from "@/lib/format/location";
 import { toastSuccess } from "@/lib/toast";
 import { useAsyncAction } from "@/lib/use-async-action";
 
 type EditProfileFormProps = {
   profile: ProfileDetail;
+  enrichMode?: boolean;
+  companySuggestion?: CompanySuggestion | null;
 };
 
 function profileFormState(profile: ProfileDetail) {
@@ -34,7 +38,11 @@ function profileFormState(profile: ProfileDetail) {
   };
 }
 
-export function EditProfileForm({ profile }: EditProfileFormProps) {
+export function EditProfileForm({
+  profile,
+  enrichMode = false,
+  companySuggestion = null,
+}: EditProfileFormProps) {
   const router = useRouter();
   const { alert } = useAppDialog();
   const { isPending, run } = useAsyncAction();
@@ -75,10 +83,20 @@ export function EditProfileForm({ profile }: EditProfileFormProps) {
           />
           <ProfileDetailField label="Email" value={profile.email} />
           <ProfileDetailField label="Phone" value={profile.phone} />
-          <ProfileDetailField
-            label="Company"
-            value={profile.organisationName}
-          />
+          {enrichMode &&
+          companySuggestion &&
+          !profile.organisationName?.trim() ? (
+            <SuggestedCompanyField
+              profileId={profile.id}
+              suggestion={companySuggestion}
+              variant="detail"
+            />
+          ) : (
+            <ProfileDetailField
+              label="Company"
+              value={profile.organisationName}
+            />
+          )}
           <ProfileDetailField label="Occupation" value={profile.occupation} />
           <ProfileDetailField label="Location" value={location} />
           <ProfileDetailField label="LinkedIn" value={profile.linkedinUrl} />

@@ -3,9 +3,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { CompanySuggestion } from "@/lib/enrichment/company-from-email";
+import { resolveCompanySuggestionForEmail } from "@/lib/enrichment/company-from-email";
 import {
   getCompanySuggestionForEmail,
+  loadPeerOrganisationNamesIndex,
+  peerOrganisationNamesForDomain,
 } from "@/lib/enrichment/company-enrichment";
+import { workEmailDomain } from "@/lib/integrations/calendar/company-suggestions";
 import {
   getOwnerSuggestionForEmail,
   getOwnerSuggestionForProfile,
@@ -85,4 +89,74 @@ export async function getEmailEnrichmentSuggestions(
   const orgId = await getOrgId();
   const supabase = await createClient();
   return getEmailEnrichmentSuggestionsForOrg(supabase, orgId, email);
+}
+
+export type ProfileEnrichmentBatchInput = {
+  id: string;
+  email: string | null;
+  organisationName: string | null;
+  hasOwner: boolean;
+};
+
+export async function getProfileEnrichmentSuggestionsBatch(
+  profiles: ProfileEnrichmentBatchInput[],
+): Promise<Map<string, ProfileEnrichmentSuggestions>> {
+  const result = new Map<string, ProfileEnrichmentSuggestions>();
+
+  for (const profile of profiles) {
+    result.set(profile.id, { company: null, owner: null });
+  }
+
+  if (profiles.length === 0) {
+    return result;
+  }
+
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+  const [filters, peerIndex] = await Promise.all([
+    loadOrgParticipantFilters(supabase, orgId),
+    loadPeerOrganisationNamesIndex(supabase, orgId),
+  ]);
+
+  for (const profile of profiles) {
+    if (profile.organisationName?.trim() || !profile.email) {
+      continue;
+    }
+
+    if (isInternalParticipant(profile.email, filters)) {
+      continue;
+    }
+
+    const domain = workEmailDomain(profile.email);
+    if (!domain) {
+      continue;
+    }
+
+    const company = resolveCompanySuggestionForEmail(
+      profile.email,
+      peerOrganisationNamesForDomain(peerIndex, domain),
+    );
+
+    if (company) {
+      result.get(profile.id)!.company = company;
+    }
+  }
+
+  const ownerCandidates = profiles.filter((profile) => !profile.hasOwner);
+
+  await Promise.all(
+    ownerCandidates.map(async (profile) => {
+      const owner = await getOwnerSuggestionForProfile(
+        supabase,
+        orgId,
+        profile.id,
+      );
+
+      if (owner) {
+        result.get(profile.id)!.owner = owner;
+      }
+    }),
+  );
+
+  return result;
 }

@@ -46,6 +46,7 @@ type ProfilesListFiltersProps = {
   activeComplete?: ProfileCompleteness;
   activeSort?: ProfileSortKey;
   activeOrder?: SortOrder;
+  activeEnrich?: boolean;
 };
 
 function buildProfilesHref(options: {
@@ -57,6 +58,7 @@ function buildProfilesHref(options: {
   complete?: ProfileCompleteness;
   sort?: ProfileSortKey;
   order?: SortOrder;
+  enrich?: boolean;
 }) {
   const params = new URLSearchParams();
   if (options.tag) {
@@ -76,6 +78,9 @@ function buildProfilesHref(options: {
   }
   if (options.complete) {
     params.set("complete", options.complete);
+  }
+  if (options.enrich) {
+    params.set("enrich", "1");
   }
   if (options.sort && options.sort !== "name") {
     params.set("sort", options.sort);
@@ -99,6 +104,7 @@ export function ProfilesListFilters({
   activeComplete,
   activeSort = "name",
   activeOrder = "asc",
+  activeEnrich = false,
 }: ProfilesListFiltersProps) {
   const preserved = {
     tag: activeTagId,
@@ -107,6 +113,7 @@ export function ProfilesListFilters({
     complete: activeComplete,
     sort: activeSort,
     order: activeOrder,
+    enrich: activeEnrich,
   };
   const hasFilters =
     activeOwnerId ||

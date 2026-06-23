@@ -16,6 +16,7 @@ type ProfilesTagFilterProps = {
   activeComplete?: ProfileCompleteness;
   activeSort?: ProfileSortKey;
   activeOrder?: SortOrder;
+  activeEnrich?: boolean;
 };
 
 function buildTagHref(
@@ -28,6 +29,7 @@ function buildTagHref(
     complete?: ProfileCompleteness;
     sort?: ProfileSortKey;
     order?: SortOrder;
+    enrich?: boolean;
   },
 ) {
   const params = new URLSearchParams();
@@ -49,6 +51,9 @@ function buildTagHref(
   if (options?.complete) {
     params.set("complete", options.complete);
   }
+  if (options?.enrich) {
+    params.set("enrich", "1");
+  }
   if (options?.sort && options.sort !== "name") {
     params.set("sort", options.sort);
   }
@@ -69,6 +74,7 @@ export function ProfilesTagFilter({
   activeComplete,
   activeSort = "name",
   activeOrder = "asc",
+  activeEnrich = false,
 }: ProfilesTagFilterProps) {
   const filterOptions = {
     owner: activeOwnerId,
@@ -78,6 +84,7 @@ export function ProfilesTagFilter({
     complete: activeComplete,
     sort: activeSort,
     order: activeOrder,
+    enrich: activeEnrich,
   };
 
   if (tags.length === 0) {

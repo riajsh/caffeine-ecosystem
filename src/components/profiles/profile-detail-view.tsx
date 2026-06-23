@@ -23,6 +23,7 @@ type ProfileDetailViewProps = {
   orgTags: OrgTag[];
   networkIntel: ProfileNetworkIntel;
   enrichmentSuggestions?: ProfileEnrichmentSuggestionsData;
+  enrichMode?: boolean;
   currentUserId: string;
   defaultTab?: ProfileTab;
   mode?: "page" | "drawer";
@@ -38,6 +39,7 @@ export function ProfileDetailView({
   orgTags,
   networkIntel,
   enrichmentSuggestions,
+  enrichMode = false,
   currentUserId,
   defaultTab,
   mode = "page",
@@ -48,7 +50,7 @@ export function ProfileDetailView({
 
       <ProfileNetworkIntelligence profileId={profile.id} intel={networkIntel} />
 
-      {enrichmentSuggestions ? (
+      {enrichmentSuggestions && !enrichMode ? (
         <ProfileEnrichmentSuggestions
           profileId={profile.id}
           suggestions={enrichmentSuggestions}
@@ -57,7 +59,11 @@ export function ProfileDetailView({
 
       <section className="space-y-3">
         <h2 className="text-heading font-medium text-foreground">Details</h2>
-        <EditProfileForm profile={profile} />
+        <EditProfileForm
+          profile={profile}
+          enrichMode={enrichMode}
+          companySuggestion={enrichmentSuggestions?.company ?? null}
+        />
       </section>
 
       <section className="space-y-3">
@@ -71,6 +77,8 @@ export function ProfileDetailView({
           profileId={profile.id}
           owners={profile.owners}
           teamUsers={teamUsers}
+          enrichMode={enrichMode}
+          ownerSuggestion={enrichmentSuggestions?.owner ?? null}
         />
       </section>
 

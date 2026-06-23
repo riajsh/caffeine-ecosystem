@@ -7,11 +7,18 @@ import { PageHeader } from "@/components/app-shell/page-header";
 import { ProfileDetailView } from "@/components/profiles/profile-detail-view";
 import { ProfileDrawer } from "@/components/profiles/profile-drawer";
 import { ProfilesListFilters } from "@/components/profiles/profiles-list-filters";
+import {
+  ProfilesEnrichModeHint,
+  ProfilesEnrichToggle,
+} from "@/components/profiles/profiles-enrich-toggle";
 import { ProfilesTable } from "@/components/profiles/profiles-table";
 import { ProfilesTagFilter } from "@/components/profiles/profiles-tag-filter";
 import { formatCountLabel, ListMeta } from "@/components/ui/list-meta";
 import { Button } from "@/components/ui/button";
-import { getProfileEnrichmentSuggestions } from "@/lib/enrichment/profile-enrichment";
+import {
+  getProfileEnrichmentSuggestions,
+  getProfileEnrichmentSuggestionsBatch,
+} from "@/lib/enrichment/profile-enrichment";
 import { getProfileNetworkIntel } from "@/lib/computed/profile-intelligence";
 import {
   getProfileById,
@@ -23,6 +30,7 @@ import {
 import { listOrgTags } from "@/lib/data/tags";
 import { listOrgUsers } from "@/lib/data/users";
 import { parseProfileCompleteness } from "@/lib/profiles/completeness";
+import { parseEnrichMode } from "@/lib/profiles/enrich-mode";
 import { parseProfileSort, parseSortOrder } from "@/lib/profiles/list-sort";
 import { parseProfileTabOrDefault } from "@/lib/profiles/tab";
 import { requireUser } from "@/lib/auth/session";
@@ -54,6 +62,7 @@ type ProfilesPageProps = {
     sort?: string;
     order?: string;
     page?: string;
+    enrich?: string;
   }>;
 };
 
@@ -67,6 +76,7 @@ function buildListHref(options: {
   sort?: string;
   order?: string;
   page?: number;
+  enrich?: boolean;
 }) {
   const params = new URLSearchParams();
   if (options.tag) params.set("tag", options.tag);
@@ -75,6 +85,7 @@ function buildListHref(options: {
   if (options.company) params.set("company", options.company);
   if (options.city) params.set("city", options.city);
   if (options.complete) params.set("complete", options.complete);
+  if (options.enrich) params.set("enrich", "1");
   if (options.sort && options.sort !== "name") params.set("sort", options.sort);
   if (options.order && options.order !== "asc") params.set("order", options.order);
   if (options.page && options.page > 1) params.set("page", String(options.page));
@@ -91,6 +102,7 @@ function buildCloseHref(options: {
   complete?: string;
   sort?: string;
   order?: string;
+  enrich?: boolean;
 }) {
   const params = new URLSearchParams();
   if (options.tag) params.set("tag", options.tag);
@@ -99,6 +111,7 @@ function buildCloseHref(options: {
   if (options.company) params.set("company", options.company);
   if (options.city) params.set("city", options.city);
   if (options.complete) params.set("complete", options.complete);
+  if (options.enrich) params.set("enrich", "1");
   if (options.sort && options.sort !== "name") params.set("sort", options.sort);
   if (options.order && options.order !== "asc") params.set("order", options.order);
   const query = params.toString();
@@ -118,6 +131,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     sort: sortParam,
     order: orderParam,
     page: pageParam,
+    enrich: enrichParam,
   } = await searchParams;
 
   const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
@@ -125,6 +139,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
   const sort = parseProfileSort(sortParam);
   const order = parseSortOrder(orderParam);
   const complete = parseProfileCompleteness(completeParam);
+  const enrichRequested = parseEnrichMode(enrichParam);
 
   const defaultTab = parseProfileTabOrDefault(tab);
 
@@ -150,6 +165,9 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
   ]);
 
   const ownerUserId = await resolveViewAsOwnerId(ownerParam, currentUser, teamUsers);
+  const enrichMode =
+    enrichRequested && currentUser.role === "admin";
+  const isAdmin = currentUser.role === "admin";
 
   const [{ profiles, total, hasMore }, orgTags, companies, cities] =
     await Promise.all([
@@ -182,7 +200,19 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
     complete: completeParam,
     sort: sortParam,
     order: orderParam,
+    enrich: enrichMode,
   });
+
+  const enrichmentByProfileId = enrichMode
+    ? await getProfileEnrichmentSuggestionsBatch(
+        profiles.map((profile) => ({
+          id: profile.id,
+          email: profile.email,
+          organisationName: profile.organisationName,
+          hasOwner: Boolean(profile.primaryOwner),
+        })),
+      )
+    : null;
 
   let drawerContent = null;
 
@@ -210,6 +240,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
           orgTags={orgTags}
           networkIntel={networkIntel}
           enrichmentSuggestions={enrichmentSuggestions}
+          enrichMode={enrichMode}
           currentUserId={currentUser.id}
           defaultTab={defaultTab}
           mode="drawer"
@@ -225,11 +256,19 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
           title="Profiles"
           description="Everyone the org knows — filterable table view of the relationship spine."
         >
-          <Button asChild>
-            <Link href="/profiles/new">New profile</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin ? (
+              <Suspense fallback={null}>
+                <ProfilesEnrichToggle isActive={enrichMode} />
+              </Suspense>
+            ) : null}
+            <Button asChild>
+              <Link href="/profiles/new">New profile</Link>
+            </Button>
+          </div>
         </PageHeader>
         <div className="shrink-0 space-y-3 border-b border-border px-8 pb-4">
+          {enrichMode ? <ProfilesEnrichModeHint /> : null}
           <ProfilesTagFilter
             tags={orgTags}
             activeTagId={tagId}
@@ -240,6 +279,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
             activeComplete={complete}
             activeSort={sort}
             activeOrder={order}
+            activeEnrich={enrichMode}
           />
           <ProfilesListFilters
             teamUsers={teamUsers}
@@ -253,6 +293,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
             activeComplete={complete}
             activeSort={sort}
             activeOrder={order}
+            activeEnrich={enrichMode}
           />
         </div>
       </div>
@@ -268,7 +309,10 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
             sort={sort}
             order={order}
             hasActiveFilters={hasActiveFilters}
-            canImportDatasets={currentUser.role === "admin"}
+            canImportDatasets={isAdmin}
+            enrichMode={enrichMode}
+            enrichmentByProfileId={enrichmentByProfileId ?? undefined}
+            teamUsers={teamUsers}
           />
         </Suspense>
         {hasMore ? (
@@ -285,6 +329,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
                   sort: sortParam,
                   order: orderParam,
                   page: page + 1,
+                  enrich: enrichMode,
                 })}
               >
                 Load more
