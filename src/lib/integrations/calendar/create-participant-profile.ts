@@ -2,11 +2,31 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { isPostgresUniqueViolation } from "@/lib/integrations/calendar/idempotent-insert";
 import { normaliseEmail } from "@/lib/integrations/participant-email";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
+
+async function findProfileIdByEmail(
+  supabase: AdminClient,
+  orgId: string,
+  email: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("org_id", orgId)
+    .ilike("email", email)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to check existing profile: ${error.message}`);
+  }
+
+  return data?.id ?? null;
+}
 
 export async function createCalendarParticipantProfile(
   supabase: AdminClient,
@@ -22,19 +42,9 @@ export async function createCalendarParticipantProfile(
   const organisationName = params.organisationName?.trim() || null;
   const occupation = params.occupation?.trim() || null;
 
-  const { data: existing, error: existingError } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("org_id", params.orgId)
-    .ilike("email", email)
-    .maybeSingle();
-
-  if (existingError) {
-    throw new Error(`Failed to check existing profile: ${existingError.message}`);
-  }
-
-  if (existing?.id) {
-    return existing.id;
+  const existingId = await findProfileIdByEmail(supabase, params.orgId, email);
+  if (existingId) {
+    return existingId;
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -52,6 +62,13 @@ export async function createCalendarParticipantProfile(
     .single();
 
   if (profileError) {
+    if (isPostgresUniqueViolation(profileError)) {
+      const racedId = await findProfileIdByEmail(supabase, params.orgId, email);
+      if (racedId) {
+        return racedId;
+      }
+    }
+
     throw new Error(`Failed to create profile: ${profileError.message}`);
   }
 
