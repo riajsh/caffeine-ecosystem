@@ -115,6 +115,10 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   const initialQuery = defaultLinkSearchQuery(group);
   const [linkQuery, setLinkQuery] = useState(initialQuery);
   const [linkExpanded, setLinkExpanded] = useState(false);
+  const [fullName, setFullName] = useState(
+    group.displayName?.trim() ||
+      (group.email.split("@")[0] ?? "").replace(/[._+-]/g, " ").trim(),
+  );
   const [organisationName, setOrganisationName] = useState("");
   const [occupation, setOccupation] = useState("");
   const [candidates, setCandidates] = useState<CalendarProfileMatch[]>([]);
@@ -219,10 +223,17 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
             Create new profile
           </p>
           <p className="text-caption text-muted-foreground">
-            Add company and role now if you know them — saves triage later.
+            Add name, company and role now if you know them — saves triage later.
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3">
+          <Input
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            placeholder="Name"
+            aria-label={`Name for ${group.email}`}
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             {group.suggestedCompanies.length > 0 ? (
               <>
@@ -261,6 +272,7 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
             placeholder="Role / title"
             aria-label={`Role for ${group.email}`}
           />
+          </div>
         </div>
       </div>
 
@@ -384,7 +396,7 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
           onClick={() => {
             const formData = new FormData();
             formData.set("email", group.email);
-            formData.set("displayName", group.displayName ?? "");
+            formData.set("displayName", fullName.trim());
             formData.set("organisationName", organisationName);
             formData.set("occupation", occupation);
             runAction(
