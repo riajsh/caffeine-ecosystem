@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth/session";
-import { runCalendarSyncChunk } from "@/lib/integrations/calendar/sync";
+import { runCalendarSyncBurst, DEFAULT_SYNC_BURST_CHUNKS } from "@/lib/integrations/calendar/sync";
 import { syncProgressSummary } from "@/lib/integrations/calendar/sync-progress";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -14,9 +14,13 @@ export async function POST(request: Request) {
   }
 
   let accountId: string | undefined;
+  let burst = DEFAULT_SYNC_BURST_CHUNKS;
   try {
-    const body = (await request.json()) as { accountId?: string };
+    const body = (await request.json()) as { accountId?: string; burst?: number };
     accountId = body.accountId?.trim();
+    if (typeof body.burst === "number" && Number.isFinite(body.burst)) {
+      burst = Math.min(8, Math.max(1, Math.floor(body.burst)));
+    }
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
@@ -46,7 +50,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runCalendarSyncChunk(account);
+    const result = await runCalendarSyncBurst(account, { maxChunks: burst });
 
     return NextResponse.json({
       ok: true,

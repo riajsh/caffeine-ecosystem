@@ -697,6 +697,8 @@ export async function runCalendarSyncChunk(
   }
 
   progress.updated_at = new Date().toISOString();
+  progress.totals.errors = [...new Set(progress.totals.errors)].slice(-3);
+  progress.last_error = progress.totals.errors.at(-1) ?? null;
   const hasMore = syncProgressHasMore(progress);
 
   if (!hasMore) {
@@ -717,6 +719,57 @@ export async function runCalendarSyncChunk(
   });
 
   return { stats: progress.totals, hasMore, progress };
+}
+
+const DEFAULT_SYNC_BURST_CHUNKS = 4;
+const DEFAULT_SYNC_BURST_MS = 240_000;
+
+export { DEFAULT_SYNC_BURST_CHUNKS };
+
+export async function runCalendarSyncBurst(
+  account: CalendarAccount,
+  options: {
+    maxChunks?: number;
+    maxDurationMs?: number;
+  } = {},
+): Promise<CalendarSyncRunResult> {
+  const supabase = createAdminClient();
+  const maxChunks = options.maxChunks ?? DEFAULT_SYNC_BURST_CHUNKS;
+  const deadline = Date.now() + (options.maxDurationMs ?? DEFAULT_SYNC_BURST_MS);
+  let currentAccount = account;
+  let lastResult: CalendarSyncRunResult = {
+    stats: emptyStats(),
+    hasMore: false,
+    progress: null,
+  };
+
+  for (let index = 0; index < maxChunks; index += 1) {
+    if (Date.now() >= deadline) {
+      break;
+    }
+
+    lastResult = await runCalendarSyncChunk(currentAccount);
+    if (!lastResult.hasMore || lastResult.progress?.totals.rateLimited) {
+      break;
+    }
+
+    const { data, error } = await supabase
+      .from("calendar_accounts")
+      .select(
+        "id, org_id, email, refresh_token, sync_cursor, metadata, last_sync_at",
+      )
+      .eq("id", account.id)
+      .eq("org_id", account.org_id)
+      .maybeSingle();
+
+    if (error || !data) {
+      break;
+    }
+
+    currentAccount = data;
+  }
+
+  return lastResult;
 }
 
 export async function syncCalendarAccountIncremental(
@@ -886,7 +939,7 @@ export async function syncAllCalendarAccounts(): Promise<{
       metadata.needs_backfill === true;
 
     if (hasActiveChunk) {
-      const result = await runCalendarSyncChunk(account);
+      const result = await runCalendarSyncBurst(account, { maxChunks: 8 });
       mergeStats(aggregate, result.stats);
       if (result.hasMore) {
         chunksRemaining += 1;

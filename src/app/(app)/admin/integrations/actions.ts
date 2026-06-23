@@ -15,7 +15,7 @@ import {
   parseCalendarAccountMetadata,
 } from "@/lib/integrations/calendar/sync-cursors";
 import {
-  runCalendarSyncChunk,
+  runCalendarSyncBurst,
   syncAllCalendarAccounts,
   syncCalendarAccount,
 } from "@/lib/integrations/calendar/sync";
@@ -129,7 +129,7 @@ export async function runCalendarBackfillContinueAction(accountId: string) {
       return { error: "Calendar account not found or disabled" };
     }
 
-    const result = await runCalendarSyncChunk(account);
+    const result = await runCalendarSyncBurst(account);
 
     revalidatePath("/admin");
     revalidatePath("/admin/calendar-sync/review");

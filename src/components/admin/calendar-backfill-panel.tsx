@@ -74,7 +74,7 @@ async function fetchSyncChunk(accountId: string): Promise<ChunkResponse> {
   const response = await fetch("/api/admin/calendar-sync/chunk", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accountId }),
+    body: JSON.stringify({ accountId, burst: 4 }),
   });
 
   const payload = (await response.json()) as ChunkResponse;
@@ -211,7 +211,7 @@ export function CalendarBackfillPanel({
       while (hasMore) {
         hasMore = await runNextChunk();
         if (hasMore) {
-          await sleep(400);
+          await sleep(200);
         }
       }
 
@@ -255,6 +255,18 @@ export function CalendarBackfillPanel({
 
     return () => window.clearInterval(interval);
   }, [syncing, refreshProgress]);
+
+  useEffect(() => {
+    if (!syncing || isDraining) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void drainBackfill();
+    }, 20_000);
+
+    return () => window.clearInterval(timer);
+  }, [syncing, isDraining, drainBackfill]);
 
   const showResume = initialSyncing || syncing;
 
