@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  loadCalendarSyncCursors,
+  parseCalendarAccountMetadata,
+} from "@/lib/integrations/calendar/sync-cursors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getOrgId, requireUser } from "@/lib/auth/session";
@@ -10,6 +14,7 @@ export type CalendarAccountSummary = {
   syncEnabled: boolean;
   lastSyncAt: string | null;
   syncStatus: string;
+  backfillPending: boolean;
   userId: string;
   userName: string | null;
 };
@@ -17,7 +22,12 @@ export type CalendarAccountSummary = {
 function formatSyncStatus(
   lastSyncAt: string | null,
   metadata: unknown,
+  backfillPending: boolean,
 ): string {
+  if (backfillPending) {
+    return "Backfill pending — run calendar sync";
+  }
+
   if (
     metadata &&
     typeof metadata === "object" &&
@@ -46,6 +56,7 @@ export async function listCalendarAccountsForOrg(): Promise<CalendarAccountSumma
       email,
       sync_enabled,
       last_sync_at,
+      sync_cursor,
       metadata,
       user_id,
       users (
@@ -60,15 +71,25 @@ export async function listCalendarAccountsForOrg(): Promise<CalendarAccountSumma
     throw new Error(`Failed to list calendar accounts: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    email: row.email,
-    syncEnabled: row.sync_enabled,
-    lastSyncAt: row.last_sync_at,
-    syncStatus: formatSyncStatus(row.last_sync_at, row.metadata),
-    userId: row.user_id,
-    userName: row.users?.full_name ?? null,
-  }));
+  return (data ?? []).map((row) => {
+    const metadata = parseCalendarAccountMetadata(row.metadata);
+    const cursors = loadCalendarSyncCursors(row.metadata, row.sync_cursor);
+    const backfillPending =
+      row.sync_enabled &&
+      (metadata.needs_backfill === true ||
+        (row.sync_cursor === null && Object.keys(cursors).length === 0));
+
+    return {
+      id: row.id,
+      email: row.email,
+      syncEnabled: row.sync_enabled,
+      lastSyncAt: row.last_sync_at,
+      backfillPending,
+      syncStatus: formatSyncStatus(row.last_sync_at, row.metadata, backfillPending),
+      userId: row.user_id,
+      userName: row.users?.full_name ?? null,
+    };
+  });
 }
 
 export async function getCurrentUserCalendarAccount(): Promise<CalendarAccountSummary | null> {
@@ -95,7 +116,8 @@ export async function getCurrentUserCalendarAccount(): Promise<CalendarAccountSu
     email: data.email,
     syncEnabled: data.sync_enabled,
     lastSyncAt: data.last_sync_at,
-    syncStatus: formatSyncStatus(data.last_sync_at, null),
+    backfillPending: false,
+    syncStatus: formatSyncStatus(data.last_sync_at, null, false),
     userId: data.user_id,
     userName: user.full_name,
   };

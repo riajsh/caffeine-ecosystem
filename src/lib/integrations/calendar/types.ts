@@ -7,6 +7,8 @@ export type CalendarParticipant = {
 
 export type ParsedCalendarEvent = {
   googleEventId: string;
+  icalUid: string | null;
+  sourceCalendarId: string;
   title: string | null;
   description: string | null;
   participants: CalendarParticipant[];
@@ -17,6 +19,8 @@ export type ParsedCalendarEvent = {
 
 export type CalendarSyncStats = {
   eventsProcessed: number;
+  eventsSkippedDuplicate: number;
+  calendarsSynced: number;
   activitiesCreated: number;
   reviewsQueued: number;
   profilesAutoCreated: number;

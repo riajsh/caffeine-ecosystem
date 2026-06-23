@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       activities: {
@@ -170,10 +195,12 @@ export type Database = {
           description: string | null
           end_at: string | null
           google_event_id: string
+          ical_uid: string | null
           id: string
           is_deleted: boolean
           org_id: string
           participants: Json
+          source_calendar_id: string | null
           start_at: string | null
           title: string | null
           updated_at: string
@@ -184,10 +211,12 @@ export type Database = {
           description?: string | null
           end_at?: string | null
           google_event_id: string
+          ical_uid?: string | null
           id?: string
           is_deleted?: boolean
           org_id: string
           participants?: Json
+          source_calendar_id?: string | null
           start_at?: string | null
           title?: string | null
           updated_at?: string
@@ -198,10 +227,12 @@ export type Database = {
           description?: string | null
           end_at?: string | null
           google_event_id?: string
+          ical_uid?: string | null
           id?: string
           is_deleted?: boolean
           org_id?: string
           participants?: Json
+          source_calendar_id?: string | null
           start_at?: string | null
           title?: string | null
           updated_at?: string
@@ -1526,6 +1557,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       activity_source: [

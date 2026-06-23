@@ -22,6 +22,8 @@ Ecosystem owns this entirely (ADR 0007 pattern). Separate OAuth client and token
 
 - Multiple connected calendar accounts (`calendar_accounts`)
 - Incremental sync via Google Calendar `nextSyncToken`
+- **Multi-calendar sync:** primary plus subscribed `@previously.co` calendars and PU room resources (`CALENDAR_SYNC_DOMAINS` / `ORG_INTERNAL_EMAIL_DOMAINS`); per-calendar tokens in `calendar_accounts.metadata.sync_cursors`
+- Cross-calendar dedup on `(org_id, ical_uid, start_at)`; activities keyed by iCalUID occurrence
 - Initial backfill: **12 months back**, **3 months forward**
 - Ongoing cron keeps the forward window rolling; events beyond lookahead are skipped and purged
 - External participant → profile matching by `lower(email)`
@@ -41,7 +43,6 @@ Ecosystem owns this entirely (ADR 0007 pattern). Separate OAuth client and token
 - Calendar write (create/update events from Ecosystem)
 - Auto-inferred profile-to-profile connections from co-attendance (Phase 2 / Agent 1 per ADR 0009)
 - AI meeting notes (Phase 3)
-- Sync of non-primary calendars (V1: `calendarId: "primary"` only)
 - Recurring event expansion beyond Google's `singleEvents: true` behaviour
 
 ---

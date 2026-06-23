@@ -119,15 +119,27 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           Google Calendar
         </h2>
         <p className="max-w-2xl text-body text-muted-foreground">
-          Connect a Google Calendar account to sync meetings with external
-          participants. Matched attendees become meeting activities on profile
-          timelines; unmatched emails go to a review queue.
+          Connect a Google Calendar account to sync your primary calendar plus
+          subscribed @previously.co calendars and PU room bookings. Matched
+          external attendees become meeting activities; unmatched emails go to
+          review.
         </p>
         <AutomationTierReference variant="compact" />
         {(params.calendar_connected ?? params.connected) ? (
           <p className="text-body text-foreground">
-            Connected {params.calendar_connected ?? params.connected}. Initial
-            sync is running in the background.
+            Connected {params.calendar_connected ?? params.connected}. Run
+            calendar sync below to start the backfill.
+          </p>
+        ) : null}
+        {calendarAccounts.some((account) => account.backfillPending) ? (
+          <p className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-body text-foreground">
+            Backfill is queued for{" "}
+            {calendarAccounts
+              .filter((account) => account.backfillPending)
+              .map((account) => account.email)
+              .join(", ")}
+            . Click Run calendar sync now to pull subscribed PU calendars from
+            Jun 2025 through the next six weeks.
           </p>
         ) : null}
         {params.calendar_error ? (
@@ -151,6 +163,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                 email={account.email}
                 userName={account.userName}
                 syncStatus={account.syncStatus}
+                backfillPending={account.backfillPending}
                 syncEnabled={account.syncEnabled}
                 isCurrentUser={account.userId === user.id}
               />

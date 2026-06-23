@@ -292,8 +292,8 @@ Raw calendar data from Google Calendar sync (ADR 0008). Same org-scoped, idempot
 | refresh_token | text | encrypted; server-side only |
 | sync_enabled | boolean | admin or owner can pause without disconnecting |
 | last_sync_at | timestamptz | |
-| sync_cursor | text | Google Calendar nextSyncToken for incremental sync |
-| metadata | jsonb | last sync run stats |
+| sync_cursor | text | Legacy primary-calendar token; per-calendar tokens in `metadata.sync_cursors` |
+| metadata | jsonb | sync run stats, `sync_cursors`, `needs_backfill` |
 
 Constraint: `unique(org_id, email)`.
 
@@ -303,6 +303,8 @@ Constraint: `unique(org_id, email)`.
 |---|---|---|
 | google_event_id | text | unique per org |
 | calendar_account_id | uuid | references calendar_accounts |
+| ical_uid | text | nullable; Google iCalUID for cross-calendar dedup |
+| source_calendar_id | text | nullable; calendarList id this copy came from |
 | title | text | |
 | description | text | |
 | participants | jsonb | array of `{email, name, responseStatus, organizer}` |

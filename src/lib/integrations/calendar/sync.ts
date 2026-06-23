@@ -4,10 +4,11 @@ import { GaxiosError } from "gaxios";
 import type { calendar_v3 } from "googleapis";
 
 import { autoResolveEligibleCalendarReviews } from "@/lib/integrations/calendar/auto-resolve-reviews";
+import { listSyncableCalendars } from "@/lib/integrations/calendar/calendar-list";
 import { getCalendarClient } from "@/lib/integrations/calendar/client";
 import { removeCalendarEventDerivedData } from "@/lib/integrations/calendar/cleanup-event";
 import {
-  CALENDAR_BACKFILL_MONTHS,
+  calendarBackfillTimeMin,
   calendarLookaheadCutoff,
   isBeyondCalendarLookahead,
 } from "@/lib/integrations/calendar/env";
@@ -17,10 +18,21 @@ import {
   processCalendarParticipants,
   type OrgProfileByEmail,
 } from "@/lib/integrations/calendar/match";
+import { calendarOccurrenceKey } from "@/lib/integrations/calendar/occurrence";
 import { loadOrgParticipantFilters } from "@/lib/integrations/participant-email";
-import { loadIgnoredParticipantEmails, loadOrgRelationshipsByProfileId } from "@/lib/integrations/calendar/review-utils";
+import {
+  loadIgnoredParticipantEmails,
+  loadOrgRelationshipsByProfileId,
+} from "@/lib/integrations/calendar/review-utils";
 import { purgeBeyondLookaheadCalendarData } from "@/lib/integrations/calendar/purge-beyond-lookahead";
 import { purgeInternalCalendarSyncData } from "@/lib/integrations/calendar/purge-internal";
+import {
+  loadCalendarSyncCursors,
+  parseCalendarAccountMetadata,
+  resolvePrimarySyncCursor,
+  type CalendarAccountMetadata,
+  type CalendarSyncCursors,
+} from "@/lib/integrations/calendar/sync-cursors";
 import type {
   CalendarParticipant,
   CalendarSyncStats,
@@ -35,7 +47,33 @@ type CalendarAccount = {
   email: string;
   refresh_token: string;
   sync_cursor: string | null;
+  metadata: Json | null;
 };
+
+function emptyStats(): CalendarSyncStats {
+  return {
+    eventsProcessed: 0,
+    eventsSkippedDuplicate: 0,
+    calendarsSynced: 0,
+    activitiesCreated: 0,
+    reviewsQueued: 0,
+    profilesAutoCreated: 0,
+    errors: [],
+  };
+}
+
+function mergeStats(into: CalendarSyncStats, from: CalendarSyncStats): void {
+  into.eventsProcessed += from.eventsProcessed;
+  into.eventsSkippedDuplicate += from.eventsSkippedDuplicate;
+  into.calendarsSynced += from.calendarsSynced;
+  into.activitiesCreated += from.activitiesCreated;
+  into.reviewsQueued += from.reviewsQueued;
+  into.profilesAutoCreated += from.profilesAutoCreated;
+  into.errors.push(...from.errors);
+  if (from.rateLimited) {
+    into.rateLimited = true;
+  }
+}
 
 function parseEventDate(
   value: calendar_v3.Schema$EventDateTime | null | undefined,
@@ -63,8 +101,6 @@ function parseParticipants(event: calendar_v3.Schema$Event): CalendarParticipant
     participants.set(organizerEmail, {
       email: organizerEmail,
       name: event.organizer?.displayName ?? null,
-      // self: true = PU team member is the organiser (accepted by definition).
-      // self: false = external organiser; actual status comes from attendees array.
       responseStatus: event.organizer?.self ? "accepted" : "needsAction",
       organizer: true,
     });
@@ -87,7 +123,10 @@ function parseParticipants(event: calendar_v3.Schema$Event): CalendarParticipant
   return [...participants.values()];
 }
 
-function parseGoogleEvent(event: calendar_v3.Schema$Event): ParsedCalendarEvent | null {
+function parseGoogleEvent(
+  event: calendar_v3.Schema$Event,
+  sourceCalendarId: string,
+): ParsedCalendarEvent | null {
   const googleEventId = event.id;
   if (!googleEventId) {
     return null;
@@ -95,6 +134,8 @@ function parseGoogleEvent(event: calendar_v3.Schema$Event): ParsedCalendarEvent 
 
   return {
     googleEventId,
+    icalUid: event.iCalUID?.trim() ?? null,
+    sourceCalendarId,
     title: event.summary ?? null,
     description: event.description ?? null,
     participants: parseParticipants(event),
@@ -104,14 +145,29 @@ function parseGoogleEvent(event: calendar_v3.Schema$Event): ParsedCalendarEvent 
   };
 }
 
-function backfillTimeMin(): string {
-  const date = new Date();
-  date.setMonth(date.getMonth() - CALENDAR_BACKFILL_MONTHS);
-  return date.toISOString();
-}
-
 function backfillTimeMax(): string {
   return calendarLookaheadCutoff().toISOString();
+}
+
+async function findExistingOccurrenceEvent(
+  supabase: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  icalUid: string,
+  startAt: string,
+): Promise<{ id: string; google_event_id: string } | null> {
+  const { data, error } = await supabase
+    .from("calendar_events")
+    .select("id, google_event_id")
+    .eq("org_id", orgId)
+    .eq("ical_uid", icalUid)
+    .eq("start_at", startAt)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to lookup calendar occurrence: ${error.message}`);
+  }
+
+  return data;
 }
 
 async function upsertCalendarEvent(
@@ -128,17 +184,70 @@ async function upsertCalendarEvent(
   activitiesCreated: number;
   reviewsQueued: number;
   profilesAutoCreated: number;
+  skippedDuplicate: boolean;
 }> {
+  const occurrenceKey = calendarOccurrenceKey(parsed.icalUid, parsed.startAt);
+
+  if (occurrenceKey && parsed.icalUid && parsed.startAt) {
+    const existing = await findExistingOccurrenceEvent(
+      supabase,
+      account.org_id,
+      parsed.icalUid,
+      parsed.startAt,
+    );
+
+    if (existing) {
+      if (parsed.isDeleted) {
+        const { error: tombstoneError } = await supabase
+          .from("calendar_events")
+          .update({ is_deleted: true })
+          .eq("id", existing.id)
+          .eq("org_id", account.org_id);
+
+        if (tombstoneError) {
+          throw new Error(
+            `Failed to tombstone duplicate occurrence: ${tombstoneError.message}`,
+          );
+        }
+
+        await removeCalendarEventDerivedData(
+          supabase,
+          account.org_id,
+          existing.id,
+          existing.google_event_id,
+          parsed.icalUid,
+          parsed.startAt,
+        );
+      }
+
+      return {
+        activitiesCreated: 0,
+        reviewsQueued: 0,
+        profilesAutoCreated: 0,
+        skippedDuplicate: true,
+      };
+    }
+  }
 
   if (
     !parsed.isDeleted &&
     !hasExternalParticipant(parsed.participants, participantFilters)
   ) {
-    return { activitiesCreated: 0, reviewsQueued: 0, profilesAutoCreated: 0 };
+    return {
+      activitiesCreated: 0,
+      reviewsQueued: 0,
+      profilesAutoCreated: 0,
+      skippedDuplicate: false,
+    };
   }
 
   if (!parsed.isDeleted && isBeyondCalendarLookahead(parsed.startAt)) {
-    return { activitiesCreated: 0, reviewsQueued: 0, profilesAutoCreated: 0 };
+    return {
+      activitiesCreated: 0,
+      reviewsQueued: 0,
+      profilesAutoCreated: 0,
+      skippedDuplicate: false,
+    };
   }
 
   const { data: eventRow, error: eventError } = await supabase
@@ -148,6 +257,8 @@ async function upsertCalendarEvent(
         org_id: account.org_id,
         google_event_id: parsed.googleEventId,
         calendar_account_id: account.id,
+        ical_uid: parsed.icalUid,
+        source_calendar_id: parsed.sourceCalendarId,
         title: parsed.title,
         description: parsed.description,
         participants: parsed.participants as unknown as Json,
@@ -170,38 +281,158 @@ async function upsertCalendarEvent(
       account.org_id,
       eventRow.id,
       parsed.googleEventId,
+      parsed.icalUid,
+      parsed.startAt,
     );
-    return { activitiesCreated: 0, reviewsQueued: 0, profilesAutoCreated: 0 };
+    return {
+      activitiesCreated: 0,
+      reviewsQueued: 0,
+      profilesAutoCreated: 0,
+      skippedDuplicate: false,
+    };
   }
 
-  return processCalendarParticipants(supabase, {
+  const result = await processCalendarParticipants(supabase, {
     orgId: account.org_id,
     eventId: eventRow.id,
     googleEventId: parsed.googleEventId,
-    title: parsed.title,
+    icalUid: parsed.icalUid,
     startAt: parsed.startAt,
+    title: parsed.title,
     participants: parsed.participants,
     participantFilters,
     ignoredParticipantEmails,
     profilesByEmail,
     relationshipsByProfileId,
   });
+
+  return { ...result, skippedDuplicate: false };
+}
+
+async function syncCalendarFeed(
+  calendar: calendar_v3.Calendar,
+  params: {
+    calendarId: string;
+    syncToken: string | undefined;
+    account: CalendarAccount;
+    supabase: ReturnType<typeof createAdminClient>;
+    participantFilters: Awaited<ReturnType<typeof loadOrgParticipantFilters>>;
+    ignoredParticipantEmails: ReadonlySet<string>;
+    profilesByEmail: OrgProfileByEmail;
+    relationshipsByProfileId: Awaited<
+      ReturnType<typeof loadOrgRelationshipsByProfileId>
+    >;
+  },
+): Promise<{ stats: CalendarSyncStats; nextSyncToken: string | undefined }> {
+  const stats = emptyStats();
+  let pageToken: string | undefined;
+  let nextSyncToken: string | undefined;
+
+  do {
+    const response = await calendar.events.list({
+      calendarId: params.calendarId,
+      singleEvents: true,
+      showDeleted: true,
+      maxResults: 250,
+      pageToken,
+      syncToken: params.syncToken,
+      timeMin: params.syncToken ? undefined : calendarBackfillTimeMin(),
+      timeMax: params.syncToken ? undefined : backfillTimeMax(),
+    });
+
+    for (const item of response.data.items ?? []) {
+      try {
+        const parsed = parseGoogleEvent(item, params.calendarId);
+        if (!parsed) {
+          continue;
+        }
+
+        const result = await upsertCalendarEvent(
+          params.supabase,
+          params.account,
+          parsed,
+          params.participantFilters,
+          params.ignoredParticipantEmails,
+          params.profilesByEmail,
+          params.relationshipsByProfileId,
+        );
+
+        if (result.skippedDuplicate) {
+          stats.eventsSkippedDuplicate += 1;
+        } else {
+          stats.eventsProcessed += 1;
+        }
+
+        stats.activitiesCreated += result.activitiesCreated;
+        stats.reviewsQueued += result.reviewsQueued;
+        stats.profilesAutoCreated += result.profilesAutoCreated;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown event sync error";
+        stats.errors.push(`${params.calendarId}: ${message}`);
+      }
+    }
+
+    pageToken = response.data.nextPageToken ?? undefined;
+    nextSyncToken = response.data.nextSyncToken ?? nextSyncToken;
+  } while (pageToken);
+
+  stats.calendarsSynced = 1;
+  return { stats, nextSyncToken };
+}
+
+async function persistAccountSyncState(
+  supabase: ReturnType<typeof createAdminClient>,
+  account: CalendarAccount,
+  params: {
+    syncCursors: CalendarSyncCursors;
+    stats: CalendarSyncStats;
+    existingMetadata: ReturnType<typeof parseCalendarAccountMetadata>;
+  },
+): Promise<void> {
+  const metadata: CalendarAccountMetadata = {
+    ...params.existingMetadata,
+    syncing: false,
+    needs_backfill: false,
+    sync_cursors: params.syncCursors,
+    last_run: {
+      at: new Date().toISOString(),
+      stats: params.stats,
+      calendars_synced: params.stats.calendarsSynced,
+      ...(params.stats.errors.length > 0
+        ? { error: params.stats.errors[params.stats.errors.length - 1] }
+        : {}),
+    },
+  };
+
+  await supabase
+    .from("calendar_accounts")
+    .update({
+      last_sync_at: new Date().toISOString(),
+      sync_cursor: resolvePrimarySyncCursor(params.syncCursors, account.email),
+      metadata: metadata as unknown as Json,
+    })
+    .eq("id", account.id)
+    .eq("org_id", account.org_id);
 }
 
 export async function syncCalendarAccount(
   account: CalendarAccount,
-  isTokenRetry = false,
+  options: { clearedCalendarId?: string } = {},
 ): Promise<CalendarSyncStats> {
-  const stats: CalendarSyncStats = {
-    eventsProcessed: 0,
-    activitiesCreated: 0,
-    reviewsQueued: 0,
-    profilesAutoCreated: 0,
-    errors: [],
-  };
+  const stats = emptyStats();
 
   const supabase = createAdminClient();
   const calendar = getCalendarClient(account);
+  const existingMetadata = parseCalendarAccountMetadata(account.metadata);
+  let syncCursors = loadCalendarSyncCursors(account.metadata, account.sync_cursor);
+
+  if (options.clearedCalendarId) {
+    delete syncCursors[options.clearedCalendarId];
+  } else if (existingMetadata.needs_backfill) {
+    syncCursors = {};
+  }
+
   const participantFilters = await loadOrgParticipantFilters(
     supabase,
     account.org_id,
@@ -216,72 +447,90 @@ export async function syncCalendarAccount(
     account.org_id,
   );
 
-  let pageToken: string | undefined;
-  let nextSyncToken: string | undefined;
-  const syncToken = account.sync_cursor ?? undefined;
-  let retryingAfterInvalidToken = false;
-
   try {
-    // Set syncing flag and run purges inside the try so the finally block
-    // always resets syncing: false even if these steps throw (#4).
-    if (!isTokenRetry) {
-      await supabase
-        .from("calendar_accounts")
-        .update({
-          metadata: {
-            syncing: true,
-            started_at: new Date().toISOString(),
-          },
-        })
-        .eq("id", account.id)
-        .eq("org_id", account.org_id);
-    }
+    await supabase
+      .from("calendar_accounts")
+      .update({
+        metadata: {
+          ...existingMetadata,
+          syncing: true,
+          started_at: new Date().toISOString(),
+        } as unknown as Json,
+      })
+      .eq("id", account.id)
+      .eq("org_id", account.org_id);
 
     await purgeInternalCalendarSyncData(supabase, account.org_id, participantFilters);
     await purgeBeyondLookaheadCalendarData(supabase, account.org_id);
 
-    do {
-      const response = await calendar.events.list({
-        calendarId: "primary",
-        singleEvents: true,
-        showDeleted: true,
-        maxResults: 250,
-        pageToken,
-        syncToken,
-        timeMin: syncToken ? undefined : backfillTimeMin(),
-        timeMax: syncToken ? undefined : backfillTimeMax(),
-      });
+    const syncableCalendars = await listSyncableCalendars(calendar, account.email);
 
-      for (const item of response.data.items ?? []) {
-        try {
-          const parsed = parseGoogleEvent(item);
-          if (!parsed) {
-            continue;
-          }
+    for (const syncable of syncableCalendars) {
+      const syncToken = syncCursors[syncable.id] || undefined;
 
-          const result = await upsertCalendarEvent(
-            supabase,
-            account,
-            parsed,
-            participantFilters,
-            ignoredParticipantEmails,
-            profilesByEmail,
-            relationshipsByProfileId,
-          );
-          stats.eventsProcessed += 1;
-          stats.activitiesCreated += result.activitiesCreated;
-          stats.reviewsQueued += result.reviewsQueued;
-          stats.profilesAutoCreated += result.profilesAutoCreated;
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Unknown event sync error";
-          stats.errors.push(message);
+      try {
+        const feedResult = await syncCalendarFeed(calendar, {
+          calendarId: syncable.id,
+          syncToken,
+          account,
+          supabase,
+          participantFilters,
+          ignoredParticipantEmails,
+          profilesByEmail,
+          relationshipsByProfileId,
+        });
+
+        mergeStats(stats, feedResult.stats);
+
+        if (feedResult.nextSyncToken) {
+          syncCursors[syncable.id] = feedResult.nextSyncToken;
         }
-      }
+      } catch (error) {
+        if (error instanceof GaxiosError && error.response?.status === 429) {
+          stats.errors.push(
+            `Rate limited on ${syncable.id} — will retry on next run`,
+          );
+          stats.rateLimited = true;
+          break;
+        }
 
-      pageToken = response.data.nextPageToken ?? undefined;
-      nextSyncToken = response.data.nextSyncToken ?? nextSyncToken;
-    } while (pageToken);
+        const message =
+          error instanceof Error ? error.message : "Calendar sync request failed";
+
+        const isExpiredToken =
+          (error instanceof GaxiosError && error.response?.status === 410) ||
+          message.includes("Sync token is no longer valid");
+
+        if (isExpiredToken) {
+          delete syncCursors[syncable.id];
+          try {
+            const retryResult = await syncCalendarFeed(calendar, {
+              calendarId: syncable.id,
+              syncToken: undefined,
+              account,
+              supabase,
+              participantFilters,
+              ignoredParticipantEmails,
+              profilesByEmail,
+              relationshipsByProfileId,
+            });
+            mergeStats(stats, retryResult.stats);
+            if (retryResult.nextSyncToken) {
+              syncCursors[syncable.id] = retryResult.nextSyncToken;
+            }
+          } catch (retryError) {
+            const retryMessage =
+              retryError instanceof Error
+                ? retryError.message
+                : "Calendar backfill retry failed";
+            stats.errors.push(`${syncable.id}: ${retryMessage}`);
+          }
+          continue;
+        }
+
+        stats.errors.push(`${syncable.id}: ${message}`);
+      }
+    }
 
     try {
       const autoResolveResult = await autoResolveEligibleCalendarReviews(
@@ -302,56 +551,15 @@ export async function syncCalendarAccount(
       stats.errors.push(message);
     }
   } catch (error) {
-    if (error instanceof GaxiosError && error.response?.status === 429) {
-      stats.errors.push(
-        "Rate limited by Google Calendar API — will retry on next run",
-      );
-      stats.rateLimited = true;
-      return stats;
-    }
-
     const message =
-      error instanceof Error ? error.message : "Calendar sync request failed";
-
-    const isExpiredToken =
-      (error instanceof GaxiosError && error.response?.status === 410) ||
-      message.includes("Sync token is no longer valid");
-
-    if (isExpiredToken && !isTokenRetry) {
-      retryingAfterInvalidToken = true;
-      try {
-        // Await so that if the retry itself throws, we can reset the flag
-        // and let this call's finally block clean up syncing: false (#3).
-        return await syncCalendarAccount({ ...account, sync_cursor: null }, true);
-      } catch (retryError) {
-        retryingAfterInvalidToken = false;
-        throw retryError;
-      }
-    }
-
+      error instanceof Error ? error.message : "Calendar sync failed";
     stats.errors.push(message);
-    return stats;
   } finally {
-    if (!retryingAfterInvalidToken) {
-      await supabase
-        .from("calendar_accounts")
-        .update({
-          last_sync_at: new Date().toISOString(),
-          sync_cursor: nextSyncToken ?? account.sync_cursor,
-          metadata: {
-            syncing: false,
-            last_run: {
-              at: new Date().toISOString(),
-              stats,
-              ...(stats.errors.length > 0
-                ? { error: stats.errors[stats.errors.length - 1] }
-                : {}),
-            },
-          },
-        })
-        .eq("id", account.id)
-        .eq("org_id", account.org_id);
-    }
+    await persistAccountSyncState(supabase, account, {
+      syncCursors,
+      stats,
+      existingMetadata,
+    });
   }
 
   return stats;
@@ -364,28 +572,18 @@ export async function syncAllCalendarAccounts(): Promise<{
   const supabase = createAdminClient();
   const { data: accounts, error } = await supabase
     .from("calendar_accounts")
-    .select("id, org_id, email, refresh_token, sync_cursor")
+    .select("id, org_id, email, refresh_token, sync_cursor, metadata")
     .eq("sync_enabled", true);
 
   if (error) {
     throw new Error(`Failed to load calendar accounts: ${error.message}`);
   }
 
-  const aggregate: CalendarSyncStats = {
-    eventsProcessed: 0,
-    activitiesCreated: 0,
-    reviewsQueued: 0,
-    profilesAutoCreated: 0,
-    errors: [],
-  };
+  const aggregate = emptyStats();
 
   for (const account of accounts ?? []) {
     const stats = await syncCalendarAccount(account);
-    aggregate.eventsProcessed += stats.eventsProcessed;
-    aggregate.activitiesCreated += stats.activitiesCreated;
-    aggregate.reviewsQueued += stats.reviewsQueued;
-    aggregate.profilesAutoCreated += stats.profilesAutoCreated;
-    aggregate.errors.push(...stats.errors);
+    mergeStats(aggregate, stats);
   }
 
   return {
@@ -412,11 +610,11 @@ export async function upsertCalendarAccount(params: {
         refresh_token: params.encryptedRefreshToken,
         sync_enabled: true,
         sync_cursor: null,
-        metadata: { needs_backfill: true },
+        metadata: { needs_backfill: true, sync_cursors: {} },
       },
       { onConflict: "org_id,email" },
     )
-    .select("id, org_id, email, refresh_token, sync_cursor")
+    .select("id, org_id, email, refresh_token, sync_cursor, metadata")
     .single();
 
   if (error) {

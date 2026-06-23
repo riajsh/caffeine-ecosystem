@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createCalendarParticipantProfile } from "@/lib/integrations/calendar/create-participant-profile";
 import type { CalendarParticipant } from "@/lib/integrations/calendar/types";
 import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
+import { calendarActivitySourceRef } from "@/lib/integrations/calendar/occurrence";
 import { canAutoCreateProfileFromCalendarParticipant, parseCalendarDisplayName } from "@/lib/integrations/calendar/parse-display-name";
 import { isPostgresUniqueViolation } from "@/lib/integrations/calendar/idempotent-insert";
 import { resolveCalendarReviewsForEmail } from "@/lib/integrations/calendar/resolve-calendar-reviews";
@@ -61,8 +62,9 @@ export async function processCalendarParticipants(
     orgId: string;
     eventId: string;
     googleEventId: string;
-    title: string | null;
+    icalUid: string | null;
     startAt: string | null;
+    title: string | null;
     participants: CalendarParticipant[];
     participantFilters: OrgParticipantFilters;
     ignoredParticipantEmails: ReadonlySet<string>;
@@ -78,6 +80,11 @@ export async function processCalendarParticipants(
     !params.startAt || new Date(params.startAt).getTime() <= Date.now();
   const activityDate = params.startAt ?? new Date().toISOString();
   const activityTitle = params.title ?? "Calendar meeting";
+  const activitySourceRef = calendarActivitySourceRef(
+    params.icalUid,
+    params.startAt,
+    params.googleEventId,
+  );
 
   const matchedProfileIds = new Set<string>();
   let profilesAutoCreated = 0;
@@ -184,7 +191,7 @@ export async function processCalendarParticipants(
         summary: null,
         activity_date: activityDate,
         source: "calendar_sync" as const,
-        source_ref: params.googleEventId,
+        source_ref: activitySourceRef,
       });
 
       if (activityError) {

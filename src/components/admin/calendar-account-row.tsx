@@ -12,6 +12,7 @@ type CalendarAccountRowProps = {
   email: string;
   userName: string | null;
   syncStatus: string;
+  backfillPending: boolean;
   syncEnabled: boolean;
   isCurrentUser: boolean;
 };
@@ -21,6 +22,7 @@ export function CalendarAccountRow({
   email,
   userName,
   syncStatus,
+  backfillPending,
   syncEnabled,
   isCurrentUser,
 }: CalendarAccountRowProps) {
@@ -34,6 +36,7 @@ export function CalendarAccountRow({
         <p className="text-body font-medium text-foreground">{email}</p>
         <p className="text-caption text-muted-foreground">
           {userName ? `Connected by ${userName}` : "Unknown user"} · {syncStatus}
+          {backfillPending ? " · awaiting sync" : ""}
           {!syncEnabled ? " · disconnected" : ""}
         </p>
         {error ? (

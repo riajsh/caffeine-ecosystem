@@ -10,6 +10,22 @@ import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
 
+const BATCH_SIZE = 100;
+
+async function deleteInBatches(
+  ids: string[],
+  deleteBatch: (batch: string[]) => Promise<number>,
+): Promise<number> {
+  let removed = 0;
+
+  for (let index = 0; index < ids.length; index += BATCH_SIZE) {
+    const batch = ids.slice(index, index + BATCH_SIZE);
+    removed += await deleteBatch(batch);
+  }
+
+  return removed;
+}
+
 export async function purgeInternalCalendarSyncData(
   supabase: AdminClient,
   orgId: string,
@@ -81,22 +97,34 @@ export async function purgeInternalCalendarSyncData(
       const calendarEventIds = (calendarEvents ?? []).map((row) => row.id);
 
       if (calendarEventIds.length > 0) {
-        const { data: deletedSources, error: sourcesError } = await supabase
-          .from("relationship_sources")
-          .delete()
-          .eq("org_id", orgId)
-          .eq("source_type", "meeting")
-          .in("relationship_id", relationshipIds)
-          .in("source_id", calendarEventIds)
-          .select("id");
+        for (let relIndex = 0; relIndex < relationshipIds.length; relIndex += BATCH_SIZE) {
+          const relationshipBatch = relationshipIds.slice(
+            relIndex,
+            relIndex + BATCH_SIZE,
+          );
 
-        if (sourcesError) {
-          throw new Error(
-            `Failed to remove internal meeting provenance: ${sourcesError.message}`,
+          sourcesRemoved += await deleteInBatches(
+            calendarEventIds,
+            async (eventBatch) => {
+              const { data, error } = await supabase
+                .from("relationship_sources")
+                .delete()
+                .eq("org_id", orgId)
+                .eq("source_type", "meeting")
+                .in("relationship_id", relationshipBatch)
+                .in("source_id", eventBatch)
+                .select("id");
+
+              if (error) {
+                throw new Error(
+                  `Failed to remove internal meeting provenance: ${error.message}`,
+                );
+              }
+
+              return data?.length ?? 0;
+            },
           );
         }
-
-        sourcesRemoved = deletedSources?.length ?? 0;
       }
     }
   }

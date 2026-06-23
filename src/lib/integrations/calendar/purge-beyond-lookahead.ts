@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { calendarLookaheadCutoff } from "@/lib/integrations/calendar/env";
+import { activitySourceRefForCalendarEvent } from "@/lib/integrations/calendar/cleanup-event";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
@@ -82,7 +83,7 @@ export async function purgeBeyondLookaheadCalendarData(
   while (true) {
     const { data: farEvents, error: eventsError } = await supabase
       .from("calendar_events")
-      .select("id, google_event_id")
+      .select("id, google_event_id, ical_uid, start_at")
       .eq("org_id", orgId)
       .gt("start_at", cutoff)
       .limit(BATCH_SIZE);
@@ -97,19 +98,19 @@ export async function purgeBeyondLookaheadCalendarData(
       break;
     }
 
-    const googleEventIds = farEvents.map((event) => event.google_event_id);
+    const sourceRefs = farEvents.map((event) =>
+      activitySourceRefForCalendarEvent(event),
+    );
     const eventIds = farEvents.map((event) => event.id);
 
-    activitiesFromEvents += await deleteInBatches(
-      googleEventIds,
-      async (batch) => {
-        const { data, error } = await supabase
-          .from("activities")
-          .delete()
-          .eq("org_id", orgId)
-          .eq("source", "calendar_sync")
-          .in("source_ref", batch)
-          .select("id");
+    activitiesFromEvents += await deleteInBatches(sourceRefs, async (batch) => {
+      const { data, error } = await supabase
+        .from("activities")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("source", "calendar_sync")
+        .in("source_ref", batch)
+        .select("id");
 
         if (error) {
           throw new Error(
@@ -118,8 +119,7 @@ export async function purgeBeyondLookaheadCalendarData(
         }
 
         return data?.length ?? 0;
-      },
-    );
+    });
 
     sourcesRemoved += await deleteInBatches(eventIds, async (batch) => {
       const { data, error } = await supabase

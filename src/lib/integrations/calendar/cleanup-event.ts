@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { calendarActivitySourceRef } from "@/lib/integrations/calendar/occurrence";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
@@ -12,13 +13,17 @@ export async function removeCalendarEventDerivedData(
   orgId: string,
   eventId: string,
   googleEventId: string,
+  icalUid?: string | null,
+  startAt?: string | null,
 ): Promise<void> {
+  const sourceRef = calendarActivitySourceRef(icalUid, startAt, googleEventId);
+
   const { error: activitiesError } = await supabase
     .from("activities")
     .delete()
     .eq("org_id", orgId)
     .eq("source", "calendar_sync")
-    .eq("source_ref", googleEventId);
+    .eq("source_ref", sourceRef);
 
   if (activitiesError) {
     throw new Error(
@@ -51,4 +56,16 @@ export async function removeCalendarEventDerivedData(
       `Failed to remove meeting provenance for cancelled event: ${sourcesError.message}`,
     );
   }
+}
+
+export function activitySourceRefForCalendarEvent(event: {
+  google_event_id: string;
+  ical_uid?: string | null;
+  start_at?: string | null;
+}): string {
+  return calendarActivitySourceRef(
+    event.ical_uid,
+    event.start_at,
+    event.google_event_id,
+  );
 }

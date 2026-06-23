@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ensureRelationshipForProfile } from "@/lib/integrations/calendar/review-utils";
 import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
+import { activitySourceRefForCalendarEvent } from "@/lib/integrations/calendar/cleanup-event";
 import { isPostgresUniqueViolation } from "@/lib/integrations/calendar/idempotent-insert";
 import type { Database } from "@/types/database";
 
@@ -28,6 +29,7 @@ export async function backfillCalendarReviewsForProfile(
       calendar_events (
         id,
         google_event_id,
+        ical_uid,
         title,
         start_at
       )
@@ -71,7 +73,7 @@ export async function backfillCalendarReviewsForProfile(
       summary: null,
       activity_date: event.start_at ?? new Date().toISOString(),
       source: "calendar_sync",
-      source_ref: event.google_event_id,
+      source_ref: activitySourceRefForCalendarEvent(event),
     });
 
     if (activityError) {

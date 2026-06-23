@@ -39,11 +39,34 @@ export function getCalendarEnv(): CalendarEnv {
 export const CALENDAR_READONLY_SCOPE =
   "https://www.googleapis.com/auth/calendar.readonly";
 
-/** How far back the initial sync pulls events (months). */
-export const CALENDAR_BACKFILL_MONTHS = 12;
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
-/** How far ahead the sync window extends (weeks). Cron keeps this horizon rolling. */
-export const CALENDAR_LOOKAHEAD_WEEKS = 4;
+/** How far back the initial sync pulls events (months). Override via CALENDAR_BACKFILL_MONTHS. */
+export const CALENDAR_BACKFILL_MONTHS = parsePositiveInt(
+  process.env.CALENDAR_BACKFILL_MONTHS,
+  14,
+);
+
+/** How far ahead the sync window extends (weeks). Override via CALENDAR_LOOKAHEAD_WEEKS. */
+export const CALENDAR_LOOKAHEAD_WEEKS = parsePositiveInt(
+  process.env.CALENDAR_LOOKAHEAD_WEEKS,
+  6,
+);
+
+/** Optional fixed backfill start (ISO date, e.g. 2025-06-01). Overrides month count when set. */
+export function calendarBackfillTimeMin(): string {
+  const explicit = process.env.CALENDAR_BACKFILL_FROM?.trim();
+  if (explicit) {
+    return new Date(explicit).toISOString();
+  }
+
+  const date = new Date();
+  date.setMonth(date.getMonth() - CALENDAR_BACKFILL_MONTHS);
+  return date.toISOString();
+}
 
 export function calendarLookaheadCutoff(): Date {
   const date = new Date();
