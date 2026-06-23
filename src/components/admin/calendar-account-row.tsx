@@ -13,6 +13,7 @@ type CalendarAccountRowProps = {
   userName: string | null;
   syncStatus: string;
   backfillPending: boolean;
+  lastSyncError: string | null;
   syncEnabled: boolean;
   isCurrentUser: boolean;
 };
@@ -23,6 +24,7 @@ export function CalendarAccountRow({
   userName,
   syncStatus,
   backfillPending,
+  lastSyncError,
   syncEnabled,
   isCurrentUser,
 }: CalendarAccountRowProps) {
@@ -39,6 +41,11 @@ export function CalendarAccountRow({
           {backfillPending ? " · awaiting sync" : ""}
           {!syncEnabled ? " · disconnected" : ""}
         </p>
+        {lastSyncError ? (
+          <p className="mt-1 text-caption text-destructive" role="alert">
+            {lastSyncError}
+          </p>
+        ) : null}
         {error ? (
           <p className="mt-1 text-caption text-destructive" role="alert">
             {error}

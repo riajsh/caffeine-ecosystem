@@ -6,7 +6,9 @@ export type CalendarAccountMetadata = {
   syncing?: boolean;
   started_at?: string;
   needs_backfill?: boolean;
+  selected_calendar_ids?: string[];
   sync_cursors?: CalendarSyncCursors;
+  sync_progress?: import("@/lib/integrations/calendar/sync-progress").CalendarSyncProgress;
   last_run?: {
     at: string;
     stats: unknown;
@@ -51,17 +53,19 @@ export function isCalendarBackfillPending(params: {
   }
 
   const parsed = parseCalendarAccountMetadata(params.metadata);
+  const selectedIds = parsed.selected_calendar_ids ?? params.calendarIds;
+
   if (parsed.needs_backfill) {
     return true;
   }
 
   const cursors = loadCalendarSyncCursors(params.metadata, params.legacySyncCursor);
 
-  if (params.calendarIds.length === 0) {
-    return params.legacySyncCursor === null && Object.keys(cursors).length === 0;
+  if (selectedIds.length > 0) {
+    return selectedIds.some((calendarId) => !cursors[calendarId]);
   }
 
-  return params.calendarIds.some((calendarId) => !cursors[calendarId]);
+  return params.legacySyncCursor === null && Object.keys(cursors).length === 0;
 }
 
 export function resolvePrimarySyncCursor(

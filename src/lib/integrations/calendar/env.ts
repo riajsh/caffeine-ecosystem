@@ -81,3 +81,9 @@ export function isBeyondCalendarLookahead(startAt: string | null): boolean {
 
   return new Date(startAt) > calendarLookaheadCutoff();
 }
+
+/** Max Google Calendar list pages per serverless chunk (~250 events/page). */
+export const CALENDAR_SYNC_MAX_PAGES_PER_CHUNK = parsePositiveInt(
+  process.env.CALENDAR_SYNC_MAX_PAGES_PER_CHUNK,
+  2,
+);

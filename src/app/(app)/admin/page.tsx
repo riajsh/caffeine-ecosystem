@@ -7,6 +7,7 @@ import {
 import { AdminPage } from "@/components/admin/admin-page";
 import { AutomationTierReference } from "@/components/admin/automation-tier-reference";
 import { CalendarAccountRow } from "@/components/admin/calendar-account-row";
+import { CalendarBackfillPanel } from "@/components/admin/calendar-backfill-panel";
 import { CalendarConnectButton } from "@/components/admin/calendar-connect-button";
 import { DeployChecklist } from "@/components/admin/deploy-checklist";
 import { RunCalendarSyncButton } from "@/components/admin/run-calendar-sync-button";
@@ -138,8 +139,13 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
               .filter((account) => account.backfillPending)
               .map((account) => account.email)
               .join(", ")}
-            . Click Run calendar sync now to pull subscribed PU calendars from
-            Jun 2025 through the next six weeks.
+            . Load subscribed calendars below, choose which to sync, then run
+            backfill.
+          </p>
+        ) : null}
+        {calendarAccounts.some((account) => account.lastSyncError) ? (
+          <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-body text-destructive">
+            Last calendar sync failed. Fix the error below before backfilling.
           </p>
         ) : null}
         {params.calendar_error ? (
@@ -157,16 +163,26 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
         {calendarAccounts.length > 0 ? (
           <div className="space-y-2 pt-2">
             {calendarAccounts.map((account) => (
-              <CalendarAccountRow
-                key={account.id}
-                accountId={account.id}
-                email={account.email}
-                userName={account.userName}
-                syncStatus={account.syncStatus}
-                backfillPending={account.backfillPending}
-                syncEnabled={account.syncEnabled}
-                isCurrentUser={account.userId === user.id}
-              />
+              <div key={account.id} className="space-y-3">
+                <CalendarAccountRow
+                  accountId={account.id}
+                  email={account.email}
+                  userName={account.userName}
+                  syncStatus={account.syncStatus}
+                  backfillPending={account.backfillPending}
+                  lastSyncError={account.lastSyncError}
+                  syncEnabled={account.syncEnabled}
+                  isCurrentUser={account.userId === user.id}
+                />
+                {account.syncEnabled ? (
+                  <CalendarBackfillPanel
+                    accountId={account.id}
+                    accountEmail={account.email}
+                    lastSyncError={account.lastSyncError}
+                    initialSyncing={account.syncing}
+                  />
+                ) : null}
+              </div>
             ))}
           </div>
         ) : (

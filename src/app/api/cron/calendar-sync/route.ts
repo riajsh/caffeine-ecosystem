@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 
 import { syncAllCalendarAccounts } from "@/lib/integrations/calendar/sync";
 
+export const maxDuration = 300;
+
 function authoriseCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) {
@@ -38,6 +40,7 @@ export async function GET(request: Request) {
         ok: true,
         accountsProcessed: result.accountsProcessed,
         stats: result.stats,
+        chunksRemaining: result.chunksRemaining,
         warnings:
           result.stats.errors.length > 0 ? result.stats.errors : undefined,
       },

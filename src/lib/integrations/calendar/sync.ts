@@ -4,12 +4,16 @@ import { GaxiosError } from "gaxios";
 import type { calendar_v3 } from "googleapis";
 
 import { autoResolveEligibleCalendarReviews } from "@/lib/integrations/calendar/auto-resolve-reviews";
-import { listSyncableCalendars } from "@/lib/integrations/calendar/calendar-list";
+import {
+  listSyncableCalendars,
+} from "@/lib/integrations/calendar/calendar-list";
 import { getCalendarClient } from "@/lib/integrations/calendar/client";
 import { removeCalendarEventDerivedData } from "@/lib/integrations/calendar/cleanup-event";
+import { formatGoogleCalendarError } from "@/lib/integrations/calendar/google-errors";
 import {
   calendarBackfillTimeMin,
   calendarLookaheadCutoff,
+  CALENDAR_SYNC_MAX_PAGES_PER_CHUNK,
   isBeyondCalendarLookahead,
 } from "@/lib/integrations/calendar/env";
 import {
@@ -27,6 +31,15 @@ import {
 import { purgeBeyondLookaheadCalendarData } from "@/lib/integrations/calendar/purge-beyond-lookahead";
 import { purgeInternalCalendarSyncData } from "@/lib/integrations/calendar/purge-internal";
 import {
+  initCalendarSyncProgress,
+  mergeIntoTotals,
+  parseCalendarSyncProgress,
+  syncProgressHasMore,
+  syncProgressSummary,
+  type CalendarQueueItem,
+  type CalendarSyncProgress,
+} from "@/lib/integrations/calendar/sync-progress";
+import {
   loadCalendarSyncCursors,
   parseCalendarAccountMetadata,
   resolvePrimarySyncCursor,
@@ -35,6 +48,7 @@ import {
 } from "@/lib/integrations/calendar/sync-cursors";
 import type {
   CalendarParticipant,
+  CalendarSyncRunResult,
   CalendarSyncStats,
   ParsedCalendarEvent,
 } from "@/lib/integrations/calendar/types";
@@ -48,6 +62,7 @@ type CalendarAccount = {
   refresh_token: string;
   sync_cursor: string | null;
   metadata: Json | null;
+  last_sync_at?: string | null;
 };
 
 function emptyStats(): CalendarSyncStats {
@@ -322,11 +337,20 @@ async function syncCalendarFeed(
     relationshipsByProfileId: Awaited<
       ReturnType<typeof loadOrgRelationshipsByProfileId>
     >;
+    maxPages?: number;
+    resumePageToken?: string | null;
   },
-): Promise<{ stats: CalendarSyncStats; nextSyncToken: string | undefined }> {
+): Promise<{
+  stats: CalendarSyncStats;
+  nextSyncToken: string | undefined;
+  incompletePageToken: string | undefined;
+  calendarFinished: boolean;
+}> {
   const stats = emptyStats();
-  let pageToken: string | undefined;
+  let pageToken: string | undefined = params.resumePageToken ?? undefined;
   let nextSyncToken: string | undefined;
+  let pagesProcessed = 0;
+  const maxPages = params.maxPages ?? Number.POSITIVE_INFINITY;
 
   do {
     const response = await calendar.events.list({
@@ -375,10 +399,25 @@ async function syncCalendarFeed(
 
     pageToken = response.data.nextPageToken ?? undefined;
     nextSyncToken = response.data.nextSyncToken ?? nextSyncToken;
+    pagesProcessed += 1;
+
+    if (pagesProcessed >= maxPages && pageToken) {
+      return {
+        stats,
+        nextSyncToken,
+        incompletePageToken: pageToken,
+        calendarFinished: false,
+      };
+    }
   } while (pageToken);
 
   stats.calendarsSynced = 1;
-  return { stats, nextSyncToken };
+  return {
+    stats,
+    nextSyncToken,
+    incompletePageToken: undefined,
+    calendarFinished: true,
+  };
 }
 
 async function persistAccountSyncState(
@@ -387,18 +426,31 @@ async function persistAccountSyncState(
   params: {
     syncCursors: CalendarSyncCursors;
     stats: CalendarSyncStats;
-    existingMetadata: ReturnType<typeof parseCalendarAccountMetadata>;
+    existingMetadata: CalendarAccountMetadata;
+    progress: CalendarSyncProgress | null;
+    syncing: boolean;
   },
 ): Promise<void> {
+  const needsBackfill =
+    params.progress !== null
+      ? syncProgressHasMore(params.progress)
+      : params.existingMetadata.selected_calendar_ids?.length
+        ? params.existingMetadata.selected_calendar_ids.some(
+            (calendarId) => !params.syncCursors[calendarId],
+          )
+        : false;
+
   const metadata: CalendarAccountMetadata = {
     ...params.existingMetadata,
-    syncing: false,
-    needs_backfill: false,
+    syncing: params.syncing,
+    selected_calendar_ids: params.existingMetadata.selected_calendar_ids,
+    needs_backfill: needsBackfill,
     sync_cursors: params.syncCursors,
+    sync_progress: params.progress ?? undefined,
     last_run: {
       at: new Date().toISOString(),
-      stats: params.stats,
-      calendars_synced: params.stats.calendarsSynced,
+      stats: params.progress?.totals ?? params.stats,
+      calendars_synced: params.progress?.completed.length ?? params.stats.calendarsSynced,
       ...(params.stats.errors.length > 0
         ? { error: params.stats.errors[params.stats.errors.length - 1] }
         : {}),
@@ -408,7 +460,7 @@ async function persistAccountSyncState(
   await supabase
     .from("calendar_accounts")
     .update({
-      last_sync_at: new Date().toISOString(),
+      last_sync_at: params.syncing ? account.last_sync_at ?? null : new Date().toISOString(),
       sync_cursor: resolvePrimarySyncCursor(params.syncCursors, account.email),
       metadata: metadata as unknown as Json,
     })
@@ -416,23 +468,10 @@ async function persistAccountSyncState(
     .eq("org_id", account.org_id);
 }
 
-export async function syncCalendarAccount(
+async function loadSyncContext(
+  supabase: ReturnType<typeof createAdminClient>,
   account: CalendarAccount,
-  options: { clearedCalendarId?: string } = {},
-): Promise<CalendarSyncStats> {
-  const stats = emptyStats();
-
-  const supabase = createAdminClient();
-  const calendar = getCalendarClient(account);
-  const existingMetadata = parseCalendarAccountMetadata(account.metadata);
-  let syncCursors = loadCalendarSyncCursors(account.metadata, account.sync_cursor);
-
-  if (options.clearedCalendarId) {
-    delete syncCursors[options.clearedCalendarId];
-  } else if (existingMetadata.needs_backfill) {
-    syncCursors = {};
-  }
-
+) {
   const participantFilters = await loadOrgParticipantFilters(
     supabase,
     account.org_id,
@@ -447,24 +486,257 @@ export async function syncCalendarAccount(
     account.org_id,
   );
 
+  return {
+    participantFilters,
+    ignoredParticipantEmails,
+    profilesByEmail,
+    relationshipsByProfileId,
+  };
+}
+
+async function finalizeCalendarSync(
+  supabase: ReturnType<typeof createAdminClient>,
+  account: CalendarAccount,
+  stats: CalendarSyncStats,
+  context: Awaited<ReturnType<typeof loadSyncContext>>,
+): Promise<void> {
   try {
-    await supabase
-      .from("calendar_accounts")
-      .update({
-        metadata: {
-          ...existingMetadata,
-          syncing: true,
-          started_at: new Date().toISOString(),
-        } as unknown as Json,
-      })
-      .eq("id", account.id)
-      .eq("org_id", account.org_id);
+    const autoResolveResult = await autoResolveEligibleCalendarReviews(supabase, {
+      orgId: account.org_id,
+      participantFilters: context.participantFilters,
+      profilesByEmail: context.profilesByEmail,
+    });
+    stats.profilesAutoCreated += autoResolveResult.profilesCreated;
+    stats.activitiesCreated += autoResolveResult.activitiesCreated;
+  } catch (autoResolveError) {
+    const message =
+      autoResolveError instanceof Error
+        ? autoResolveError.message
+        : "Calendar review auto-resolve failed";
+    stats.errors.push(message);
+  }
+}
 
-    await purgeInternalCalendarSyncData(supabase, account.org_id, participantFilters);
+export async function runCalendarSyncChunk(
+  account: CalendarAccount,
+  options: {
+    reset?: boolean;
+    selectedCalendarIds?: string[];
+    queueItems?: CalendarQueueItem[];
+  } = {},
+): Promise<CalendarSyncRunResult> {
+  const supabase = createAdminClient();
+  const calendar = getCalendarClient(account);
+  const existingMetadata = parseCalendarAccountMetadata(account.metadata);
+  const selectedCalendarIds =
+    options.selectedCalendarIds ?? existingMetadata.selected_calendar_ids ?? [];
+  let syncCursors = loadCalendarSyncCursors(account.metadata, account.sync_cursor);
+  let progress = parseCalendarSyncProgress(account.metadata);
+
+  if (options.reset && selectedCalendarIds.length > 0) {
+    for (const calendarId of selectedCalendarIds) {
+      delete syncCursors[calendarId];
+    }
+    progress = null;
+  }
+
+  const startingFresh =
+    options.reset ||
+    !progress ||
+    progress.status === "complete" ||
+    progress.status === "failed";
+
+  if (startingFresh) {
+    const queue =
+      options.queueItems ??
+      selectedCalendarIds.map((calendarId) => ({
+        id: calendarId,
+        summary: calendarId,
+      }));
+
+    if (queue.length === 0) {
+      const stats = emptyStats();
+      stats.errors.push("No calendars selected for sync");
+      return { stats, hasMore: false, progress: null };
+    }
+
+    progress = initCalendarSyncProgress(queue);
+
+    const context = await loadSyncContext(supabase, account);
+    await purgeInternalCalendarSyncData(
+      supabase,
+      account.org_id,
+      context.participantFilters,
+    );
     await purgeBeyondLookaheadCalendarData(supabase, account.org_id);
+  }
 
-    const syncableCalendars = await listSyncableCalendars(calendar, account.email);
+  if (!progress) {
+    const stats = emptyStats();
+    return { stats, hasMore: false, progress: null };
+  }
 
+  if (progress.totals.rateLimited) {
+    return { stats: progress.totals, hasMore: true, progress };
+  }
+
+  const context = await loadSyncContext(supabase, account);
+
+  if (!progress.current) {
+    if (progress.queue.length === 0) {
+      progress.status = progress.totals.errors.length > 0 ? "failed" : "complete";
+      progress.updated_at = new Date().toISOString();
+      await finalizeCalendarSync(supabase, account, progress.totals, context);
+      await persistAccountSyncState(supabase, account, {
+        syncCursors,
+        stats: progress.totals,
+        existingMetadata: {
+          ...existingMetadata,
+          selected_calendar_ids: selectedCalendarIds,
+          needs_backfill: false,
+        },
+        progress,
+        syncing: false,
+      });
+      return { stats: progress.totals, hasMore: false, progress };
+    }
+
+    const next = progress.queue.shift()!;
+    progress.current = { ...next, page_token: null };
+  }
+
+  const current = progress.current!;
+  const calendarId = current.id;
+  const syncToken = syncCursors[calendarId] || undefined;
+  const resumePageToken = current.page_token ?? undefined;
+
+  try {
+    const feedResult = await syncCalendarFeed(calendar, {
+      calendarId,
+      syncToken,
+      account,
+      supabase,
+      participantFilters: context.participantFilters,
+      ignoredParticipantEmails: context.ignoredParticipantEmails,
+      profilesByEmail: context.profilesByEmail,
+      relationshipsByProfileId: context.relationshipsByProfileId,
+      maxPages: CALENDAR_SYNC_MAX_PAGES_PER_CHUNK,
+      resumePageToken,
+    });
+
+    mergeIntoTotals(progress.totals, feedResult.stats);
+
+    if (feedResult.incompletePageToken) {
+      progress.current = {
+        ...current,
+        page_token: feedResult.incompletePageToken,
+      };
+    } else {
+      if (feedResult.nextSyncToken) {
+        syncCursors[calendarId] = feedResult.nextSyncToken;
+      }
+      progress.completed.push({ id: calendarId, summary: current.summary });
+      progress.current = null;
+    }
+  } catch (error) {
+    if (error instanceof GaxiosError && error.response?.status === 429) {
+      progress.totals.rateLimited = true;
+      progress.totals.errors.push(
+        `Rate limited on ${calendarId} — will retry on next chunk`,
+      );
+      progress.last_error = "Rate limited — retry shortly";
+    } else {
+      const message = formatGoogleCalendarError(error);
+      const isExpiredToken =
+        (error instanceof GaxiosError && error.response?.status === 410) ||
+        message.includes("Sync token is no longer valid");
+
+      if (isExpiredToken) {
+        delete syncCursors[calendarId];
+        try {
+          const retryResult = await syncCalendarFeed(calendar, {
+            calendarId,
+            syncToken: undefined,
+            account,
+            supabase,
+            participantFilters: context.participantFilters,
+            ignoredParticipantEmails: context.ignoredParticipantEmails,
+            profilesByEmail: context.profilesByEmail,
+            relationshipsByProfileId: context.relationshipsByProfileId,
+            maxPages: CALENDAR_SYNC_MAX_PAGES_PER_CHUNK,
+            resumePageToken: undefined,
+          });
+          mergeIntoTotals(progress.totals, retryResult.stats);
+          if (retryResult.incompletePageToken) {
+            progress.current = {
+              ...current,
+              page_token: retryResult.incompletePageToken,
+            };
+          } else {
+            if (retryResult.nextSyncToken) {
+              syncCursors[calendarId] = retryResult.nextSyncToken;
+            }
+            progress.completed.push({ id: calendarId, summary: current.summary });
+            progress.current = null;
+          }
+        } catch (retryError) {
+          const retryMessage = formatGoogleCalendarError(retryError);
+          progress.totals.errors.push(`${calendarId}: ${retryMessage}`);
+          progress.last_error = retryMessage;
+          progress.completed.push({ id: calendarId, summary: current.summary });
+          progress.current = null;
+        }
+      } else {
+        progress.totals.errors.push(`${calendarId}: ${message}`);
+        progress.last_error = message;
+        progress.completed.push({ id: calendarId, summary: current.summary });
+        progress.current = null;
+      }
+    }
+  }
+
+  progress.updated_at = new Date().toISOString();
+  const hasMore = syncProgressHasMore(progress);
+
+  if (!hasMore) {
+    progress.status = progress.totals.errors.length > 0 ? "failed" : "complete";
+    await finalizeCalendarSync(supabase, account, progress.totals, context);
+  }
+
+  await persistAccountSyncState(supabase, account, {
+    syncCursors,
+    stats: progress.totals,
+    existingMetadata: {
+      ...existingMetadata,
+      selected_calendar_ids: selectedCalendarIds,
+      needs_backfill: hasMore,
+    },
+    progress,
+    syncing: hasMore,
+  });
+
+  return { stats: progress.totals, hasMore, progress };
+}
+
+export async function syncCalendarAccountIncremental(
+  account: CalendarAccount,
+): Promise<CalendarSyncStats> {
+  const stats = emptyStats();
+  const supabase = createAdminClient();
+  const calendar = getCalendarClient(account);
+  const existingMetadata = parseCalendarAccountMetadata(account.metadata);
+  const syncCursors = loadCalendarSyncCursors(account.metadata, account.sync_cursor);
+  const context = await loadSyncContext(supabase, account);
+
+  const syncableCalendars = existingMetadata.selected_calendar_ids?.length
+    ? existingMetadata.selected_calendar_ids.map((calendarId) => ({
+        id: calendarId,
+        summary: calendarId,
+        accessRole: null,
+      }))
+    : await listSyncableCalendars(calendar, account.email);
+
+  try {
     for (const syncable of syncableCalendars) {
       const syncToken = syncCursors[syncable.id] || undefined;
 
@@ -474,10 +746,10 @@ export async function syncCalendarAccount(
           syncToken,
           account,
           supabase,
-          participantFilters,
-          ignoredParticipantEmails,
-          profilesByEmail,
-          relationshipsByProfileId,
+          participantFilters: context.participantFilters,
+          ignoredParticipantEmails: context.ignoredParticipantEmails,
+          profilesByEmail: context.profilesByEmail,
+          relationshipsByProfileId: context.relationshipsByProfileId,
         });
 
         mergeStats(stats, feedResult.stats);
@@ -487,16 +759,12 @@ export async function syncCalendarAccount(
         }
       } catch (error) {
         if (error instanceof GaxiosError && error.response?.status === 429) {
-          stats.errors.push(
-            `Rate limited on ${syncable.id} — will retry on next run`,
-          );
+          stats.errors.push(`Rate limited on ${syncable.id} — will retry on next run`);
           stats.rateLimited = true;
           break;
         }
 
-        const message =
-          error instanceof Error ? error.message : "Calendar sync request failed";
-
+        const message = formatGoogleCalendarError(error);
         const isExpiredToken =
           (error instanceof GaxiosError && error.response?.status === 410) ||
           message.includes("Sync token is no longer valid");
@@ -509,21 +777,19 @@ export async function syncCalendarAccount(
               syncToken: undefined,
               account,
               supabase,
-              participantFilters,
-              ignoredParticipantEmails,
-              profilesByEmail,
-              relationshipsByProfileId,
+              participantFilters: context.participantFilters,
+              ignoredParticipantEmails: context.ignoredParticipantEmails,
+              profilesByEmail: context.profilesByEmail,
+              relationshipsByProfileId: context.relationshipsByProfileId,
             });
             mergeStats(stats, retryResult.stats);
             if (retryResult.nextSyncToken) {
               syncCursors[syncable.id] = retryResult.nextSyncToken;
             }
           } catch (retryError) {
-            const retryMessage =
-              retryError instanceof Error
-                ? retryError.message
-                : "Calendar backfill retry failed";
-            stats.errors.push(`${syncable.id}: ${retryMessage}`);
+            stats.errors.push(
+              `${syncable.id}: ${formatGoogleCalendarError(retryError)}`,
+            );
           }
           continue;
         }
@@ -532,47 +798,75 @@ export async function syncCalendarAccount(
       }
     }
 
-    try {
-      const autoResolveResult = await autoResolveEligibleCalendarReviews(
-        supabase,
-        {
-          orgId: account.org_id,
-          participantFilters,
-          profilesByEmail,
-        },
-      );
-      stats.profilesAutoCreated += autoResolveResult.profilesCreated;
-      stats.activitiesCreated += autoResolveResult.activitiesCreated;
-    } catch (autoResolveError) {
-      const message =
-        autoResolveError instanceof Error
-          ? autoResolveError.message
-          : "Calendar review auto-resolve failed";
-      stats.errors.push(message);
-    }
+    await finalizeCalendarSync(supabase, account, stats, context);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Calendar sync failed";
-    stats.errors.push(message);
+    stats.errors.push(formatGoogleCalendarError(error));
   } finally {
     await persistAccountSyncState(supabase, account, {
       syncCursors,
       stats,
       existingMetadata,
+      progress: null,
+      syncing: false,
     });
   }
 
   return stats;
 }
 
+export async function syncCalendarAccount(
+  account: CalendarAccount,
+  options: {
+    clearedCalendarId?: string;
+    selectedCalendarIds?: string[];
+    queueItems?: CalendarQueueItem[];
+  } = {},
+): Promise<CalendarSyncRunResult> {
+  if (options.clearedCalendarId) {
+    const supabase = createAdminClient();
+    const syncCursors = loadCalendarSyncCursors(account.metadata, account.sync_cursor);
+    delete syncCursors[options.clearedCalendarId];
+    const existingMetadata = parseCalendarAccountMetadata(account.metadata);
+    await persistAccountSyncState(supabase, account, {
+      syncCursors,
+      stats: emptyStats(),
+      existingMetadata,
+      progress: null,
+      syncing: false,
+    });
+    return { stats: emptyStats(), hasMore: false, progress: null };
+  }
+
+  const existingMetadata = parseCalendarAccountMetadata(account.metadata);
+  const selectedCalendarIds =
+    options.selectedCalendarIds ?? existingMetadata.selected_calendar_ids;
+  const progress = parseCalendarSyncProgress(account.metadata);
+  const backfillActive =
+    existingMetadata.needs_backfill ||
+    options.selectedCalendarIds?.length ||
+    (progress !== null && syncProgressHasMore(progress));
+
+  if (backfillActive) {
+    return runCalendarSyncChunk(account, {
+      reset: Boolean(options.selectedCalendarIds?.length),
+      selectedCalendarIds: options.selectedCalendarIds,
+      queueItems: options.queueItems,
+    });
+  }
+
+  const stats = await syncCalendarAccountIncremental(account);
+  return { stats, hasMore: false, progress: null };
+}
+
 export async function syncAllCalendarAccounts(): Promise<{
   accountsProcessed: number;
   stats: CalendarSyncStats;
+  chunksRemaining: number;
 }> {
   const supabase = createAdminClient();
   const { data: accounts, error } = await supabase
     .from("calendar_accounts")
-    .select("id, org_id, email, refresh_token, sync_cursor, metadata")
+    .select("id, org_id, email, refresh_token, sync_cursor, metadata, last_sync_at")
     .eq("sync_enabled", true);
 
   if (error) {
@@ -580,17 +874,37 @@ export async function syncAllCalendarAccounts(): Promise<{
   }
 
   const aggregate = emptyStats();
+  let chunksRemaining = 0;
 
   for (const account of accounts ?? []) {
-    const stats = await syncCalendarAccount(account);
+    const progress = parseCalendarSyncProgress(account.metadata);
+    const metadata = parseCalendarAccountMetadata(account.metadata);
+    const hasActiveChunk =
+      (progress !== null && syncProgressHasMore(progress)) ||
+      metadata.syncing === true ||
+      metadata.needs_backfill === true;
+
+    if (hasActiveChunk) {
+      const result = await runCalendarSyncChunk(account);
+      mergeStats(aggregate, result.stats);
+      if (result.hasMore) {
+        chunksRemaining += 1;
+      }
+      continue;
+    }
+
+    const stats = await syncCalendarAccountIncremental(account);
     mergeStats(aggregate, stats);
   }
 
   return {
     accountsProcessed: accounts?.length ?? 0,
     stats: aggregate,
+    chunksRemaining,
   };
 }
+
+export { syncProgressSummary };
 
 export async function upsertCalendarAccount(params: {
   orgId: string;

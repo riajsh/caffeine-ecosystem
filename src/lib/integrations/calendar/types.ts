@@ -27,3 +27,9 @@ export type CalendarSyncStats = {
   errors: string[];
   rateLimited?: boolean;
 };
+
+export type CalendarSyncRunResult = {
+  stats: CalendarSyncStats;
+  hasMore: boolean;
+  progress: import("@/lib/integrations/calendar/sync-progress").CalendarSyncProgress | null;
+};

@@ -10,6 +10,12 @@ export type SyncableCalendar = {
   accessRole: string | null;
 };
 
+export type SubscribedCalendarOption = SyncableCalendar & {
+  kind: "primary" | "room" | "colleague" | "holiday" | "other" | "ignored";
+  recommended: boolean;
+  readable: boolean;
+};
+
 function loadSyncCalendarDomains(): Set<string> {
   const raw = process.env.CALENDAR_SYNC_DOMAINS ?? process.env.ORG_INTERNAL_EMAIL_DOMAINS ?? "";
   return new Set(
@@ -20,11 +26,34 @@ function loadSyncCalendarDomains(): Set<string> {
   );
 }
 
+function loadIgnorePatterns(): string[] {
+  const raw =
+    process.env.CALENDAR_SYNC_IGNORE_SUBSTRINGS ?? "31 crummer,31_crummer";
+  return raw
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Calendars excluded from auto-sync and default backfill selection (e.g. 31 Crummer rooms). */
+export function shouldExcludeCalendar(
+  calendarId: string,
+  summary: string | null,
+): boolean {
+  const haystack = `${calendarId} ${summary ?? ""}`.toLowerCase();
+  return loadIgnorePatterns().some((pattern) => haystack.includes(pattern));
+}
+
 /** Whether a calendarList entry should be synced for this connected account. */
 export function shouldSyncCalendarId(
   calendarId: string,
   accountEmail: string,
+  summary: string | null = null,
 ): boolean {
+  if (shouldExcludeCalendar(calendarId, summary)) {
+    return false;
+  }
+
   const normalisedId = calendarId.trim().toLowerCase();
   const normalisedAccountEmail = accountEmail.trim().toLowerCase();
 
@@ -86,7 +115,7 @@ export async function listSyncableCalendars(
         continue;
       }
 
-      if (!shouldSyncCalendarId(entry.id, accountEmail)) {
+      if (!shouldSyncCalendarId(entry.id, accountEmail, entry.summary ?? null)) {
         continue;
       }
 
@@ -121,6 +150,98 @@ function calendarSyncPriority(calendarId: string): number {
   }
 
   return 2;
+}
+
+function calendarKind(
+  calendarId: string,
+  accountEmail: string,
+  summary: string | null = null,
+): SubscribedCalendarOption["kind"] {
+  const id = calendarId.toLowerCase();
+  if (id === "primary" || id === accountEmail.toLowerCase()) {
+    return "primary";
+  }
+  if (id.endsWith("@resource.calendar.google.com")) {
+    return "room";
+  }
+  if (id.includes("@group.v.calendar.google.com")) {
+    return "holiday";
+  }
+  if (shouldSyncCalendarId(calendarId, accountEmail, summary)) {
+    return "colleague";
+  }
+  return "other";
+}
+
+/** All calendars visible in Google CalendarList — for admin picker. */
+export async function listSubscribedCalendarsForPicker(
+  calendar: calendar_v3.Calendar,
+  accountEmail: string,
+): Promise<SubscribedCalendarOption[]> {
+  const calendars: SubscribedCalendarOption[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const response = await calendar.calendarList.list({
+      maxResults: 250,
+      pageToken,
+      showHidden: false,
+    });
+
+    for (const entry of response.data.items ?? []) {
+      if (!entry.id || entry.hidden) {
+        continue;
+      }
+
+      const excluded = shouldExcludeCalendar(entry.id, entry.summary ?? null);
+      const readable = entry.accessRole !== "freeBusyReader";
+      calendars.push({
+        id: entry.id,
+        summary: entry.summary ?? entry.id,
+        accessRole: entry.accessRole ?? null,
+        kind: excluded
+          ? "ignored"
+          : calendarKind(entry.id, accountEmail, entry.summary ?? null),
+        recommended:
+          readable &&
+          !excluded &&
+          shouldSyncCalendarId(entry.id, accountEmail, entry.summary ?? null),
+        readable,
+      });
+    }
+
+    pageToken = response.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  if (!calendars.some((item) => item.id === "primary")) {
+    calendars.unshift({
+      id: "primary",
+      summary: accountEmail,
+      accessRole: "owner",
+      kind: "primary",
+      recommended: true,
+      readable: true,
+    });
+  }
+
+  return calendars.sort(
+    (a, b) =>
+      Number(b.recommended) - Number(a.recommended) ||
+      calendarSyncPriority(a.id) - calendarSyncPriority(b.id) ||
+      (a.summary ?? a.id).localeCompare(b.summary ?? b.id),
+  );
+}
+
+export function filterCalendarsBySelection(
+  calendars: SyncableCalendar[],
+  selectedIds: string[] | undefined,
+): SyncableCalendar[] {
+  if (!selectedIds?.length) {
+    return calendars;
+  }
+
+  const allowed = new Set(selectedIds);
+  return calendars.filter((calendar) => allowed.has(calendar.id));
 }
 
 /** True when attendee is a room/desk resource, not a person. */

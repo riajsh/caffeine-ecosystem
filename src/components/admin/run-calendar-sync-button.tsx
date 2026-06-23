@@ -31,17 +31,20 @@ export function RunCalendarSyncButton() {
           if (!("success" in result)) {
             return;
           }
-          const warningCount = result.stats.errors.length;
-          toastSuccess(
-            warningCount > 0
-              ? "Calendar sync finished with warnings"
-              : "Calendar sync finished",
-          );
+          if (result.stats.errors.length > 0) {
+            await alert({
+              title: "Calendar sync finished with errors",
+              description: result.stats.errors.join("\n"),
+            });
+            router.refresh();
+            return;
+          }
+          toastSuccess("Calendar sync finished");
           router.push("/admin/calendar-sync/review");
         });
       }}
     >
-      {isPending ? "Syncing…" : "Run calendar sync now"}
+      {isPending ? "Syncing…" : "Run incremental sync"}
     </Button>
   );
 }
