@@ -58,6 +58,11 @@ Sidebar order, matching the validated prototype:
 
 **Deferred — first / last name columns.** V1 stores a single `profiles.full_name` (no `first_name` / `last_name` in schema). A display-only split in the table (first word vs remainder) is straightforward; proper separate fields need a schema change, backfill, and updates to create/edit, import, merge, and search. Revisit once the core platform UX feels more settled — not worth the ambiguity cost until then.
 
+### Admin → Dedup
+- Detects duplicate groups by email, phone, LinkedIn, exact name+company, and fuzzy name+company (same org).
+- **Merge group** opens the same merge dialog as Profiles bulk actions (including email conflict resolution).
+- Per-import dedup still runs in the CSV wizard.
+
 ### Profile (drawer or page)
 
 Spec: `docs/specs/profile-detail.md`.

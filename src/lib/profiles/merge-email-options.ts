@@ -1,4 +1,4 @@
-import type { ProfileListItem } from "@/lib/data/profiles";
+import type { MergeableProfile } from "@/lib/profiles/mergeable-profile";
 
 export type MergeEmailOption = {
   email: string;
@@ -7,7 +7,7 @@ export type MergeEmailOption = {
 };
 
 export function collectMergeEmailOptions(
-  profiles: Pick<ProfileListItem, "id" | "email" | "fullName">[],
+  profiles: Pick<MergeableProfile, "id" | "email" | "fullName">[],
 ): MergeEmailOption[] {
   const seen = new Set<string>();
   const options: MergeEmailOption[] = [];
@@ -35,7 +35,7 @@ export function collectMergeEmailOptions(
 }
 
 export function hasMergeEmailConflict(
-  profiles: Pick<ProfileListItem, "id" | "email" | "fullName">[],
+  profiles: Pick<MergeableProfile, "id" | "email" | "fullName">[],
 ): boolean {
   return collectMergeEmailOptions(profiles).length > 1;
 }

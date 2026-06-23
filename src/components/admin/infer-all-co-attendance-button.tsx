@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import {
+  applyPeerCompanyEnrichmentAction,
   inferAllCoAttendanceAction,
   inferSameCompanyAction,
 } from "@/app/(app)/admin/actions";
@@ -64,6 +65,38 @@ export function InferSameCompanyButton() {
     >
       <Button type="submit" variant="outline" disabled={isPending}>
         {isPending ? "Running…" : "Infer same-company"}
+      </Button>
+    </form>
+  );
+}
+
+export function ApplyPeerCompanyEnrichmentButton() {
+  const router = useRouter();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
+
+  return (
+    <form
+      action={() => {
+        void run(async () => {
+          const result = await applyPeerCompanyEnrichmentAction();
+          if (result.error) {
+            await alert({
+              title: "Company enrichment failed",
+              description: result.error,
+            });
+            return;
+          }
+          toastSuccess(
+            "Company enrichment complete",
+            `${result.updated} profiles updated.`,
+          );
+          router.refresh();
+        });
+      }}
+    >
+      <Button type="submit" variant="outline" disabled={isPending}>
+        {isPending ? "Running…" : "Fill companies from domains"}
       </Button>
     </form>
   );

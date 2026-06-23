@@ -13,7 +13,9 @@ export async function resolveViewAsOwnerId(
   teamUsers: OrgUser[],
 ): Promise<string | undefined> {
   if (urlOwnerId) {
-    return urlOwnerId;
+    return teamUsers.some((member) => member.id === urlOwnerId)
+      ? urlOwnerId
+      : undefined;
   }
 
   if (user.role !== "admin") {

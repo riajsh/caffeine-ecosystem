@@ -22,9 +22,16 @@ import {
   parseTags,
   validateNormalizedRow,
 } from "@/lib/import/mapping";
+import {
+  findLinkedinMatches,
+  findNameCompanyMatches,
+  findPhoneMatches,
+} from "@/lib/dedup/match-profiles";
 import { nameCompanyDedupKey } from "@/lib/dedup/name-company";
 import {
+  getCandidateProfileIds,
   getInFileMatchRowNumber,
+  withCandidateProfileIds,
   withMergeInFileRowNumber,
   withInFileMatchRowNumber,
 } from "@/lib/import/in-file-dedup";
@@ -41,6 +48,11 @@ import type {
   NormalizedImportRow,
   SoftMatchAction,
 } from "@/lib/import/types";
+import {
+  applyImportCommitRollbacks,
+  type RelationshipGraphRollback,
+  type RelationshipOwnerSnapshot,
+} from "@/lib/data/import-commit-rollback";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -100,9 +112,41 @@ function asNormalized(value: unknown): NormalizedImportRow {
 function mapImportRow(
   row: ImportRowRecord,
   rowsByNumber?: Map<number, ImportRowRecord>,
+  profilesById?: Map<
+    string,
+    {
+      full_name: string;
+      organisation_name: string | null;
+      email: string | null;
+    }
+  >,
 ): ImportRowView {
   const inFileRowNumber = getInFileMatchRowNumber(row.normalized);
   const inFileRow = inFileRowNumber ? rowsByNumber?.get(inFileRowNumber) : undefined;
+  const candidateIds = [
+    ...new Set([
+      ...getCandidateProfileIds(row.normalized),
+      ...(row.matched_profile_id ? [row.matched_profile_id] : []),
+    ]),
+  ];
+  const matchedProfileCandidates = candidateIds.flatMap((profileId) => {
+    const profile = profilesById?.get(profileId);
+    if (!profile) {
+      return [];
+    }
+
+    return [
+      {
+        id: profileId,
+        fullName: profile.full_name,
+        organisationName: profile.organisation_name,
+        email: profile.email,
+      },
+    ];
+  });
+  const primaryCandidate = row.matched_profile_id
+    ? profilesById?.get(row.matched_profile_id)
+    : undefined;
 
   return {
     id: row.id,
@@ -112,15 +156,20 @@ function mapImportRow(
     dedupStatus: row.dedup_status,
     matchedProfileId: row.matched_profile_id,
     matchedProfileName:
+      primaryCandidate?.full_name ??
       row.matched_profile?.full_name ??
       inFileRow?.normalized.full_name ??
+      matchedProfileCandidates[0]?.fullName ??
       null,
     matchedProfileCompany:
+      primaryCandidate?.organisation_name ??
       row.matched_profile?.organisation_name ??
       inFileRow?.normalized.organisation_name ??
+      matchedProfileCandidates[0]?.organisationName ??
       null,
     matchedInFileRowNumber: inFileRowNumber,
     matchedInFileRowEmail: inFileRow?.normalized.email ?? null,
+    matchedProfileCandidates,
     error: row.error,
   };
 }
@@ -333,7 +382,47 @@ export async function getImportDetail(importId: string): Promise<ImportDetail> {
   const metadata = parseMetadata(importRecord.metadata);
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
   const rowsByNumber = new Map(rows.map((row) => [row.row_number, row]));
-  const mappedRows = rows.map((row) => mapImportRow(row, rowsByNumber));
+  const candidateProfileIds = new Set<string>();
+
+  for (const row of rows) {
+    for (const profileId of getCandidateProfileIds(row.normalized)) {
+      candidateProfileIds.add(profileId);
+    }
+
+    if (row.matched_profile_id) {
+      candidateProfileIds.add(row.matched_profile_id);
+    }
+  }
+
+  const profilesById = new Map<
+    string,
+    {
+      full_name: string;
+      organisation_name: string | null;
+      email: string | null;
+    }
+  >();
+
+  if (candidateProfileIds.size > 0) {
+    const supabase = await createClient();
+    const { data: candidateProfiles, error: candidateError } = await supabase
+      .from("profiles")
+      .select("id, full_name, organisation_name, email")
+      .eq("org_id", orgId)
+      .in("id", [...candidateProfileIds]);
+
+    if (candidateError) {
+      throw new Error(
+        `Failed to load soft-match candidates: ${candidateError.message}`,
+      );
+    }
+
+    for (const profile of candidateProfiles ?? []) {
+      profilesById.set(profile.id, profile);
+    }
+  }
+
+  const mappedRows = rows.map((row) => mapImportRow(row, rowsByNumber, profilesById));
   const softMatchRows = mappedRows.filter((row) => row.dedupStatus === "soft_match");
   const unresolvedSoftMatches = softMatchRows.length;
   const dedupSummary =
@@ -617,7 +706,7 @@ export async function runImportDedup(importId: string): Promise<DedupSummary> {
     loadImportRows(importId, orgId),
     supabase
       .from("profiles")
-      .select("id, email, full_name, organisation_name")
+      .select("id, email, full_name, organisation_name, phone, linkedin_url")
       .eq("org_id", orgId),
   ]);
 
@@ -627,16 +716,10 @@ export async function runImportDedup(importId: string): Promise<DedupSummary> {
 
   const profiles = profilesResult.data ?? [];
   const emailIndex = new Map<string, string>();
-  const nameCompanyIndex = new Map<string, string>();
 
   for (const profile of profiles) {
     if (profile.email) {
       emailIndex.set(profile.email.toLowerCase(), profile.id);
-    }
-
-    const key = nameCompanyDedupKey(profile.full_name, profile.organisation_name);
-    if (key) {
-      nameCompanyIndex.set(key, profile.id);
     }
   }
 
@@ -685,6 +768,24 @@ export async function runImportDedup(importId: string): Promise<DedupSummary> {
     }
 
     if (!error && dedupStatus === "pending") {
+      const phoneMatches = findPhoneMatches(normalized.phone, profiles);
+      if (phoneMatches.length > 0) {
+        dedupStatus = "soft_match";
+        matchedProfileId = phoneMatches[0] ?? null;
+        normalized = withCandidateProfileIds(normalized, phoneMatches);
+      }
+    }
+
+    if (!error && dedupStatus === "pending") {
+      const linkedinMatches = findLinkedinMatches(normalized.linkedin_url, profiles);
+      if (linkedinMatches.length > 0) {
+        dedupStatus = "soft_match";
+        matchedProfileId = linkedinMatches[0] ?? null;
+        normalized = withCandidateProfileIds(normalized, linkedinMatches);
+      }
+    }
+
+    if (!error && dedupStatus === "pending") {
       const key = nameCompanyDedupKey(
         normalized.full_name,
         normalized.organisation_name,
@@ -698,11 +799,17 @@ export async function runImportDedup(importId: string): Promise<DedupSummary> {
           normalized = withInFileMatchRowNumber(normalized, firstInFileRow);
         } else {
           seenNameCompany.set(key, row.row_number);
-          const candidateId = nameCompanyIndex.get(key);
+          const candidateIds = findNameCompanyMatches(
+            normalized.full_name,
+            normalized.organisation_name,
+            profiles,
+            { includeFuzzy: true },
+          );
 
-          if (candidateId) {
+          if (candidateIds.length > 0) {
             dedupStatus = "soft_match";
-            matchedProfileId = candidateId;
+            matchedProfileId = candidateIds[0] ?? null;
+            normalized = withCandidateProfileIds(normalized, candidateIds);
           }
         }
       }
@@ -996,6 +1103,7 @@ export async function backfillImportProfiles(
 export async function resolveSoftMatch(
   rowId: string,
   action: SoftMatchAction,
+  selectedProfileId?: string | null,
 ): Promise<void> {
   await requireAdmin();
   const orgId = await getOrgId();
@@ -1025,12 +1133,24 @@ export async function resolveSoftMatch(
 
   const normalized = asNormalized(row.normalized);
   const inFileRowNumber = getInFileMatchRowNumber(normalized);
+  const candidateIds = getCandidateProfileIds(normalized);
 
   if (action === "confirm") {
-    if (row.matched_profile_id) {
+    const profileId =
+      selectedProfileId?.trim() || row.matched_profile_id || candidateIds[0] || null;
+
+    if (profileId) {
+      if (
+        candidateIds.length > 0 &&
+        !candidateIds.includes(profileId) &&
+        row.matched_profile_id !== profileId
+      ) {
+        throw new Error("Selected profile is not a valid candidate for this row");
+      }
+
       update = {
         dedup_status: "matched_email",
-        matched_profile_id: row.matched_profile_id,
+        matched_profile_id: profileId,
         error: null,
       };
     } else if (inFileRowNumber) {
@@ -1155,6 +1275,23 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
   const mapping = metadata.column_mapping ?? {};
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
 
+  const createdProfileIds: string[] = [];
+  const updatedProfileSnapshots = new Map<
+    string,
+    Database["public"]["Tables"]["profiles"]["Update"]
+  >();
+  const graphRollbacks: RelationshipGraphRollback[] = [];
+
+  const { error: processingError } = await supabase
+    .from("imports")
+    .update({ status: "processing" })
+    .eq("id", importId)
+    .eq("org_id", orgId);
+
+  if (processingError) {
+    throw new Error(`Failed to mark import as processing: ${processingError.message}`);
+  }
+
   try {
     const profileIdByRowNumber = new Map<number, string>();
     const sortedCommitRows = [...commitRows].sort(
@@ -1179,6 +1316,7 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           orgUsers: orgUserRecords,
         });
         profileIdByRowNumber.set(row.row_number, profileId);
+        createdProfileIds.push(profileId);
         summary.created += 1;
         summary.ownerWarnings += ownerWarnings;
       } else if (row.dedup_status === "matched_email") {
@@ -1192,7 +1330,8 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           );
         }
 
-        const ownerWarnings = await updateProfileFromImportRow({
+        const { ownerWarnings, profileSnapshot, graphRollback } =
+          await updateProfileFromImportRow({
           orgId,
           importId,
           userId: user.id,
@@ -1201,6 +1340,12 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           sourceLabel,
           orgUsers: orgUserRecords,
         });
+        if (profileSnapshot) {
+          updatedProfileSnapshots.set(profileId, profileSnapshot);
+        }
+        if (graphRollback) {
+          graphRollbacks.push(graphRollback);
+        }
         summary.updated += 1;
         summary.ownerWarnings += ownerWarnings;
       }
@@ -1225,6 +1370,24 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
 
     return summary;
   } catch (error) {
+    if (createdProfileIds.length > 0) {
+      await supabase
+        .from("profiles")
+        .delete()
+        .in("id", createdProfileIds)
+        .eq("org_id", orgId);
+    }
+
+    for (const [profileId, snapshot] of updatedProfileSnapshots) {
+      await supabase
+        .from("profiles")
+        .update(snapshot)
+        .eq("id", profileId)
+        .eq("org_id", orgId);
+    }
+
+    await applyImportCommitRollbacks(supabase, orgId, graphRollbacks);
+
     await supabase
       .from("imports")
       .update({
@@ -1322,7 +1485,7 @@ async function createProfileFromImportRow(
     throw new Error(`Failed to create profile: ${profileError.message}`);
   }
 
-  const ownerWarnings = await ensureRelationshipGraph({
+  const { ownerWarnings } = await ensureRelationshipGraph({
     orgId,
     profileId: profile.id,
     importId,
@@ -1337,14 +1500,18 @@ async function createProfileFromImportRow(
 
 async function updateProfileFromImportRow(
   context: CommitContext & { profileId: string },
-): Promise<number> {
+): Promise<{
+  ownerWarnings: number;
+  profileSnapshot?: Database["public"]["Tables"]["profiles"]["Update"];
+  graphRollback?: RelationshipGraphRollback;
+}> {
   const supabase = await createClient();
   const { orgId, profileId, normalized } = context;
 
   const { data: existing, error: existingError } = await supabase
     .from("profiles")
     .select(
-      "email, phone, linkedin_url, organisation_name, occupation, location_city, location_country, extended",
+      "email, phone, linkedin_url, organisation_name, organisation_name_normalised, occupation, location_city, location_country, extended",
     )
     .eq("id", profileId)
     .eq("org_id", orgId)
@@ -1400,6 +1567,18 @@ async function updateProfileFromImportRow(
   }
 
   if (Object.keys(update).length > 0) {
+    const profileSnapshot: Database["public"]["Tables"]["profiles"]["Update"] = {
+      email: existing.email,
+      phone: existing.phone,
+      linkedin_url: existing.linkedin_url,
+      organisation_name: existing.organisation_name,
+      organisation_name_normalised: existing.organisation_name_normalised,
+      occupation: existing.occupation,
+      location_city: existing.location_city,
+      location_country: existing.location_country,
+      extended: existing.extended,
+    };
+
     const { error } = await supabase
       .from("profiles")
       .update(update)
@@ -1409,12 +1588,21 @@ async function updateProfileFromImportRow(
     if (error) {
       throw new Error(`Failed to update profile: ${error.message}`);
     }
+
+    const { ownerWarnings, graphRollback } = await ensureRelationshipGraph({
+      ...context,
+      profileId,
+    });
+
+    return { ownerWarnings, profileSnapshot, graphRollback };
   }
 
-  return ensureRelationshipGraph({
+  const { ownerWarnings, graphRollback } = await ensureRelationshipGraph({
     ...context,
     profileId,
   });
+
+  return { ownerWarnings, graphRollback };
 }
 
 async function ensureRelationshipGraph(input: {
@@ -1425,7 +1613,10 @@ async function ensureRelationshipGraph(input: {
   normalized: NormalizedImportRow;
   sourceLabel: string;
   orgUsers: OrgUserRecord[];
-}): Promise<number> {
+}): Promise<{
+  ownerWarnings: number;
+  graphRollback?: RelationshipGraphRollback;
+}> {
   const supabase = await createClient();
   const {
     orgId,
@@ -1437,6 +1628,14 @@ async function ensureRelationshipGraph(input: {
     orgUsers,
   } = input;
   let ownerWarnings = 0;
+  const graphRollback: RelationshipGraphRollback = {
+    relationshipId: "",
+    ownersModified: false,
+    relationshipOwnersBefore: [],
+    linkedProfileTags: [],
+    createdTagIds: [],
+  };
+  let trackedRollback = false;
 
   const relationshipStatus = (normalized.relationship_status ??
     "prospect") as RelationshipStatus;
@@ -1475,7 +1674,11 @@ async function ensureRelationshipGraph(input: {
     }
 
     relationshipId = createdRelationship.id;
+    graphRollback.createdRelationshipId = createdRelationship.id;
+    trackedRollback = true;
   }
+
+  graphRollback.relationshipId = relationshipId;
 
   const { data: existingSource, error: sourceLookupError } = await supabase
     .from("relationship_sources")
@@ -1490,18 +1693,25 @@ async function ensureRelationshipGraph(input: {
   }
 
   if (!existingSource) {
-    const { error: sourceError } = await supabase.from("relationship_sources").insert({
-      org_id: orgId,
-      relationship_id: relationshipId,
-      source_type: "csv_import",
-      source_id: importId,
-      source_label: sourceLabel,
-      created_by: userId,
-    });
+    const { data: createdSource, error: sourceError } = await supabase
+      .from("relationship_sources")
+      .insert({
+        org_id: orgId,
+        relationship_id: relationshipId,
+        source_type: "csv_import",
+        source_id: importId,
+        source_label: sourceLabel,
+        created_by: userId,
+      })
+      .select("id")
+      .single();
 
     if (sourceError) {
       throw new Error(`Failed to create relationship source: ${sourceError.message}`);
     }
+
+    graphRollback.createdRelationshipSourceId = createdSource.id;
+    trackedRollback = true;
   }
 
   const ownerRef = normalized.owner_email?.trim();
@@ -1512,6 +1722,21 @@ async function ensureRelationshipGraph(input: {
       ownerWarnings += 1;
     } else {
       const ownerStrength = (normalized.owner_strength ?? "unknown") as OwnerStrength;
+
+      const { data: ownersBefore, error: ownersBeforeError } = await supabase
+        .from("relationship_owners")
+        .select("user_id, strength, is_primary, notes, last_interaction_at")
+        .eq("relationship_id", relationshipId)
+        .eq("org_id", orgId);
+
+      if (ownersBeforeError) {
+        throw new Error(`Failed to load relationship owners: ${ownersBeforeError.message}`);
+      }
+
+      graphRollback.relationshipOwnersBefore = (ownersBefore ??
+        []) as RelationshipOwnerSnapshot[];
+      graphRollback.ownersModified = true;
+      trackedRollback = true;
 
       await supabase
         .from("relationship_owners")
@@ -1538,7 +1763,10 @@ async function ensureRelationshipGraph(input: {
 
   const tagNames = parseTags(normalized.tags);
   if (tagNames.length === 0) {
-    return ownerWarnings;
+    return {
+      ownerWarnings,
+      graphRollback: trackedRollback ? graphRollback : undefined,
+    };
   }
 
   for (const tagName of tagNames) {
@@ -1554,9 +1782,10 @@ async function ensureRelationshipGraph(input: {
     }
 
     let tagId = tag?.id;
+    let createdTag = false;
 
     if (!tagId) {
-      const { data: createdTag, error: createTagError } = await supabase
+      const { data: createdTagRow, error: createTagError } = await supabase
         .from("tags")
         .insert({
           org_id: orgId,
@@ -1570,22 +1799,46 @@ async function ensureRelationshipGraph(input: {
         throw new Error(`Failed to create tag: ${createTagError.message}`);
       }
 
-      tagId = createdTag.id;
+      tagId = createdTagRow.id;
+      createdTag = true;
+      graphRollback.createdTagIds.push(tagId);
+      trackedRollback = true;
     }
 
-    const { error: profileTagError } = await supabase.from("profile_tags").upsert(
-      {
+    const { data: existingProfileTag, error: existingProfileTagError } =
+      await supabase
+        .from("profile_tags")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("profile_id", profileId)
+        .eq("tag_id", tagId)
+        .maybeSingle();
+
+    if (existingProfileTagError) {
+      throw new Error(`Failed to check profile tag: ${existingProfileTagError.message}`);
+    }
+
+    if (!existingProfileTag) {
+      const { error: profileTagError } = await supabase.from("profile_tags").insert({
         org_id: orgId,
         profile_id: profileId,
         tag_id: tagId,
-      },
-      { onConflict: "profile_id,tag_id" },
-    );
+      });
 
-    if (profileTagError) {
-      throw new Error(`Failed to link tag: ${profileTagError.message}`);
+      if (profileTagError) {
+        if (createdTag) {
+          graphRollback.createdTagIds.pop();
+        }
+        throw new Error(`Failed to link tag: ${profileTagError.message}`);
+      }
+
+      graphRollback.linkedProfileTags.push({ profileId, tagId });
+      trackedRollback = true;
     }
   }
 
-  return ownerWarnings;
+  return {
+    ownerWarnings,
+    graphRollback: trackedRollback ? graphRollback : undefined,
+  };
 }

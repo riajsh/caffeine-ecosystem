@@ -64,6 +64,7 @@ export type NormalizedImportRow = {
   extended?: Record<string, string>;
   _dedup_in_file_row_number?: number;
   _dedup_merge_in_file_row_number?: number;
+  _dedup_candidate_profile_ids?: string[];
 };
 
 export type ImportListItem = {
@@ -91,6 +92,12 @@ export type ImportRowView = {
   matchedProfileCompany: string | null;
   matchedInFileRowNumber: number | null;
   matchedInFileRowEmail: string | null;
+  matchedProfileCandidates: Array<{
+    id: string;
+    fullName: string;
+    organisationName: string | null;
+    email: string | null;
+  }>;
   error: string | null;
 };
 

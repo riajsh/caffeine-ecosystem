@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { assertLoginRateLimitByIp } from "@/lib/auth/login-rate-limit";
 import { isAllowedLoginEmail } from "@/lib/auth/allowed-email";
 import { getSafeRedirectPath } from "@/lib/auth/safe-redirect";
 import { ensureUserRow } from "@/lib/auth/session";
@@ -12,6 +13,14 @@ export async function GET(request: Request) {
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
+  }
+
+  try {
+    await assertLoginRateLimitByIp();
+  } catch {
+    return NextResponse.redirect(
+      `${origin}/login?error=${encodeURIComponent("Too many sign-in attempts. Try again in a few minutes.")}`,
+    );
   }
 
   const supabase = await createClient();

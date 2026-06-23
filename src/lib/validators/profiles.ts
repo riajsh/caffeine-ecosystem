@@ -1,9 +1,15 @@
 import { z } from "zod";
 
+import { normalisePersonName } from "@/lib/normalise/person-name";
 import { postgresUuidSchema } from "@/lib/validators/id";
 
 const profileFieldsSchema = {
-  fullName: z.string().trim().min(1, "Name is required").max(200),
+  fullName: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(200)
+    .transform(normalisePersonName),
   email: z
     .string()
     .trim()

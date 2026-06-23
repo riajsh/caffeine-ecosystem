@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import {
+  ApplyPeerCompanyEnrichmentButton,
   InferAllCoAttendanceButton,
   InferSameCompanyButton,
 } from "@/components/admin/infer-all-co-attendance-button";
@@ -196,12 +197,13 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
         <h2 className="text-heading font-medium text-foreground">Inference</h2>
         <p className="max-w-2xl text-body text-muted-foreground">
           Infer profile-to-profile connections from shared event attendance
-          and normalised company names. Co-attendance also runs automatically
-          when attendees are added.
+          and normalised company names. Fill missing companies when colleagues
+          on the same work email domain already have a company set.
         </p>
         <div className="flex flex-wrap gap-3">
           <InferAllCoAttendanceButton />
           <InferSameCompanyButton />
+          <ApplyPeerCompanyEnrichmentButton />
         </div>
       </section>
 

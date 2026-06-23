@@ -8,7 +8,9 @@ import { ProfileHeader } from "@/components/profiles/profile-header";
 import { DeleteProfileButton } from "@/components/profiles/delete-profile-button";
 import { ProfileNetworkIntelligence } from "@/components/profiles/profile-network-intelligence";
 import { ProfileOwnersSection } from "@/components/profiles/profile-owners-section";
+import { ProfileEnrichmentSuggestions } from "@/components/profiles/profile-enrichment-suggestions";
 import type { ProfileNetworkIntel } from "@/lib/computed/profile-intelligence";
+import type { ProfileEnrichmentSuggestions as ProfileEnrichmentSuggestionsData } from "@/lib/enrichment/profile-enrichment";
 import { ProfileTagsSection } from "@/components/profiles/profile-tags-section";
 import type { ProfileDetail } from "@/lib/data/profiles";
 import type { OrgTag } from "@/lib/data/tags";
@@ -20,6 +22,7 @@ type ProfileDetailViewProps = {
   teamUsers: OrgUser[];
   orgTags: OrgTag[];
   networkIntel: ProfileNetworkIntel;
+  enrichmentSuggestions?: ProfileEnrichmentSuggestionsData;
   currentUserId: string;
   defaultTab?: ProfileTab;
   mode?: "page" | "drawer";
@@ -34,6 +37,7 @@ export function ProfileDetailView({
   teamUsers,
   orgTags,
   networkIntel,
+  enrichmentSuggestions,
   currentUserId,
   defaultTab,
   mode = "page",
@@ -43,6 +47,13 @@ export function ProfileDetailView({
       <ProfileHeader profile={profile} />
 
       <ProfileNetworkIntelligence profileId={profile.id} intel={networkIntel} />
+
+      {enrichmentSuggestions ? (
+        <ProfileEnrichmentSuggestions
+          profileId={profile.id}
+          suggestions={enrichmentSuggestions}
+        />
+      ) : null}
 
       <section className="space-y-3">
         <h2 className="text-heading font-medium text-foreground">Details</h2>

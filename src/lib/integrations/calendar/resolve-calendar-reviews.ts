@@ -94,3 +94,27 @@ export async function resolveCalendarReviewsForEmail(
     profileId: params.profileId ?? null,
   };
 }
+
+export async function deleteCalendarReviewsForEmail(
+  supabase: AdminClient,
+  params: {
+    orgId: string;
+    email: string;
+  },
+): Promise<{ reviewCount: number }> {
+  const normalisedEmail = normaliseEmail(params.email);
+
+  const { data, error } = await supabase
+    .from("calendar_participant_reviews")
+    .delete()
+    .eq("org_id", params.orgId)
+    .ilike("email", normalisedEmail)
+    .eq("status", "pending")
+    .select("id");
+
+  if (error) {
+    throw new Error(`Failed to delete review rows: ${error.message}`);
+  }
+
+  return { reviewCount: data?.length ?? 0 };
+}

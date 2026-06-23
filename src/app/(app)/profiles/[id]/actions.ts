@@ -32,11 +32,101 @@ import {
   updateRelationshipSchema,
 } from "@/lib/validators/relationships";
 import { profileTagSchema } from "@/lib/validators/tags";
+import { getOrgId, requireUser } from "@/lib/auth/session";
+import { normaliseOrganisationName } from "@/lib/normalise/organisation";
+import { createClient } from "@/lib/supabase/server";
+import { postgresUuidSchema } from "@/lib/validators/id";
 
 function revalidateProfile(profileId: string) {
   revalidatePath("/");
   revalidatePath("/profiles");
   revalidatePath(`/profiles/${profileId}`);
+}
+
+export async function acceptSuggestedCompanyAction(
+  profileId: string,
+  companyName: string,
+) {
+  const parsedId = postgresUuidSchema.safeParse(profileId);
+  const trimmedCompany = companyName.trim();
+
+  if (!parsedId.success || !trimmedCompany) {
+    return { error: "Invalid input" };
+  }
+
+  try {
+    await requireUser();
+    const orgId = await getOrgId();
+    const supabase = await createClient();
+
+    const { data: profile, error: loadError } = await supabase
+      .from("profiles")
+      .select("organisation_name")
+      .eq("org_id", orgId)
+      .eq("id", parsedId.data)
+      .maybeSingle();
+
+    if (loadError) {
+      throw new Error(`Failed to load profile: ${loadError.message}`);
+    }
+
+    if (!profile) {
+      return { error: "Profile not found" };
+    }
+
+    if (profile.organisation_name?.trim()) {
+      return { error: "Profile already has a company" };
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        organisation_name: trimmedCompany,
+        organisation_name_normalised: normaliseOrganisationName(trimmedCompany),
+      })
+      .eq("org_id", orgId)
+      .eq("id", parsedId.data);
+
+    if (error) {
+      throw new Error(`Failed to update company: ${error.message}`);
+    }
+
+    revalidateProfile(parsedId.data);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Failed to apply company",
+    };
+  }
+}
+
+export async function assignSuggestedOwnerAction(
+  profileId: string,
+  userId: string,
+) {
+  const parsedProfileId = postgresUuidSchema.safeParse(profileId);
+  const parsedUserId = postgresUuidSchema.safeParse(userId);
+
+  if (!parsedProfileId.success || !parsedUserId.success) {
+    return { error: "Invalid input" };
+  }
+
+  try {
+    await assignRelationshipOwner({
+      profileId: parsedProfileId.data,
+      userId: parsedUserId.data,
+      strength: "warm",
+      isPrimary: true,
+    });
+    revalidateProfile(parsedProfileId.data);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Failed to assign owner",
+    };
+  }
 }
 
 export async function assignOwnerAction(formData: FormData) {

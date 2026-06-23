@@ -7,6 +7,7 @@ import {
   getCalendarSyncProgressAction,
   listSubscribedCalendarsAction,
   runCalendarBackfillAction,
+  updateCalendarBackfillSelectionAction,
 } from "@/app/(app)/admin/integrations/actions";
 import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog-provider";
@@ -70,11 +71,52 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type SyncQueueState = {
+  completedIds: Set<string>;
+  currentId: string | null;
+  queuedIds: Set<string>;
+};
+
+function buildSyncQueueState(progress: {
+  completed?: { id: string }[];
+  current?: { id: string } | null;
+  queue?: { id: string }[];
+} | null | undefined): SyncQueueState | null {
+  if (!progress) {
+    return null;
+  }
+
+  return {
+    completedIds: new Set((progress.completed ?? []).map((item) => item.id)),
+    currentId: progress.current?.id ?? null,
+    queuedIds: new Set((progress.queue ?? []).map((item) => item.id)),
+  };
+}
+
+function calendarSyncStatus(
+  calendarId: string,
+  queueState: SyncQueueState | null,
+): string | null {
+  if (!queueState) {
+    return null;
+  }
+  if (queueState.completedIds.has(calendarId)) {
+    return "Done";
+  }
+  if (queueState.currentId === calendarId) {
+    return "Syncing now";
+  }
+  if (queueState.queuedIds.has(calendarId)) {
+    return "Queued";
+  }
+  return null;
+}
+
 async function fetchSyncChunk(accountId: string): Promise<ChunkResponse> {
   const response = await fetch("/api/admin/calendar-sync/chunk", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accountId, burst: 4 }),
+    body: JSON.stringify({ accountId, burst: 8 }),
   });
 
   const payload = (await response.json()) as ChunkResponse;
@@ -103,15 +145,35 @@ export function CalendarBackfillPanel({
   );
   const [eventsProcessed, setEventsProcessed] = useState(0);
   const [progressError, setProgressError] = useState<string | null>(null);
+  const [queueState, setQueueState] = useState<SyncQueueState | null>(null);
   const continueRef = useRef(false);
   const [isDraining, setIsDraining] = useState(false);
 
   const selectedIds = calendars.filter((calendar) => calendar.selected).map((c) => c.id);
+  const skippedQueuedCount = calendars.filter(
+    (calendar) => queueState?.queuedIds.has(calendar.id) && !calendar.selected,
+  ).length;
+  const selectionChanged = syncing && loaded && skippedQueuedCount > 0;
 
-  const refreshProgress = useCallback(async () => {
+  const loadCalendars = useCallback(async () => {
+    setLoadError(null);
+    const result = await listSubscribedCalendarsAction(accountId);
+    if ("error" in result && result.error) {
+      setLoadError(result.error);
+      return false;
+    }
+    if (!("success" in result) || !result.calendars) {
+      return false;
+    }
+    setCalendars(result.calendars);
+    setLoaded(true);
+    return true;
+  }, [accountId]);
+
+  const refreshProgress = useCallback(async (): Promise<boolean> => {
     const result = await getCalendarSyncProgressAction(accountId);
     if (!("success" in result) || !result.success) {
-      return;
+      return false;
     }
     if (result.summary) {
       setProgressSummary(result.summary);
@@ -119,9 +181,15 @@ export function CalendarBackfillPanel({
     if (result.stats) {
       setEventsProcessed(result.stats.eventsProcessed);
     }
+    if (result.progress) {
+      setQueueState(buildSyncQueueState(result.progress));
+    }
     if (result.syncing) {
       setSyncing(true);
+    } else {
+      setSyncing(false);
     }
+    return result.syncing;
   }, [accountId]);
 
   const applyChunkResult = useCallback((result: ChunkResponse): boolean => {
@@ -160,6 +228,10 @@ export function CalendarBackfillPanel({
         }
 
         setProgressError(result.error);
+        const progress = await getCalendarSyncProgressAction(accountId);
+        if ("success" in progress && progress.success && progress.syncing) {
+          return true;
+        }
         return false;
       } catch (error) {
         const message =
@@ -170,6 +242,10 @@ export function CalendarBackfillPanel({
           continue;
         }
         setProgressError(message);
+        const progress = await getCalendarSyncProgressAction(accountId);
+        if ("success" in progress && progress.success && progress.syncing) {
+          return true;
+        }
         return false;
       }
     }
@@ -234,15 +310,43 @@ export function CalendarBackfillPanel({
   }, [accountId, eventsProcessed, finishBackfill, runNextChunk]);
 
   useEffect(() => {
-    if (!initialSyncing) {
+    let cancelled = false;
+
+    void (async () => {
+      const stillSyncing = await refreshProgress();
+      if (cancelled) {
+        return;
+      }
+
+      if (initialSyncing || stillSyncing) {
+        await loadCalendars();
+      }
+      if (!cancelled && (initialSyncing || stillSyncing)) {
+        await drainBackfill();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Resume once when the panel mounts; server metadata is the source of truth.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId]);
+
+  useEffect(() => {
+    if (!syncing) {
       return;
     }
 
-    void (async () => {
-      await refreshProgress();
-      await drainBackfill();
-    })();
-  }, [initialSyncing, drainBackfill, refreshProgress]);
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !continueRef.current) {
+        void drainBackfill();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [syncing, drainBackfill]);
 
   useEffect(() => {
     if (!syncing) {
@@ -263,7 +367,7 @@ export function CalendarBackfillPanel({
 
     const timer = window.setInterval(() => {
       void drainBackfill();
-    }, 20_000);
+    }, 5_000);
 
     return () => window.clearInterval(timer);
   }, [syncing, isDraining, drainBackfill]);
@@ -279,7 +383,9 @@ export function CalendarBackfillPanel({
         <p className="mt-1 text-caption text-muted-foreground">
           Load your subscribed Google calendars, choose which to pull, then run
           backfill from Jun 2025 through the next six weeks. Large backfills run
-          in chunks so they do not time out — progress updates below.
+          in chunks so they do not time out — progress updates below. While a
+          backfill is running, you can uncheck queued calendars and click Skip
+          to drop them from the run.
         </p>
         {lastSyncError ? (
           <p className="mt-2 text-caption text-destructive" role="alert">
@@ -322,6 +428,10 @@ export function CalendarBackfillPanel({
               {progressError}
             </p>
           ) : null}
+          <p className="text-caption text-muted-foreground">
+            Keep this tab open while backfill runs. If you navigate away, it
+            resumes when you return or on the next hourly sync.
+          </p>
           {!isDraining ? (
             <Button
               type="button"
@@ -342,31 +452,74 @@ export function CalendarBackfillPanel({
         <Button
           type="button"
           variant="outline"
-          disabled={isPending || syncing}
+          disabled={isPending || (syncing && isDraining)}
           onClick={() => {
             void run(async () => {
-              setLoadError(null);
-              const result = await listSubscribedCalendarsAction(accountId);
-              if ("error" in result && result.error) {
-                setLoadError(result.error);
+              const ok = await loadCalendars();
+              if (!ok) {
                 await alert({
                   title: "Could not load calendars",
-                  description: result.error,
+                  description: loadError ?? "Unknown error",
                 });
-                return;
               }
-              if (!("success" in result) || !result.calendars) {
-                return;
+              if (syncing) {
+                await refreshProgress();
               }
-              setCalendars(result.calendars);
-              setLoaded(true);
             });
           }}
         >
           {loaded ? "Reload calendars" : "Load subscribed calendars"}
         </Button>
 
-        {loaded ? (
+        {loaded && syncing ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={isPending || isDraining || !selectionChanged}
+            onClick={() => {
+              void run(async () => {
+                const result = await updateCalendarBackfillSelectionAction(
+                  accountId,
+                  selectedIds,
+                );
+
+                if ("error" in result && result.error) {
+                  await alert({
+                    title: "Could not update selection",
+                    description: result.error,
+                  });
+                  return;
+                }
+                if (!("success" in result)) {
+                  return;
+                }
+
+                if (result.summary) {
+                  setProgressSummary(result.summary);
+                }
+                if (result.stats) {
+                  setEventsProcessed(result.stats.eventsProcessed);
+                }
+
+                await refreshProgress();
+
+                if (!result.syncing) {
+                  await finishBackfill(
+                    (result.stats?.errors.length ?? 0) > 0,
+                    result.stats?.errors ?? [],
+                    result.stats?.eventsProcessed ?? eventsProcessed,
+                  );
+                }
+              });
+            }}
+          >
+            {selectionChanged
+              ? `Skip ${skippedQueuedCount} queued calendar${skippedQueuedCount === 1 ? "" : "s"}`
+              : "Selection up to date"}
+          </Button>
+        ) : null}
+
+        {loaded && !syncing ? (
           <>
             <Button
               type="button"
@@ -455,36 +608,60 @@ export function CalendarBackfillPanel({
 
       {loaded ? (
         <ul className="max-h-80 space-y-2 overflow-y-auto rounded-md border border-border p-2">
-          {calendars.map((calendar) => (
-            <li key={calendar.id}>
-              <label className="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4 rounded border"
-                  checked={calendar.selected}
-                  disabled={!calendar.readable || isPending || syncing}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setCalendars((current) =>
-                      current.map((item) =>
-                        item.id === calendar.id ? { ...item, selected: checked } : item,
-                      ),
-                    );
-                  }}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-body text-foreground">
-                    {calendar.summary ?? calendar.id}
+          {calendars.map((calendar) => {
+            const syncStatus = calendarSyncStatus(calendar.id, queueState);
+            const isCompleted = queueState?.completedIds.has(calendar.id) ?? false;
+            const isCurrent = queueState?.currentId === calendar.id;
+            const isQueued = queueState?.queuedIds.has(calendar.id) ?? false;
+            const canToggleDuringSync =
+              syncing && isQueued && !isCompleted && !isCurrent;
+            const checkboxDisabled =
+              !calendar.readable ||
+              isPending ||
+              isCompleted ||
+              isCurrent ||
+              (syncing && !canToggleDuringSync);
+
+            return (
+              <li key={calendar.id}>
+                <label
+                  className={`flex items-start gap-3 rounded-md px-2 py-1.5 ${
+                    checkboxDisabled && !isCompleted && !isCurrent
+                      ? "opacity-60"
+                      : "cursor-pointer hover:bg-muted/50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-1 size-4 rounded border"
+                    checked={calendar.selected}
+                    disabled={checkboxDisabled}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setCalendars((current) =>
+                        current.map((item) =>
+                          item.id === calendar.id
+                            ? { ...item, selected: checked }
+                            : item,
+                        ),
+                      );
+                    }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-body text-foreground">
+                      {calendar.summary ?? calendar.id}
+                    </span>
+                    <span className="block text-caption text-muted-foreground">
+                      {KIND_LABELS[calendar.kind] ?? calendar.kind}
+                      {calendar.recommended ? " · recommended" : ""}
+                      {!calendar.readable ? " · free/busy only" : ""}
+                      {syncStatus ? ` · ${syncStatus}` : ""}
+                    </span>
                   </span>
-                  <span className="block text-caption text-muted-foreground">
-                    {KIND_LABELS[calendar.kind] ?? calendar.kind}
-                    {calendar.recommended ? " · recommended" : ""}
-                    {!calendar.readable ? " · free/busy only" : ""}
-                  </span>
-                </span>
-              </label>
-            </li>
-          ))}
+                </label>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </div>

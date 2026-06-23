@@ -9,9 +9,18 @@ import {
   type OrgParticipantFilters,
 } from "@/lib/integrations/participant-email";
 import {
-  groupEmailsByWorkDomain,
-  workEmailDomain,
-} from "@/lib/integrations/calendar/company-suggestions";
+  loadPeerOrganisationNamesIndex,
+  peerOrganisationNamesForDomain,
+} from "@/lib/enrichment/company-enrichment";
+import {
+  rankOrganisationNames,
+  resolveCompanySuggestionForEmail,
+} from "@/lib/enrichment/company-from-email";
+import { getOwnerSuggestionsForEmails } from "@/lib/enrichment/owner-enrichment";
+import type { CompanySuggestion } from "@/lib/enrichment/company-from-email";
+import type { OwnerSuggestion } from "@/lib/enrichment/owner-enrichment";
+import { workEmailDomain } from "@/lib/integrations/calendar/company-suggestions";
+import { normaliseEmail } from "@/lib/integrations/participant-email";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -46,6 +55,8 @@ export type CalendarUnmatchedGroup = {
   sampleMeetingDate: string | null;
   reviewIds: string[];
   suggestedCompanies: string[];
+  suggestedCompany: CompanySuggestion | null;
+  suggestedOwner: OwnerSuggestion | null;
 };
 
 export type CalendarMatchedMeeting = {
@@ -291,6 +302,8 @@ export async function listPendingCalendarReviewGroups(
       sampleMeetingDate: null,
       reviewIds: [row.id],
       suggestedCompanies: [],
+      suggestedCompany: null,
+      suggestedOwner: null,
     };
     updatePastSample(group, event?.title, event?.start_at ?? null);
     groups.set(email, group);
@@ -304,69 +317,37 @@ export async function listPendingCalendarReviewGroups(
   };
 }
 
-async function loadCompaniesForEmailDomain(
-  orgId: string,
-  domain: string,
-): Promise<string[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("organisation_name")
-    .eq("org_id", orgId)
-    .ilike("email", `%@${domain}`)
-    .not("organisation_name", "is", null);
-
-  if (error) {
-    throw new Error(`Failed to load company suggestions: ${error.message}`);
-  }
-
-  const counts = new Map<string, number>();
-
-  for (const row of data ?? []) {
-    const name = row.organisation_name?.trim();
-    if (!name) {
-      continue;
-    }
-
-    counts.set(name, (counts.get(name) ?? 0) + 1);
-  }
-
-  return [...counts.entries()]
-    .sort(
-      ([leftName, leftCount], [rightName, rightCount]) =>
-        rightCount - leftCount ||
-        leftName.localeCompare(rightName, undefined, { sensitivity: "base" }),
-    )
-    .map(([name]) => name)
-    .slice(0, 8);
-}
-
-async function attachCompanySuggestions(
+async function attachEnrichmentSuggestions(
   orgId: string,
   groups: CalendarUnmatchedGroup[],
 ): Promise<void> {
-  const emailsByDomain = groupEmailsByWorkDomain(groups.map((group) => group.email));
-  if (emailsByDomain.size === 0) {
-    for (const group of groups) {
-      group.suggestedCompanies = [];
-    }
+  if (groups.length === 0) {
     return;
   }
 
-  const companiesByDomain = new Map<string, string[]>();
-
-  await Promise.all(
-    [...emailsByDomain.keys()].map(async (domain) => {
-      const companies = await loadCompaniesForEmailDomain(orgId, domain);
-      companiesByDomain.set(domain, companies);
-    }),
-  );
+  const supabase = await createClient();
+  const [peerIndex, ownerSuggestions] = await Promise.all([
+    loadPeerOrganisationNamesIndex(supabase, orgId),
+    getOwnerSuggestionsForEmails(
+      supabase,
+      orgId,
+      groups.map((group) => group.email),
+    ),
+  ]);
 
   for (const group of groups) {
     const domain = workEmailDomain(group.email);
-    group.suggestedCompanies = domain
-      ? (companiesByDomain.get(domain) ?? [])
+    const peerNames = domain
+      ? peerOrganisationNamesForDomain(peerIndex, domain)
       : [];
+
+    group.suggestedCompanies = rankOrganisationNames(peerNames).slice(0, 8);
+    group.suggestedCompany = resolveCompanySuggestionForEmail(
+      group.email,
+      peerNames,
+    );
+    group.suggestedOwner =
+      ownerSuggestions.get(normaliseEmail(group.email)) ?? null;
   }
 }
 
@@ -376,8 +357,8 @@ export async function listPendingCalendarReviewGroupsWithSuggestions(
   const groups = await listPendingCalendarReviewGroups(limit);
   const orgId = await getOrgId();
 
-  await attachCompanySuggestions(orgId, groups.external);
-  await attachCompanySuggestions(orgId, groups.internal);
+  await attachEnrichmentSuggestions(orgId, groups.external);
+  await attachEnrichmentSuggestions(orgId, groups.internal);
 
   return groups;
 }
@@ -469,6 +450,8 @@ export async function searchProfilesForCalendarLink(
   const seen = new Set<string>();
   let exactEmailMatch = false;
 
+  const sanitizeIlikeTerm = (value: string) => value.replace(/[%_]/g, "");
+
   function addProfile(
     row: { id: string; full_name: string; email: string | null },
     matchReason: CalendarProfileMatch["matchReason"],
@@ -513,10 +496,10 @@ export async function searchProfilesForCalendarLink(
     Boolean(normalisedCalendarEmail) &&
     normalisedQuery === normalisedCalendarEmail;
 
-  let nameSearchTerm = queryIsCalendarEmail ? "" : trimmed;
+  let nameSearchTerm = queryIsCalendarEmail ? "" : sanitizeIlikeTerm(trimmed);
 
   if (!nameSearchTerm && normalisedCalendarEmail) {
-    const localPart = normalisedCalendarEmail.split("@")[0] ?? "";
+    const localPart = sanitizeIlikeTerm(normalisedCalendarEmail.split("@")[0] ?? "");
     if (localPart.length >= 2) {
       nameSearchTerm = localPart;
     }
@@ -548,7 +531,7 @@ export async function searchProfilesForCalendarLink(
   }
 
   if (normalisedCalendarEmail && results.length < 8) {
-    const localPart = normalisedCalendarEmail.split("@")[0] ?? "";
+    const localPart = sanitizeIlikeTerm(normalisedCalendarEmail.split("@")[0] ?? "");
     const localPartAlreadySearched =
       nameSearchTerm.length >= 2 &&
       (localPart.includes(nameSearchTerm.toLowerCase()) ||

@@ -6,7 +6,7 @@ import { ensureRelationshipForProfile } from "@/lib/integrations/calendar/review
 import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
 import { activitySourceRefForCalendarEvent } from "@/lib/integrations/calendar/cleanup-event";
 import { calendarActivitySourceRef, calendarActivitySourceRefCandidates } from "@/lib/integrations/calendar/occurrence";
-import { isPostgresUniqueViolation, calendarActivityExistsForOccurrence } from "@/lib/integrations/calendar/idempotent-insert";
+import { isPostgresUniqueViolation } from "@/lib/integrations/calendar/idempotent-insert";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
@@ -63,18 +63,6 @@ export async function backfillCalendarReviewsForProfile(
       !event.start_at || new Date(event.start_at).getTime() <= Date.now();
 
     if (!meetingIsPast) {
-      continue;
-    }
-
-    const alreadyLogged = await calendarActivityExistsForOccurrence(supabase, {
-      orgId: params.orgId,
-      profileId: params.profileId,
-      icalUid: event.ical_uid,
-      startAt: event.start_at,
-      googleEventId: event.google_event_id,
-    });
-
-    if (alreadyLogged) {
       continue;
     }
 

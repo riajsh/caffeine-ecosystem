@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AdminPage } from "@/components/admin/admin-page";
+import { DedupGroupList } from "@/components/admin/dedup-group-list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { findDuplicateProfileGroups } from "@/lib/data/profile-dedup";
 
@@ -14,7 +15,7 @@ export default async function AdminDedupPage() {
   return (
     <AdminPage
       title="Duplicate Cleanup"
-      description="Detect duplicate profiles across all imported datasets."
+      description="Detect duplicate profiles across the org and merge groups in place."
     >
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-border bg-card p-4">
@@ -26,65 +27,32 @@ export default async function AdminDedupPage() {
           <dd className="text-subheading font-medium">{groups.length}</dd>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <dt className="text-caption text-muted-foreground">Redundant profiles</dt>
+          <dt className="text-caption text-muted-foreground">Profiles to review</dt>
           <dd className="text-subheading font-medium">{redundantProfiles}</dd>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <dt className="text-caption text-muted-foreground">Merged so far</dt>
-          <dd className="text-subheading font-medium">0</dd>
+          <dt className="text-caption text-muted-foreground">Match types</dt>
+          <dd className="text-body text-muted-foreground">
+            Email, phone, LinkedIn, name+company, fuzzy name
+          </dd>
         </div>
       </dl>
 
       <p className="text-body text-muted-foreground">
-        Org-wide merge and dismiss actions ship in a future release. Per-import
-        dedup still runs during CSV upload.
+        Per-import dedup still runs during CSV upload. Use{" "}
+        <Link href="/profiles" className="text-interactive-primary hover:underline">
+          Profiles
+        </Link>{" "}
+        to merge arbitrary selections, or merge a whole group below.
       </p>
 
       {groups.length === 0 ? (
         <EmptyState
           title="No duplicate groups detected"
-          description="Email and name+organisation matches will appear here."
+          description="Email, phone, LinkedIn, and name+organisation matches will appear here."
         />
       ) : (
-        <ul className="space-y-4">
-          {groups.map((group) => (
-            <li
-              key={group.id}
-              className="space-y-3 rounded-lg border border-border bg-card p-4"
-            >
-              <div>
-                <p className="text-body font-medium text-foreground">
-                  {group.profiles[0]?.fullName}
-                </p>
-                <p className="text-caption text-muted-foreground">
-                  {group.profiles.length} duplicates · {group.reasonLabel}
-                </p>
-                {group.hasConflictingEmails ? (
-                  <p className="mt-1 text-caption text-amber-700 dark:text-amber-400">
-                    These profiles have different emails. Review carefully before
-                    merging — org-wide merge is not available yet.
-                  </p>
-                ) : null}
-              </div>
-              <ul className="space-y-1 text-body text-muted-foreground">
-                {group.profiles.map((profile) => (
-                  <li key={profile.id}>
-                    <Link
-                      href={`/profiles?profile=${profile.id}`}
-                      className="hover:text-foreground hover:underline"
-                    >
-                      {profile.fullName}
-                      {profile.email ? ` · ${profile.email}` : ""}
-                      {profile.organisationName
-                        ? ` · ${profile.organisationName}`
-                        : ""}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
+        <DedupGroupList groups={groups} />
       )}
     </AdminPage>
   );

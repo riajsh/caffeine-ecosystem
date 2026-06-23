@@ -3,9 +3,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { mergeProfilesAction } from "@/app/(app)/profiles/[id]/actions";
+import type { MergeableProfile } from "@/lib/profiles/mergeable-profile";
 import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog-provider";
-import type { ProfileListItem } from "@/lib/data/profiles";
 import { handleFocusTrap } from "@/lib/focus-trap";
 import {
   collectMergeEmailOptions,
@@ -16,14 +16,14 @@ import { useAsyncAction } from "@/lib/use-async-action";
 import { cn } from "@/lib/utils";
 
 type ProfilesMergeDialogProps = {
-  profiles: ProfileListItem[];
+  profiles: MergeableProfile[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onMerged: (survivorId: string) => void;
 };
 
 function defaultRetainedEmail(
-  profiles: ProfileListItem[],
+  profiles: MergeableProfile[],
   survivorId: string,
 ): string | null {
   const emailOptions = collectMergeEmailOptions(profiles);
@@ -157,7 +157,13 @@ export function ProfilesMergeDialog({
                     className="mt-1"
                     checked={isSelected}
                     disabled={isPending}
-                    onChange={() => setSurvivorId(profile.id)}
+                    onChange={() => {
+                      const nextSurvivorId = profile.id;
+                      setSurvivorId(nextSurvivorId);
+                      setRetainedEmail(
+                        defaultRetainedEmail(profiles, nextSurvivorId),
+                      );
+                    }}
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block font-medium text-foreground">

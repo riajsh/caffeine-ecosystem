@@ -27,6 +27,7 @@ import { loadOrgParticipantFilters } from "@/lib/integrations/participant-email"
 import {
   loadIgnoredParticipantEmails,
   loadOrgRelationshipsByProfileId,
+  loadOwnedProfileEmails,
 } from "@/lib/integrations/calendar/review-utils";
 import { purgeBeyondLookaheadCalendarData } from "@/lib/integrations/calendar/purge-beyond-lookahead";
 import { purgeInternalCalendarSyncData } from "@/lib/integrations/calendar/purge-internal";
@@ -192,6 +193,7 @@ async function upsertCalendarEvent(
   participantFilters: Awaited<ReturnType<typeof loadOrgParticipantFilters>>,
   ignoredParticipantEmails: ReadonlySet<string>,
   profilesByEmail: OrgProfileByEmail,
+  ownedProfileEmails: ReadonlySet<string>,
   relationshipsByProfileId: Awaited<
     ReturnType<typeof loadOrgRelationshipsByProfileId>
   >,
@@ -318,6 +320,7 @@ async function upsertCalendarEvent(
     participantFilters,
     ignoredParticipantEmails,
     profilesByEmail,
+    ownedProfileEmails,
     relationshipsByProfileId,
   });
 
@@ -334,6 +337,7 @@ async function syncCalendarFeed(
     participantFilters: Awaited<ReturnType<typeof loadOrgParticipantFilters>>;
     ignoredParticipantEmails: ReadonlySet<string>;
     profilesByEmail: OrgProfileByEmail;
+    ownedProfileEmails: ReadonlySet<string>;
     relationshipsByProfileId: Awaited<
       ReturnType<typeof loadOrgRelationshipsByProfileId>
     >;
@@ -378,6 +382,7 @@ async function syncCalendarFeed(
           params.participantFilters,
           params.ignoredParticipantEmails,
           params.profilesByEmail,
+          params.ownedProfileEmails,
           params.relationshipsByProfileId,
         );
 
@@ -457,7 +462,7 @@ async function persistAccountSyncState(
     },
   };
 
-  await supabase
+  const { error } = await supabase
     .from("calendar_accounts")
     .update({
       last_sync_at: params.syncing ? account.last_sync_at ?? null : new Date().toISOString(),
@@ -466,6 +471,10 @@ async function persistAccountSyncState(
     })
     .eq("id", account.id)
     .eq("org_id", account.org_id);
+
+  if (error) {
+    throw new Error(`Failed to persist calendar sync state: ${error.message}`);
+  }
 }
 
 async function loadSyncContext(
@@ -481,6 +490,7 @@ async function loadSyncContext(
     account.org_id,
   );
   const profilesByEmail = await loadOrgProfilesByEmail(supabase, account.org_id);
+  const ownedProfileEmails = await loadOwnedProfileEmails(supabase, account.org_id);
   const relationshipsByProfileId = await loadOrgRelationshipsByProfileId(
     supabase,
     account.org_id,
@@ -490,6 +500,7 @@ async function loadSyncContext(
     participantFilters,
     ignoredParticipantEmails,
     profilesByEmail,
+    ownedProfileEmails,
     relationshipsByProfileId,
   };
 }
@@ -620,6 +631,7 @@ export async function runCalendarSyncChunk(
       participantFilters: context.participantFilters,
       ignoredParticipantEmails: context.ignoredParticipantEmails,
       profilesByEmail: context.profilesByEmail,
+      ownedProfileEmails: context.ownedProfileEmails,
       relationshipsByProfileId: context.relationshipsByProfileId,
       maxPages: CALENDAR_SYNC_MAX_PAGES_PER_CHUNK,
       resumePageToken,
@@ -663,6 +675,7 @@ export async function runCalendarSyncChunk(
             participantFilters: context.participantFilters,
             ignoredParticipantEmails: context.ignoredParticipantEmails,
             profilesByEmail: context.profilesByEmail,
+      ownedProfileEmails: context.ownedProfileEmails,
             relationshipsByProfileId: context.relationshipsByProfileId,
             maxPages: CALENDAR_SYNC_MAX_PAGES_PER_CHUNK,
             resumePageToken: undefined,
@@ -721,7 +734,7 @@ export async function runCalendarSyncChunk(
   return { stats: progress.totals, hasMore, progress };
 }
 
-const DEFAULT_SYNC_BURST_CHUNKS = 4;
+const DEFAULT_SYNC_BURST_CHUNKS = 8;
 const DEFAULT_SYNC_BURST_MS = 240_000;
 
 export { DEFAULT_SYNC_BURST_CHUNKS };
@@ -803,13 +816,19 @@ export async function syncCalendarAccountIncremental(
           participantFilters: context.participantFilters,
           ignoredParticipantEmails: context.ignoredParticipantEmails,
           profilesByEmail: context.profilesByEmail,
+          ownedProfileEmails: context.ownedProfileEmails,
           relationshipsByProfileId: context.relationshipsByProfileId,
+          maxPages: CALENDAR_SYNC_MAX_PAGES_PER_CHUNK,
         });
 
         mergeStats(stats, feedResult.stats);
 
-        if (feedResult.nextSyncToken) {
+        if (feedResult.calendarFinished && feedResult.nextSyncToken) {
           syncCursors[syncable.id] = feedResult.nextSyncToken;
+        } else if (!feedResult.calendarFinished) {
+          stats.errors.push(
+            `${syncable.id}: partial incremental sync — will continue on next run`,
+          );
         }
       } catch (error) {
         if (error instanceof GaxiosError && error.response?.status === 429) {
@@ -834,10 +853,12 @@ export async function syncCalendarAccountIncremental(
               participantFilters: context.participantFilters,
               ignoredParticipantEmails: context.ignoredParticipantEmails,
               profilesByEmail: context.profilesByEmail,
+              ownedProfileEmails: context.ownedProfileEmails,
               relationshipsByProfileId: context.relationshipsByProfileId,
+              maxPages: CALENDAR_SYNC_MAX_PAGES_PER_CHUNK,
             });
             mergeStats(stats, retryResult.stats);
-            if (retryResult.nextSyncToken) {
+            if (retryResult.calendarFinished && retryResult.nextSyncToken) {
               syncCursors[syncable.id] = retryResult.nextSyncToken;
             }
           } catch (retryError) {
@@ -912,25 +933,38 @@ export async function syncCalendarAccount(
   return { stats, hasMore: false, progress: null };
 }
 
-export async function syncAllCalendarAccounts(): Promise<{
+export async function syncAllCalendarAccounts(options?: {
+  orgId?: string;
+  maxAccounts?: number;
+}): Promise<{
   accountsProcessed: number;
   stats: CalendarSyncStats;
   chunksRemaining: number;
 }> {
   const supabase = createAdminClient();
-  const { data: accounts, error } = await supabase
+  let query = supabase
     .from("calendar_accounts")
     .select("id, org_id, email, refresh_token, sync_cursor, metadata, last_sync_at")
     .eq("sync_enabled", true);
+
+  if (options?.orgId) {
+    query = query.eq("org_id", options.orgId);
+  }
+
+  const { data: accounts, error } = await query;
 
   if (error) {
     throw new Error(`Failed to load calendar accounts: ${error.message}`);
   }
 
+  const accountList = accounts ?? [];
+  const maxAccounts = options?.maxAccounts ?? accountList.length;
+  const accountsToProcess = accountList.slice(0, Math.max(0, maxAccounts));
+
   const aggregate = emptyStats();
   let chunksRemaining = 0;
 
-  for (const account of accounts ?? []) {
+  for (const account of accountsToProcess) {
     const progress = parseCalendarSyncProgress(account.metadata);
     const metadata = parseCalendarAccountMetadata(account.metadata);
     const hasActiveChunk =
@@ -939,8 +973,38 @@ export async function syncAllCalendarAccounts(): Promise<{
       metadata.needs_backfill === true;
 
     if (hasActiveChunk) {
-      const result = await runCalendarSyncBurst(account, { maxChunks: 8 });
-      mergeStats(aggregate, result.stats);
+      const burstDeadline = Date.now() + 270_000;
+      let currentAccount = account;
+      let result: CalendarSyncRunResult = {
+        stats: emptyStats(),
+        hasMore: false,
+        progress: null,
+      };
+
+      do {
+        result = await runCalendarSyncBurst(currentAccount, { maxChunks: 8 });
+        mergeStats(aggregate, result.stats);
+
+        if (!result.hasMore || result.stats.rateLimited) {
+          break;
+        }
+
+        const { data, error } = await supabase
+          .from("calendar_accounts")
+          .select(
+            "id, org_id, email, refresh_token, sync_cursor, metadata, last_sync_at",
+          )
+          .eq("id", account.id)
+          .eq("org_id", account.org_id)
+          .maybeSingle();
+
+        if (error || !data) {
+          break;
+        }
+
+        currentAccount = data;
+      } while (Date.now() < burstDeadline);
+
       if (result.hasMore) {
         chunksRemaining += 1;
       }
@@ -952,7 +1016,7 @@ export async function syncAllCalendarAccounts(): Promise<{
   }
 
   return {
-    accountsProcessed: accounts?.length ?? 0,
+    accountsProcessed: accountsToProcess.length,
     stats: aggregate,
     chunksRemaining,
   };

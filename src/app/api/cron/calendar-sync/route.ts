@@ -1,40 +1,17 @@
-import { timingSafeEqual } from "node:crypto";
-
 import { NextResponse } from "next/server";
 
+import { authoriseCronRequest } from "@/lib/auth/cron";
 import { syncAllCalendarAccounts } from "@/lib/integrations/calendar/sync";
 
 export const maxDuration = 300;
 
-function authoriseCron(request: Request): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) {
-    return false;
-  }
-
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader) {
-    return false;
-  }
-
-  const expected = `Bearer ${secret}`;
-  try {
-    const a = Buffer.from(authHeader);
-    const b = Buffer.from(expected);
-    // Constant-time comparison to prevent timing attacks (#33).
-    return a.length === b.length && timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
-}
-
 export async function GET(request: Request) {
-  if (!authoriseCron(request)) {
+  if (!authoriseCronRequest(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const result = await syncAllCalendarAccounts();
+    const result = await syncAllCalendarAccounts({ maxAccounts: 1 });
     return NextResponse.json(
       {
         ok: true,

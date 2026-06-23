@@ -95,7 +95,7 @@ export async function getOrbitNodes(options?: {
       `,
       )
       .eq("org_id", orgId),
-    getLatestActivityByProfile(orgId),
+    getLatestActivityByProfile(),
   ]);
 
   if (profiles.error) {

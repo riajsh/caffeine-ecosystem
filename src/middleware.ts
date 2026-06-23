@@ -16,6 +16,16 @@ function isCronRoute(pathname: string): boolean {
   return pathname.startsWith("/api/cron/");
 }
 
+/** Admin API routes require an admin session (defense in depth). */
+function isAdminApiRoute(pathname: string): boolean {
+  return pathname.startsWith("/api/admin/");
+}
+
+/** Admin UI routes require an admin session in middleware (defense in depth). */
+function isAdminAppRoute(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -53,6 +63,25 @@ export async function middleware(request: NextRequest) {
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (user && (isAdminApiRoute(pathname) || isAdminAppRoute(pathname))) {
+    const { data: appUser, error: appUserError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (appUserError || appUser?.role !== "admin") {
+      if (isAdminApiRoute(pathname)) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const homeUrl = request.nextUrl.clone();
+      homeUrl.pathname = "/";
+      homeUrl.search = "";
+      return NextResponse.redirect(homeUrl);
+    }
   }
 
   if (user && pathname === "/login") {

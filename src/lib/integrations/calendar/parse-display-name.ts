@@ -1,5 +1,7 @@
 import "server-only";
 
+import { normalisePersonName } from "@/lib/normalise/person-name";
+
 const NON_PERSON_NAME_PREFIXES =
   /^(team|support|info|hello|admin|sales|hr|contact|enquiries|noreply|no-reply)$/i;
 
@@ -41,10 +43,17 @@ export function parseCalendarDisplayName(
     return null;
   }
 
+  const fullName = normalisePersonName(parts.join(" "));
+  const formattedParts = fullName.split(/\s+/).filter(Boolean);
+
+  if (formattedParts.length < 2) {
+    return null;
+  }
+
   return {
-    firstName,
-    lastName,
-    fullName: parts.join(" "),
+    firstName: formattedParts[0]!,
+    lastName: formattedParts[formattedParts.length - 1]!,
+    fullName,
   };
 }
 

@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       activities: {
@@ -1340,7 +1315,40 @@ export type Database = {
           profile_id: string
         }[]
       }
+      merge_one_profile_duplicate: {
+        Args: {
+          p_duplicate_id: string
+          p_org_id: string
+          p_survivor_id: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      merge_profiles_atomic: {
+        Args: {
+          p_duplicate_ids: string[]
+          p_retained_email: string
+          p_survivor_fields: Json
+          p_survivor_id: string
+        }
+        Returns: number
+      }
+      normalise_organisation_name_sql: {
+        Args: { p_name: string }
+        Returns: string
+      }
       org_has_full_body_access: { Args: { p_org_id: string }; Returns: boolean }
+      pick_stronger_owner_strength: {
+        Args: {
+          left_strength: Database["public"]["Enums"]["owner_strength"]
+          right_strength: Database["public"]["Enums"]["owner_strength"]
+        }
+        Returns: Database["public"]["Enums"]["owner_strength"]
+      }
+      profile_is_team_member: {
+        Args: { p_email: string; p_org_id: string }
+        Returns: boolean
+      }
       search_email_message_bodies: {
         Args: { p_limit?: number; p_query: string }
         Returns: {
@@ -1557,9 +1565,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       activity_source: [

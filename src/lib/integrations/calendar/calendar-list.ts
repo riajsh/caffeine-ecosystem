@@ -44,6 +44,44 @@ export function shouldExcludeCalendar(
   return loadIgnorePatterns().some((pattern) => haystack.includes(pattern));
 }
 
+/** PU colleague calendars (@previously.co etc.) — not the connected user's own calendar. */
+export function isColleagueCalendarId(
+  calendarId: string,
+  accountEmail: string,
+): boolean {
+  const normalisedId = calendarId.trim().toLowerCase();
+  const normalisedAccountEmail = accountEmail.trim().toLowerCase();
+
+  if (normalisedId === "primary" || normalisedId === normalisedAccountEmail) {
+    return false;
+  }
+
+  if (normalisedId.endsWith("@resource.calendar.google.com")) {
+    return false;
+  }
+
+  return shouldSyncCalendarId(calendarId, accountEmail);
+}
+
+function isRecommendedForBackfill(
+  calendarId: string,
+  accountEmail: string,
+  summary: string | null,
+): boolean {
+  if (shouldExcludeCalendar(calendarId, summary)) {
+    return false;
+  }
+
+  const normalisedId = calendarId.trim().toLowerCase();
+  const normalisedAccountEmail = accountEmail.trim().toLowerCase();
+
+  if (normalisedId === "primary" || normalisedId === normalisedAccountEmail) {
+    return true;
+  }
+
+  return normalisedId.endsWith("@resource.calendar.google.com");
+}
+
 /** Whether a calendarList entry should be synced for this connected account. */
 export function shouldSyncCalendarId(
   calendarId: string,
@@ -205,7 +243,7 @@ export async function listSubscribedCalendarsForPicker(
         recommended:
           readable &&
           !excluded &&
-          shouldSyncCalendarId(entry.id, accountEmail, entry.summary ?? null),
+          isRecommendedForBackfill(entry.id, accountEmail, entry.summary ?? null),
         readable,
       });
     }

@@ -54,6 +54,44 @@ export async function loadOrgRelationshipsByProfileId(
   return relationshipsByProfileId;
 }
 
+export async function loadOwnedProfileEmails(
+  supabase: AdminClient,
+  orgId: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(
+      `
+      email,
+      relationships!inner (
+        relationship_owners!inner ( user_id )
+      )
+    `,
+    )
+    .eq("org_id", orgId)
+    .not("email", "is", null);
+
+  if (error) {
+    throw new Error(`Failed to load owned profile emails: ${error.message}`);
+  }
+
+  const owned = new Set<string>();
+  for (const profile of data ?? []) {
+    if (!profile.email) {
+      continue;
+    }
+    const relationships = profile.relationships ?? [];
+    const hasOwner = relationships.some(
+      (relationship) => (relationship.relationship_owners?.length ?? 0) > 0,
+    );
+    if (hasOwner) {
+      owned.add(normaliseEmail(profile.email));
+    }
+  }
+
+  return owned;
+}
+
 export async function ensureRelationshipsForProfiles(
   supabase: AdminClient,
   orgId: string,

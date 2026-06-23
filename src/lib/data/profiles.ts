@@ -302,42 +302,31 @@ async function loadLatestCalendarMeetingsForProfiles(
   }
 
   const cutoff = pastActivityCutoffIso();
-  const entries = await Promise.all(
-    uniqueIds.map(async (profileId) => {
-      const { data, error } = await supabase
-        .from("activities")
-        .select("title, activity_date, source_ref")
-        .eq("org_id", orgId)
-        .eq("profile_id", profileId)
-        .eq("source", "calendar_sync")
-        .eq("activity_type", "meeting")
-        .lte("activity_date", cutoff)
-        .order("activity_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error || !data) {
-        return null;
-      }
-
-      return [
-        profileId,
-        {
-          title: data.title,
-          activityDate: data.activity_date,
-          sourceRef: data.source_ref,
-        },
-      ] as const;
-    }),
+  const { data, error } = await supabase.rpc(
+    "get_latest_calendar_meetings_for_profiles",
+    {
+      p_org_id: orgId,
+      p_profile_ids: uniqueIds,
+      p_before: cutoff,
+    },
   );
 
-  const validEntries = entries.filter(
-    (
-      entry,
-    ): entry is [
-      string,
-      { title: string; activityDate: string; sourceRef: string | null },
-    ] => entry !== null,
+  if (error) {
+    throw new Error(
+      `Failed to load latest calendar meetings: ${error.message}`,
+    );
+  }
+
+  const validEntries = (data ?? []).map(
+    (row) =>
+      [
+        row.profile_id,
+        {
+          title: row.title,
+          activityDate: row.activity_date,
+          sourceRef: row.source_ref,
+        },
+      ] as const,
   );
 
   const sourceRefs = validEntries
@@ -491,7 +480,9 @@ function mapProfileDetailRow(
 }
 
 export const PROFILES_PAGE_SIZE = 50;
-const LIST_PROFILES_MAX = 10_000;
+/** Cap in-memory sorts — larger orgs should use name/company sort (DB-backed). */
+const LIST_PROFILES_JS_SORT_MAX = 2_000;
+const LIST_PROFILES_MAX = LIST_PROFILES_JS_SORT_MAX;
 
 export type { ProfileSortKey, SortOrder };
 
@@ -1074,6 +1065,8 @@ export async function createProfile(input: CreateProfileInput): Promise<string> 
   const orgId = await getOrgId();
   const supabase = await createClient();
 
+  await assertExternalProfileEmail(input.email, orgId);
+
   const organisationName = input.organisationName ?? null;
 
   const { data, error } = await supabase
@@ -1137,10 +1130,30 @@ export async function createProfile(input: CreateProfileInput): Promise<string> 
   return data.id;
 }
 
+async function assertExternalProfileEmail(
+  email: string | null | undefined,
+  orgId: string,
+) {
+  if (!email?.trim()) {
+    return;
+  }
+
+  const participantFilters = await loadOrgParticipantFilters(
+    createAdminClient(),
+    orgId,
+  );
+
+  if (isInternalParticipant(email, participantFilters)) {
+    throw new Error("Team member emails cannot be used for external profiles.");
+  }
+}
+
 export async function updateProfile(input: UpdateProfileInput): Promise<void> {
   await requireUser();
   const orgId = await getOrgId();
   const supabase = await createClient();
+
+  await assertExternalProfileEmail(input.email, orgId);
 
   const organisationName = input.organisationName ?? null;
 

@@ -3,14 +3,12 @@ import "server-only";
 import { getOrgId } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
-export async function getLatestActivityByProfile(
-  orgId?: string,
-): Promise<Map<string, string>> {
-  const resolvedOrgId = orgId ?? (await getOrgId());
+export async function getLatestActivityByProfile(): Promise<Map<string, string>> {
+  const orgId = await getOrgId();
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("get_last_activity_per_profile", {
-    p_org_id: resolvedOrgId,
+    p_org_id: orgId,
   });
 
   if (error) {

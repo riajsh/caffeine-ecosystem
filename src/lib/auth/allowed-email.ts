@@ -18,6 +18,9 @@ export function getPrimaryLoginDomain(): string | null {
 export function isAllowedLoginEmail(email: string): boolean {
   const allowedDomains = loadAllowedLoginDomains();
   if (allowedDomains.size === 0) {
+    if (process.env.VERCEL_ENV === "production") {
+      return false;
+    }
     return true;
   }
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 /** Supabase email OTP / invite links. Primary login is Google OAuth via /auth/callback. */
 
+import { assertLoginRateLimitByIp } from "@/lib/auth/login-rate-limit";
 import { isAllowedLoginEmail } from "@/lib/auth/allowed-email";
 import { getSafeRedirectPath } from "@/lib/auth/safe-redirect";
 import { ensureUserRow } from "@/lib/auth/session";
@@ -16,6 +17,14 @@ export async function GET(request: Request) {
 
   if (!tokenHash || !type) {
     return NextResponse.redirect(`${origin}/login?error=missing_token`);
+  }
+
+  try {
+    await assertLoginRateLimitByIp();
+  } catch {
+    return NextResponse.redirect(
+      `${origin}/login?error=${encodeURIComponent("Too many sign-in attempts. Try again in a few minutes.")}`,
+    );
   }
 
   const supabase = await createClient();

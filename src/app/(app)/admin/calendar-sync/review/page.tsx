@@ -3,6 +3,7 @@ import { AutomationTierReference } from "@/components/admin/automation-tier-refe
 import { CalendarSyncReviewWizard } from "@/components/admin/calendar-sync-review-wizard";
 import { requireAdmin } from "@/lib/auth/session";
 import { autoResolveNamedCalendarReviews } from "@/lib/data/calendar-sync-auto-resolve";
+import { listOrgUsers } from "@/lib/data/users";
 import {
   getCalendarSyncReviewSummary,
   listPendingCalendarReviewGroupsWithSuggestions,
@@ -19,16 +20,23 @@ export default async function CalendarSyncReviewPage({
   await requireAdmin();
   const params = await searchParams;
 
+  let autoResolveWarning: string | null = null;
   try {
     await autoResolveNamedCalendarReviews();
-  } catch {
-    // Review list still loads if auto-resolve fails; admin can triage manually.
+  } catch (error) {
+    autoResolveWarning =
+      error instanceof Error
+        ? error.message
+        : "Auto-resolve failed; review the queue manually.";
+    console.error("Calendar auto-resolve failed:", error);
   }
 
-  const [summary, unmatchedGroups, matchedMeetings] = await Promise.all([
+  const [summary, unmatchedGroups, matchedMeetings, teamUsers] =
+    await Promise.all([
     getCalendarSyncReviewSummary(),
     listPendingCalendarReviewGroupsWithSuggestions(),
     listRecentMatchedCalendarMeetings(),
+    listOrgUsers(),
   ]);
 
   return (
@@ -44,6 +52,11 @@ export default async function CalendarSyncReviewPage({
           meetings and people to review.
         </p>
       ) : null}
+      {autoResolveWarning ? (
+        <p className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-body text-foreground">
+          Auto-resolve could not finish: {autoResolveWarning}
+        </p>
+      ) : null}
       <div className="mb-4">
         <AutomationTierReference />
       </div>
@@ -51,6 +64,7 @@ export default async function CalendarSyncReviewPage({
         summary={summary}
         unmatchedGroups={unmatchedGroups}
         matchedMeetings={matchedMeetings}
+        teamUsers={teamUsers}
       />
     </AdminPage>
   );

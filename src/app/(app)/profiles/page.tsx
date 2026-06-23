@@ -11,6 +11,7 @@ import { ProfilesTable } from "@/components/profiles/profiles-table";
 import { ProfilesTagFilter } from "@/components/profiles/profiles-tag-filter";
 import { formatCountLabel, ListMeta } from "@/components/ui/list-meta";
 import { Button } from "@/components/ui/button";
+import { getProfileEnrichmentSuggestions } from "@/lib/enrichment/profile-enrichment";
 import { getProfileNetworkIntel } from "@/lib/computed/profile-intelligence";
 import {
   getProfileById,
@@ -190,9 +191,10 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
       notFound();
     }
 
-    const [profile, networkIntel] = await Promise.all([
+    const [profile, networkIntel, enrichmentSuggestions] = await Promise.all([
       getProfileById(drawerProfileId),
       getProfileNetworkIntel(drawerProfileId),
+      getProfileEnrichmentSuggestions(drawerProfileId),
     ]);
 
     drawerContent = (
@@ -207,6 +209,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
           teamUsers={teamUsers}
           orgTags={orgTags}
           networkIntel={networkIntel}
+          enrichmentSuggestions={enrichmentSuggestions}
           currentUserId={currentUser.id}
           defaultTab={defaultTab}
           mode="drawer"

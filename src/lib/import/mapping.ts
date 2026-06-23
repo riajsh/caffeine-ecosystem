@@ -6,6 +6,7 @@ import {
   RELATIONSHIP_TYPES,
   type EcosystemFieldKey,
 } from "./constants";
+import { normalisePersonName } from "@/lib/normalise/person-name";
 import type { ColumnMapping, NormalizedImportRow } from "./types";
 
 /** Saved admin mappings override auto-detected ones; empty saves keep auto-detect. */
@@ -213,6 +214,10 @@ export function applyColumnMapping(
 
   deriveFullName(raw, normalized);
   normalizeImportEnums(normalized);
+
+  if (normalized.full_name) {
+    normalized.full_name = normalisePersonName(normalized.full_name);
+  }
 
   return normalized;
 }

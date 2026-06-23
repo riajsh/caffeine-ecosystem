@@ -133,7 +133,7 @@ export async function getReconnectSuggestions(
   const orgId = await getOrgId();
   const [profiles, latestActivity] = await Promise.all([
     loadProfileSpine(options),
-    getLatestActivityByProfile(orgId),
+    getLatestActivityByProfile(),
   ]);
 
   const suggestions: ReconnectSuggestion[] = [];

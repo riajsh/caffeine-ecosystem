@@ -85,6 +85,48 @@ async function getOrCreateRelationship(
   return created.id;
 }
 
+async function assertOwnerBelongsToProfile(
+  ownerId: string,
+  profileId: string,
+  orgId: string,
+) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("relationship_owners")
+    .select("id, relationships!inner(profile_id)")
+    .eq("id", ownerId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to verify owner: ${error.message}`);
+  }
+
+  const relationship = data?.relationships as { profile_id: string } | null;
+  if (!data || relationship?.profile_id !== profileId) {
+    throw new Error("Owner not found");
+  }
+}
+
+async function assertUserInOrg(userId: string, orgId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("id")
+    .eq("id", userId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to verify team member: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("Team member not found");
+  }
+}
+
 async function clearPrimaryOwners(relationshipId: string, orgId: string) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -116,6 +158,8 @@ export async function assignRelationshipOwner(
   if (input.isPrimary) {
     await clearPrimaryOwners(relationshipId, orgId);
   }
+
+  await assertUserInOrg(input.userId, orgId);
 
   const { error } = await supabase.from("relationship_owners").insert({
     org_id: orgId,
@@ -155,6 +199,8 @@ export async function updateRelationshipOwner(
   if (!ownerRow) {
     throw new Error("Owner not found");
   }
+
+  await assertOwnerBelongsToProfile(input.ownerId, input.profileId, orgId);
 
   if (input.isPrimary) {
     await clearPrimaryOwners(ownerRow.relationship_id, orgId);
@@ -200,6 +246,7 @@ export async function updateRelationship(
       notes: input.notes && input.notes.length > 0 ? input.notes : null,
     })
     .eq("id", input.relationshipId)
+    .eq("profile_id", input.profileId)
     .eq("org_id", orgId);
 
   if (error) {

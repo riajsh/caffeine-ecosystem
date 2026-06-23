@@ -154,7 +154,12 @@ export async function resolveSoftMatchAction(formData: FormData) {
   }
 
   try {
-    await resolveSoftMatch(parsedRowId.data, parsedAction.data);
+    const selectedProfileId = formData.get("matchedProfileId");
+    await resolveSoftMatch(
+      parsedRowId.data,
+      parsedAction.data,
+      typeof selectedProfileId === "string" ? selectedProfileId : null,
+    );
     revalidateImport(parsedId.data);
     return { success: true as const };
   } catch (error) {

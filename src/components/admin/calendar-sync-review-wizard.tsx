@@ -5,14 +5,20 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  clearColleagueCalendarSyncNoiseAction,
   createProfileFromCalendarReviewAction,
+  deleteCalendarReviewAction,
+  deleteUnownedPersonalEmailProfilesAction,
   ignoreAllInternalCalendarReviewsAction,
   ignoreCalendarReviewAction,
+  ignoreSingleMeetingCalendarReviewsAction,
+  ignoreUnownedPersonalEmailReviewsAction,
   linkCalendarReviewAction,
   searchProfilesForCalendarLinkAction,
 } from "@/app/(app)/admin/calendar-sync/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -31,6 +37,11 @@ import type {
   CalendarUnmatchedGroup,
 } from "@/lib/data/calendar-sync-review";
 import { formatInteractionDate } from "@/lib/format/date";
+import {
+  companySuggestionLabel,
+  ownerSuggestionLabel,
+} from "@/lib/enrichment/labels";
+import type { OrgUser } from "@/lib/data/users";
 import { toastSuccess } from "@/lib/toast";
 import { useAsyncAction } from "@/lib/use-async-action";
 
@@ -38,6 +49,7 @@ type CalendarSyncReviewWizardProps = {
   summary: CalendarSyncReviewSummary;
   unmatchedGroups: CalendarReviewGroupLists;
   matchedMeetings: CalendarMatchedMeetingLists;
+  teamUsers: OrgUser[];
 };
 
 function formatMeetingContext(group: CalendarUnmatchedGroup): string {
@@ -65,8 +77,36 @@ function defaultLinkSearchQuery(group: CalendarUnmatchedGroup): string {
 
 function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   const router = useRouter();
+  const { confirm } = useAppDialog();
   const { isPending, run } = useAsyncAction();
   const [error, setError] = useState<string | null>(null);
+
+  async function runDelete() {
+    const confirmed = await confirm({
+      title: "Delete review records?",
+      description:
+        "Permanently removes pending review rows for this email. Unlike Ignore, they are not remembered — the next calendar sync may queue this person again.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    void run(async () => {
+      setError(null);
+      const formData = new FormData();
+      formData.set("email", group.email);
+      const result = await deleteCalendarReviewAction(formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      toastSuccess("Review deleted");
+      router.refresh();
+    });
+  }
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-muted/20 px-4 py-3">
@@ -101,6 +141,18 @@ function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
       >
         Ignore
       </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={isPending}
+        className="text-destructive hover:text-destructive"
+        onClick={() => {
+          void runDelete();
+        }}
+      >
+        Delete
+      </Button>
       {error ? (
         <p className="text-body text-destructive" role="alert">{error}</p>
       ) : null}
@@ -108,8 +160,15 @@ function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
   );
 }
 
-function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
+function UnmatchedReviewRow({
+  group,
+  teamUsers,
+}: {
+  group: CalendarUnmatchedGroup;
+  teamUsers: OrgUser[];
+}) {
   const router = useRouter();
+  const { confirm } = useAppDialog();
   const { isPending, run } = useAsyncAction();
   const [error, setError] = useState<string | null>(null);
   const initialQuery = defaultLinkSearchQuery(group);
@@ -119,8 +178,13 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
     group.displayName?.trim() ||
       (group.email.split("@")[0] ?? "").replace(/[._+-]/g, " ").trim(),
   );
-  const [organisationName, setOrganisationName] = useState("");
+  const [organisationName, setOrganisationName] = useState(
+    () => group.suggestedCompany?.name ?? "",
+  );
   const [occupation, setOccupation] = useState("");
+  const [ownerUserId, setOwnerUserId] = useState(
+    () => group.suggestedOwner?.userId ?? "",
+  );
   const [candidates, setCandidates] = useState<CalendarProfileMatch[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
     null,
@@ -185,6 +249,24 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
       toastSuccess(successMessage);
       router.refresh();
     });
+  }
+
+  async function runDelete() {
+    const confirmed = await confirm({
+      title: "Delete review records?",
+      description:
+        "Permanently removes pending review rows for this email. Unlike Ignore, they are not remembered — the next calendar sync may queue this person again.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("email", group.email);
+    runAction(() => deleteCalendarReviewAction(formData), "Review deleted");
   }
 
   const selectedProfile = candidates.find(
@@ -258,6 +340,10 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
                   From other profiles with @{group.email.split("@")[1]} emails.
                 </p>
               </>
+            ) : group.suggestedCompany ? (
+              <p className="text-caption text-muted-foreground">
+                {companySuggestionLabel(group.suggestedCompany)}
+              </p>
             ) : null}
             <Input
               value={organisationName}
@@ -266,13 +352,39 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
               aria-label={`Company for ${group.email}`}
             />
           </div>
+          <div className="space-y-2">
+            <Select
+              value={ownerUserId || undefined}
+              onValueChange={setOwnerUserId}
+            >
+              <SelectTrigger aria-label={`Suggested owner for ${group.email}`}>
+                <SelectValue placeholder="Suggested owner" />
+              </SelectTrigger>
+              <SelectContent>
+                {teamUsers.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.fullName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {group.suggestedOwner ? (
+              <p className="text-caption text-muted-foreground">
+                {ownerSuggestionLabel(group.suggestedOwner)}
+              </p>
+            ) : (
+              <p className="text-caption text-muted-foreground">
+                Optional — assign a relationship owner now.
+              </p>
+            )}
+          </div>
+          </div>
           <Input
             value={occupation}
             onChange={(event) => setOccupation(event.target.value)}
             placeholder="Role / title"
             aria-label={`Role for ${group.email}`}
           />
-          </div>
         </div>
       </div>
 
@@ -399,6 +511,9 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
             formData.set("displayName", fullName.trim());
             formData.set("organisationName", organisationName);
             formData.set("occupation", occupation);
+            if (ownerUserId) {
+              formData.set("ownerUserId", ownerUserId);
+            }
             runAction(
               () => createProfileFromCalendarReviewAction(formData),
               "Profile created",
@@ -423,10 +538,173 @@ function UnmatchedReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
         >
           Ignore
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          className="text-destructive hover:text-destructive"
+          onClick={() => {
+            void runDelete();
+          }}
+        >
+          Delete
+        </Button>
       </div>
 
       {error ? (
         <p className="text-body text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PersonalEmailCleanupSection({
+  pendingReviewCount,
+}: {
+  pendingReviewCount: number;
+}) {
+  const router = useRouter();
+  const { alert, confirm } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-4">
+      <p className="text-body font-medium text-foreground">
+        Personal email noise
+      </p>
+      <p className="mt-1 text-body text-muted-foreground">
+        Colleague calendars pull in gmail.com and similar addresses from other
+        people&apos;s meetings. Clear the review queue, remove auto-created
+        personal-email profiles, and stop syncing PU colleague calendars.
+        Profiles with a relationship owner are always kept.
+        {pendingReviewCount > 0
+          ? ` ${pendingReviewCount} people still in the review queue.`
+          : ""}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={isPending}
+          onClick={() => {
+            void run(async () => {
+              setError(null);
+              const confirmed = await confirm({
+                title: "Remove personal-email profiles?",
+                description:
+                  "Deletes profiles on gmail.com, hotmail.com, and similar domains that have no relationship owner. Calendar activities on those profiles are removed too. Profiles with an owner are kept.",
+                confirmLabel: "Remove profiles",
+                destructive: true,
+              });
+              if (!confirmed) {
+                return;
+              }
+
+              const result = await deleteUnownedPersonalEmailProfilesAction();
+              if ("error" in result && result.error) {
+                setError(result.error);
+                await alert({
+                  title: "Could not remove profiles",
+                  description: result.error,
+                });
+                return;
+              }
+              if (!("success" in result)) {
+                return;
+              }
+
+              toastSuccess(
+                `Removed ${result.deletedCount} personal-email profile${result.deletedCount === 1 ? "" : "s"}`,
+              );
+              router.refresh();
+            });
+          }}
+        >
+          Remove personal-email profiles
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={isPending}
+          onClick={() => {
+            void run(async () => {
+              setError(null);
+              const result = await clearColleagueCalendarSyncNoiseAction();
+              if ("error" in result && result.error) {
+                setError(result.error);
+                return;
+              }
+              if (!("success" in result)) {
+                return;
+              }
+              toastSuccess(
+                `Removed ${result.removedCalendars} colleague calendars · ignored ${result.ignoredReviewCount} personal-email reviews`,
+              );
+              router.refresh();
+            });
+          }}
+        >
+          Clear colleague sync noise
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={() => {
+            void run(async () => {
+              setError(null);
+              const result = await ignoreSingleMeetingCalendarReviewsAction();
+              if ("error" in result && result.error) {
+                setError(result.error);
+                return;
+              }
+              if (!("success" in result)) {
+                return;
+              }
+              toastSuccess(
+                `Ignored ${result.reviewCount} single-meeting contacts (${result.ignoredEmails} emails)`,
+              );
+              router.refresh();
+            });
+          }}
+        >
+          Ignore one-meeting contacts
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={() => {
+            void run(async () => {
+              setError(null);
+              const result = await ignoreUnownedPersonalEmailReviewsAction();
+              if ("error" in result && result.error) {
+                setError(result.error);
+                return;
+              }
+              if (!("success" in result)) {
+                return;
+              }
+              toastSuccess(
+                `Ignored ${result.reviewCount} reviews across ${result.ignoredEmails} personal emails`,
+              );
+              router.refresh();
+            });
+          }}
+        >
+          Ignore personal emails only
+        </Button>
+      </div>
+      {error ? (
+        <p className="mt-2 text-body text-destructive" role="alert">
           {error}
         </p>
       ) : null}
@@ -532,6 +810,7 @@ export function CalendarSyncReviewWizard({
   summary,
   unmatchedGroups,
   matchedMeetings,
+  teamUsers,
 }: CalendarSyncReviewWizardProps) {
   const defaultTab =
     summary.pendingReviewCount > 0 ? "review" : "matched";
@@ -605,6 +884,9 @@ export function CalendarSyncReviewWizard({
       </TabsContent>
 
       <TabsContent value="review" id="review-tab" className="space-y-4">
+        <PersonalEmailCleanupSection
+          pendingReviewCount={summary.pendingReviewCount}
+        />
         {unmatchedGroups.external.length === 0 ? (
           <p className="text-body text-muted-foreground">
             No external attendees left in the queue.
@@ -618,7 +900,11 @@ export function CalendarSyncReviewWizard({
             </p>
             <div className="space-y-4">
               {unmatchedGroups.external.map((group) => (
-                <UnmatchedReviewRow key={group.email} group={group} />
+                <UnmatchedReviewRow
+                  key={group.email}
+                  group={group}
+                  teamUsers={teamUsers}
+                />
               ))}
             </div>
           </>

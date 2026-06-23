@@ -38,6 +38,51 @@ export function extractEmailDomain(email: string): string | null {
   return email.slice(at + 1);
 }
 
+const DEFAULT_PERSONAL_EMAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "hotmail.com",
+  "hotmail.co.uk",
+  "outlook.com",
+  "live.com",
+  "msn.com",
+  "yahoo.com",
+  "yahoo.co.uk",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "protonmail.com",
+  "proton.me",
+  "fastmail.com",
+  "aol.com",
+  "gmx.com",
+  "gmx.net",
+]);
+
+function loadPersonalEmailDomains(): Set<string> {
+  const raw = process.env.CALENDAR_PERSONAL_EMAIL_DOMAINS?.trim();
+  if (!raw) {
+    return DEFAULT_PERSONAL_EMAIL_DOMAINS;
+  }
+
+  return new Set(
+    raw
+      .split(",")
+      .map((domain) => domain.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/** Consumer email domains (gmail.com, etc.) — usually personal, not work contacts. */
+export function isPersonalEmailDomain(email: string): boolean {
+  const domain = extractEmailDomain(normaliseEmail(email));
+  if (!domain) {
+    return false;
+  }
+
+  return loadPersonalEmailDomains().has(domain);
+}
+
 export function isIgnoredEmail(email: string): boolean {
   return IGNORED_EMAIL_PATTERNS.some((pattern) => pattern.test(email));
 }

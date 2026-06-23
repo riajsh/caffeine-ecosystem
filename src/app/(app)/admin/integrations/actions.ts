@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin, requireUser } from "@/lib/auth/session";
+import { getOrgId, requireAdmin, requireUser } from "@/lib/auth/session";
 import {
   disconnectCalendarAccount,
   getCalendarAccountForSync,
@@ -19,8 +19,10 @@ import {
   syncAllCalendarAccounts,
   syncCalendarAccount,
 } from "@/lib/integrations/calendar/sync";
+import { updateCalendarBackfillSelection } from "@/lib/integrations/calendar/trim-backfill-selection";
 import {
   parseCalendarSyncProgress,
+  syncProgressHasMore,
   syncProgressSummary,
 } from "@/lib/integrations/calendar/sync-progress";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -48,7 +50,8 @@ export async function runCalendarSyncAction() {
   await requireAdmin();
 
   try {
-    const result = await syncAllCalendarAccounts();
+    const orgId = await getOrgId();
+    const result = await syncAllCalendarAccounts({ orgId });
     revalidatePath("/admin");
     revalidatePath("/admin/calendar-sync/review");
     return { success: true as const, ...result };
@@ -141,6 +144,45 @@ export async function runCalendarBackfillContinueAction(accountId: string) {
       summary: result.progress ? syncProgressSummary(result.progress) : null,
       stats: result.stats,
       failed: result.stats.errors.length > 0 && !result.hasMore,
+    };
+  } catch (error) {
+    return {
+      error: formatGoogleCalendarError(error),
+    };
+  }
+}
+
+export async function updateCalendarBackfillSelectionAction(
+  accountId: string,
+  calendarIds: string[],
+) {
+  const user = await requireAdmin();
+
+  const uniqueCalendarIds = [...new Set(calendarIds.map((id) => id.trim()))].filter(
+    Boolean,
+  );
+
+  try {
+    const result = await updateCalendarBackfillSelection({
+      accountId,
+      orgId: user.org_id,
+      selectedCalendarIds: uniqueCalendarIds,
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/calendar-sync/review");
+
+    const account = await getCalendarAccountForSync(accountId);
+    const progress = account
+      ? parseCalendarSyncProgress(account.metadata)
+      : null;
+
+    return {
+      success: true as const,
+      skippedCalendars: result.skippedCalendars,
+      syncing: progress ? syncProgressHasMore(progress) : false,
+      summary: progress ? syncProgressSummary(progress) : null,
+      stats: progress?.totals ?? null,
     };
   } catch (error) {
     return {

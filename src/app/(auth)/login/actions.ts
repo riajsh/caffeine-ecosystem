@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 
-import { getPrimaryLoginDomain } from "@/lib/auth/allowed-email";
+import { assertLoginRateLimit, assertLoginRateLimitByIp } from "@/lib/auth/login-rate-limit";
+import { getPrimaryLoginDomain, isAllowedLoginEmail } from "@/lib/auth/allowed-email";
 import { formatLoginError } from "@/lib/auth/login-errors";
 import { getSafeRedirectPath } from "@/lib/auth/safe-redirect";
 import { ensureUserRow } from "@/lib/auth/session";
@@ -27,6 +28,16 @@ export async function signInWithPassword(formData: FormData) {
     loginRedirect("Enter your password.");
   }
 
+  try {
+    await assertLoginRateLimit(email);
+  } catch (rateLimitError) {
+    loginRedirect(
+      rateLimitError instanceof Error
+        ? rateLimitError.message
+        : "Too many sign-in attempts. Try again in a few minutes.",
+    );
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email,
@@ -46,6 +57,11 @@ export async function signInWithPassword(formData: FormData) {
     loginRedirect("Sign-in succeeded but no user session was created.");
   }
 
+  if (authedUser.email && !isAllowedLoginEmail(authedUser.email)) {
+    await supabase.auth.signOut();
+    loginRedirect("Sign in with your work Google account.");
+  }
+
   try {
     await ensureUserRow(authedUser);
   } catch (bootstrapError) {
@@ -60,6 +76,16 @@ export async function signInWithPassword(formData: FormData) {
 }
 
 export async function signInWithGoogle(formData: FormData) {
+  try {
+    await assertLoginRateLimitByIp();
+  } catch (rateLimitError) {
+    loginRedirect(
+      rateLimitError instanceof Error
+        ? rateLimitError.message
+        : "Too many sign-in attempts. Try again in a few minutes.",
+    );
+  }
+
   const next = getSafeRedirectPath(String(formData.get("next") ?? ""));
   const redirectTo = new URL(`${publicEnv.NEXT_PUBLIC_SITE_URL}/auth/callback`);
   if (next !== "/") {
