@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/auth/session";
 
+export const maxDuration = 300;
+
 export default async function AdminLayout({
   children,
 }: {

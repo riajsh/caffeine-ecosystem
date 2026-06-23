@@ -577,7 +577,8 @@ export async function runCalendarSyncChunk(
   }
 
   if (progress.totals.rateLimited) {
-    return { stats: progress.totals, hasMore: true, progress };
+    progress.totals.rateLimited = false;
+    progress.last_error = null;
   }
 
   const context = await loadSyncContext(supabase, account);
