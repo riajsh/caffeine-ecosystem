@@ -42,31 +42,44 @@ export function ProfilesMergeDialog({
   onOpenChange,
   onMerged,
 }: ProfilesMergeDialogProps) {
+  if (!open || profiles.length < 2) {
+    return null;
+  }
+
+  return (
+    <ProfilesMergeDialogContent
+      key={profiles
+        .map((profile) => profile.id)
+        .sort()
+        .join(",")}
+      profiles={profiles}
+      onOpenChange={onOpenChange}
+      onMerged={onMerged}
+    />
+  );
+}
+
+function ProfilesMergeDialogContent({
+  profiles,
+  onOpenChange,
+  onMerged,
+}: Omit<ProfilesMergeDialogProps, "open">) {
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const { alert } = useAppDialog();
   const { isPending, run } = useAsyncAction();
-  const [survivorId, setSurvivorId] = useState(profiles[0]?.id ?? "");
-  const [retainedEmail, setRetainedEmail] = useState<string | null>(null);
+  const initialSurvivorId = profiles[0]?.id ?? "";
+  const [survivorId, setSurvivorId] = useState(initialSurvivorId);
+  const [retainedEmail, setRetainedEmail] = useState<string | null>(() =>
+    defaultRetainedEmail(profiles, initialSurvivorId),
+  );
 
   const emailOptions = useMemo(() => collectMergeEmailOptions(profiles), [profiles]);
   const emailConflict = hasMergeEmailConflict(profiles);
 
   useEffect(() => {
-    if (open && profiles.length > 0) {
-      const nextSurvivorId = profiles[0]?.id ?? "";
-      setSurvivorId(nextSurvivorId);
-      setRetainedEmail(defaultRetainedEmail(profiles, nextSurvivorId));
-    }
-  }, [open, profiles]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     closeButtonRef.current?.focus();
@@ -88,11 +101,7 @@ export function ProfilesMergeDialog({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [isPending, onOpenChange, open]);
-
-  if (!open || profiles.length < 2) {
-    return null;
-  }
+  }, [isPending, onOpenChange]);
 
   const duplicateCount = profiles.length - 1;
   const nonSurvivorProfiles = profiles.filter((profile) => profile.id !== survivorId);

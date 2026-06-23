@@ -109,14 +109,31 @@ export function ProfilesTable({
   const drawerProfileId = searchParams.get("profile");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
+  const visibleProfileIds = useMemo(
+    () => new Set(profiles.map((profile) => profile.id)),
+    [profiles],
+  );
+
+  const visibleSelectedIds = useMemo(() => {
+    const next = new Set<string>();
+    for (const profileId of selectedIds) {
+      if (visibleProfileIds.has(profileId)) {
+        next.add(profileId);
+      }
+    }
+    return next;
+  }, [selectedIds, visibleProfileIds]);
+
   const deletableProfiles = useMemo(
     () => profiles.filter((profile) => profile.canDelete),
     [profiles],
   );
 
   const selectedDeletableCount = useMemo(
-    () => deletableProfiles.filter((profile) => selectedIds.has(profile.id)).length,
-    [deletableProfiles, selectedIds],
+    () =>
+      deletableProfiles.filter((profile) => visibleSelectedIds.has(profile.id))
+        .length,
+    [deletableProfiles, visibleSelectedIds],
   );
 
   const allDeletableSelected =
@@ -131,16 +148,6 @@ export function ProfilesTable({
     selectAllRef.current.indeterminate =
       selectedDeletableCount > 0 && !allDeletableSelected;
   }, [allDeletableSelected, selectedDeletableCount]);
-
-  useEffect(() => {
-    setSelectedIds((current) => {
-      const visibleIds = new Set(profiles.map((profile) => profile.id));
-      const next = new Set(
-        [...current].filter((profileId) => visibleIds.has(profileId)),
-      );
-      return next.size === current.size ? current : next;
-    });
-  }, [profiles]);
 
   useEffect(() => {
     if (drawerProfileId || !lastOpenedProfileId.current) {
@@ -220,7 +227,7 @@ export function ProfilesTable({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ProfilesBulkActions
         profiles={profiles}
-        selectedIds={selectedIds}
+        selectedIds={visibleSelectedIds}
         onClearSelection={() => setSelectedIds(new Set())}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
@@ -305,7 +312,7 @@ export function ProfilesTable({
             </TableHeader>
             <TableBody>
               {profiles.map((profile) => {
-                const isSelected = selectedIds.has(profile.id);
+                const isSelected = visibleSelectedIds.has(profile.id);
                 const suggestions = enrichmentByProfileId?.get(profile.id);
                 const showSuggestedCompany =
                   enrichMode &&

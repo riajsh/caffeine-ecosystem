@@ -541,7 +541,7 @@ export async function runCalendarSyncChunk(
   const existingMetadata = parseCalendarAccountMetadata(account.metadata);
   const selectedCalendarIds =
     options.selectedCalendarIds ?? existingMetadata.selected_calendar_ids ?? [];
-  let syncCursors = loadCalendarSyncCursors(account.metadata, account.sync_cursor);
+  const syncCursors = loadCalendarSyncCursors(account.metadata, account.sync_cursor);
   let progress = parseCalendarSyncProgress(account.metadata);
 
   if (options.reset && selectedCalendarIds.length > 0) {

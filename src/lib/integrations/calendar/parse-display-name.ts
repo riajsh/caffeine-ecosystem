@@ -18,10 +18,12 @@ export function parseCalendarDisplayName(
     return null;
   }
 
-  const name = displayName
-    .trim()
-    .replace(/\s*\([^)]*\)\s*/g, " ")
-    .trim();
+  const name = normalisePersonName(
+    displayName
+      .trim()
+      .replace(/\s*\([^)]*\)\s*/g, " ")
+      .trim(),
+  );
 
   if (!name || name.includes("@")) {
     return null;
@@ -43,17 +45,10 @@ export function parseCalendarDisplayName(
     return null;
   }
 
-  const fullName = normalisePersonName(parts.join(" "));
-  const formattedParts = fullName.split(/\s+/).filter(Boolean);
-
-  if (formattedParts.length < 2) {
-    return null;
-  }
-
   return {
-    firstName: formattedParts[0]!,
-    lastName: formattedParts[formattedParts.length - 1]!,
-    fullName,
+    firstName: parts[0]!,
+    lastName: parts[parts.length - 1]!,
+    fullName: name,
   };
 }
 
