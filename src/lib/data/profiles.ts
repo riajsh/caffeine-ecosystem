@@ -14,6 +14,7 @@ import { PROFILE_ACTIVITY_LIMIT } from "@/lib/format/provenance";
 import {
   isInternalParticipant,
   loadOrgParticipantFilters,
+  type OrgParticipantFilters,
 } from "@/lib/integrations/participant-email";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
 import {
@@ -62,6 +63,7 @@ export type ProfileListItem = {
     title: string;
     activityDate: string;
   } | null;
+  canDelete: boolean;
   tags: Array<{ id: string; name: string; category: string }>;
 };
 
@@ -142,6 +144,7 @@ export type ProfileDetail = {
 type ProfileRow = {
   id: string;
   full_name: string;
+  email: string | null;
   organisation_name: string | null;
   occupation: string | null;
   location_city: string | null;
@@ -240,7 +243,10 @@ function mapTags(
     );
 }
 
-function mapProfileRow(profile: ProfileRow): ProfileListItem {
+function mapProfileRow(
+  profile: ProfileRow,
+  participantFilters: OrgParticipantFilters,
+): ProfileListItem {
   const relationship = profile.relationships?.[0];
   const owners = relationship?.relationship_owners ?? [];
   const primaryOwnerRow =
@@ -261,6 +267,9 @@ function mapProfileRow(profile: ProfileRow): ProfileListItem {
     strength: primaryOwnerRow?.strength ?? null,
     lastInteractionAt: primaryOwnerRow?.last_interaction_at ?? null,
     lastCalendarMeeting: null,
+    canDelete: !(
+      profile.email && isInternalParticipant(profile.email, participantFilters)
+    ),
     tags: mapTags(profile.profile_tags),
   };
 }
@@ -449,6 +458,10 @@ export async function listProfiles(options?: {
 }): Promise<ListProfilesResult> {
   const orgId = await getOrgId();
   const supabase = await createClient();
+  const participantFilters = await loadOrgParticipantFilters(
+    createAdminClient(),
+    orgId,
+  );
   const limit = options?.limit ?? PROFILES_PAGE_SIZE;
   const offset = options?.offset ?? 0;
   const sort = options?.sort ?? "name";
@@ -502,6 +515,7 @@ export async function listProfiles(options?: {
       `
       id,
       full_name,
+      email,
       organisation_name,
       occupation,
       location_city,
@@ -550,7 +564,7 @@ export async function listProfiles(options?: {
 
     const rows = (data ?? []) as unknown as ProfileRow[];
     const profiles = attachLatestCalendarMeetings(
-      rows.map(mapProfileRow),
+      rows.map((row) => mapProfileRow(row, participantFilters)),
       await loadLatestCalendarMeetingsForProfiles(
         supabase,
         orgId,
@@ -574,7 +588,9 @@ export async function listProfiles(options?: {
     throw new Error(`Failed to list profiles: ${error.message}`);
   }
 
-  const mapped = ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
+  const mapped = ((data ?? []) as unknown as ProfileRow[]).map((row) =>
+    mapProfileRow(row, participantFilters),
+  );
   const sorted = sortProfiles(mapped, sort, order);
   const page = sorted.slice(offset, offset + limit);
   const profiles = attachLatestCalendarMeetings(
@@ -661,6 +677,33 @@ export async function deleteProfile(profileId: string): Promise<void> {
   if (error) {
     throw new Error(`Failed to delete profile: ${error.message}`);
   }
+}
+
+export async function deleteProfiles(profileIds: string[]): Promise<{
+  deletedCount: number;
+  skipped: Array<{ id: string; reason: string }>;
+}> {
+  const uniqueIds = [...new Set(profileIds.map((id) => id.trim()))].filter((id) =>
+    /^[0-9a-f-]{36}$/i.test(id),
+  );
+
+  let deletedCount = 0;
+  const skipped: Array<{ id: string; reason: string }> = [];
+
+  for (const profileId of uniqueIds) {
+    try {
+      await deleteProfile(profileId);
+      deletedCount += 1;
+    } catch (error) {
+      skipped.push({
+        id: profileId,
+        reason:
+          error instanceof Error ? error.message : "Failed to delete profile",
+      });
+    }
+  }
+
+  return { deletedCount, skipped };
 }
 
 export async function listProfileCities(): Promise<string[]> {

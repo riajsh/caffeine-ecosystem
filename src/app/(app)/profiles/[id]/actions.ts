@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/connections";
 import {
   deleteProfile,
+  deleteProfiles,
   searchProfilesForPicker,
   updateProfile,
 } from "@/lib/data/profiles";
@@ -284,6 +285,37 @@ export async function deleteProfileAction(formData: FormData) {
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Failed to delete profile",
+    };
+  }
+}
+
+export async function deleteProfilesAction(profileIds: string[]) {
+  const validIds = [...new Set(profileIds.map((id) => id.trim()))].filter((id) =>
+    /^[0-9a-f-]{36}$/i.test(id),
+  );
+
+  if (validIds.length === 0) {
+    return { error: "Select at least one profile to delete" };
+  }
+
+  try {
+    const result = await deleteProfiles(validIds);
+
+    revalidatePath("/");
+    revalidatePath("/profiles");
+
+    for (const profileId of validIds) {
+      revalidatePath(`/profiles/${profileId}`);
+    }
+
+    return {
+      success: true as const,
+      deletedCount: result.deletedCount,
+      skipped: result.skipped,
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to delete profiles",
     };
   }
 }

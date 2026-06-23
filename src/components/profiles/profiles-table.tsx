@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 
 import { LastInteractionCell } from "./last-interaction-cell";
 import { OwnerDot } from "./owner-dot";
+import { ProfilesBulkActions } from "./profiles-bulk-actions";
 import { StrengthBadge } from "./strength-badge";
 
 type ProfilesTableProps = {
@@ -92,7 +93,42 @@ export function ProfilesTable({
   const router = useRouter();
   const searchParams = useSearchParams();
   const lastOpenedProfileId = useRef<string | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const drawerProfileId = searchParams.get("profile");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  const deletableProfiles = useMemo(
+    () => profiles.filter((profile) => profile.canDelete),
+    [profiles],
+  );
+
+  const selectedDeletableCount = useMemo(
+    () => deletableProfiles.filter((profile) => selectedIds.has(profile.id)).length,
+    [deletableProfiles, selectedIds],
+  );
+
+  const allDeletableSelected =
+    deletableProfiles.length > 0 &&
+    selectedDeletableCount === deletableProfiles.length;
+
+  useEffect(() => {
+    if (!selectAllRef.current) {
+      return;
+    }
+
+    selectAllRef.current.indeterminate =
+      selectedDeletableCount > 0 && !allDeletableSelected;
+  }, [allDeletableSelected, selectedDeletableCount]);
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const visibleIds = new Set(profiles.map((profile) => profile.id));
+      const next = new Set(
+        [...current].filter((profileId) => visibleIds.has(profileId)),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [profiles]);
 
   useEffect(() => {
     if (drawerProfileId || !lastOpenedProfileId.current) {
@@ -105,6 +141,32 @@ export function ProfilesTable({
     row?.focus();
     lastOpenedProfileId.current = null;
   }, [drawerProfileId]);
+
+  function toggleProfile(profileId: string, checked: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(profileId);
+      } else {
+        next.delete(profileId);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllDeletable(checked: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const profile of deletableProfiles) {
+        if (checked) {
+          next.add(profile.id);
+        } else {
+          next.delete(profile.id);
+        }
+      }
+      return next;
+    });
+  }
 
   if (profiles.length === 0) {
     return (
@@ -143,137 +205,188 @@ export function ProfilesTable({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
-      <div className="min-h-0 flex-1 overflow-auto">
-        <Table>
-          <TableHeader className="sticky top-0 z-10 bg-card [&_tr]:border-b [&_tr]:shadow-[inset_0_-1px_0_var(--color-border-default)]">
-            <TableRow>
-              <SortableTableHead
-                label="Name"
-                sortKey="name"
-                currentSort={sort}
-                currentOrder={order}
-                searchParams={searchParams}
-              />
-              <SortableTableHead
-                label="Company"
-                sortKey="company"
-                currentSort={sort}
-                currentOrder={order}
-                searchParams={searchParams}
-              />
-              <SortableTableHead
-                label="Occupation"
-                sortKey="occupation"
-                currentSort={sort}
-                currentOrder={order}
-                searchParams={searchParams}
-              />
-              <SortableTableHead
-                label="Location"
-                sortKey="location"
-                currentSort={sort}
-                currentOrder={order}
-                searchParams={searchParams}
-              />
-              <SortableTableHead
-                label="Primary owner"
-                sortKey="owner"
-                currentSort={sort}
-                currentOrder={order}
-                searchParams={searchParams}
-              />
-              <SortableTableHead
-                label="Status"
-                sortKey="status"
-                currentSort={sort}
-                currentOrder={order}
-                searchParams={searchParams}
-              />
-              <SortableTableHead
-                label="Strength"
-                sortKey="strength"
-                currentSort={sort}
-                currentOrder={order}
-                searchParams={searchParams}
-              />
-              <SortableTableHead
-                label="Last interaction"
-                sortKey="last_interaction"
-                currentSort={sort}
-                currentOrder={order}
-                searchParams={searchParams}
-              />
-              <TableHead>Tags</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {profiles.map((profile) => (
-              <TableRow
-                key={profile.id}
-                data-profile-row={profile.id}
-                tabIndex={0}
-                role="button"
-                aria-label={`Open profile for ${profile.fullName}`}
-                className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                onClick={() => openProfile(profile.id)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    openProfile(profile.id);
-                  }
-                }}
-              >
-                <TableCell className="font-medium text-foreground">
-                  {profile.fullName}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {profile.organisationName ?? "—"}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {profile.occupation ?? "—"}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {profile.location ?? "—"}
-                </TableCell>
-                <TableCell>
-                  {profile.primaryOwner ? (
-                    <span className="inline-flex items-center gap-2">
-                      <OwnerDot userId={profile.primaryOwner.userId} />
-                      <span>{profile.primaryOwner.fullName}</span>
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {profile.relationshipStatus
-                    ? formatEnumLabel(profile.relationshipStatus)
-                    : "—"}
-                </TableCell>
-                <TableCell>
-                  <StrengthBadge strength={profile.strength} />
-                </TableCell>
-                <TableCell>
-                  <LastInteractionCell profile={profile} />
-                </TableCell>
-                <TableCell>
-                  {profile.tags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {profile.tags.map((tag) => (
-                        <Badge key={tag.id} variant="secondary">
-                          {tag.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <ProfilesBulkActions
+        profiles={profiles}
+        selectedIds={selectedIds}
+        onClearSelection={() => setSelectedIds(new Set())}
+      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card [&_tr]:border-b [&_tr]:shadow-[inset_0_-1px_0_var(--color-border-default)]">
+              <TableRow>
+                <TableHead className="w-10">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    role="checkbox"
+                    className="size-4 rounded border"
+                    aria-label="Select all deletable profiles on this page"
+                    checked={allDeletableSelected}
+                    disabled={deletableProfiles.length === 0}
+                    onChange={(event) => {
+                      toggleAllDeletable(event.target.checked);
+                    }}
+                  />
+                </TableHead>
+                <SortableTableHead
+                  label="Name"
+                  sortKey="name"
+                  currentSort={sort}
+                  currentOrder={order}
+                  searchParams={searchParams}
+                />
+                <SortableTableHead
+                  label="Company"
+                  sortKey="company"
+                  currentSort={sort}
+                  currentOrder={order}
+                  searchParams={searchParams}
+                />
+                <SortableTableHead
+                  label="Occupation"
+                  sortKey="occupation"
+                  currentSort={sort}
+                  currentOrder={order}
+                  searchParams={searchParams}
+                />
+                <SortableTableHead
+                  label="Location"
+                  sortKey="location"
+                  currentSort={sort}
+                  currentOrder={order}
+                  searchParams={searchParams}
+                />
+                <SortableTableHead
+                  label="Primary owner"
+                  sortKey="owner"
+                  currentSort={sort}
+                  currentOrder={order}
+                  searchParams={searchParams}
+                />
+                <SortableTableHead
+                  label="Status"
+                  sortKey="status"
+                  currentSort={sort}
+                  currentOrder={order}
+                  searchParams={searchParams}
+                />
+                <SortableTableHead
+                  label="Strength"
+                  sortKey="strength"
+                  currentSort={sort}
+                  currentOrder={order}
+                  searchParams={searchParams}
+                />
+                <SortableTableHead
+                  label="Last interaction"
+                  sortKey="last_interaction"
+                  currentSort={sort}
+                  currentOrder={order}
+                  searchParams={searchParams}
+                />
+                <TableHead>Tags</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {profiles.map((profile) => {
+                const isSelected = selectedIds.has(profile.id);
+
+                return (
+                  <TableRow
+                    key={profile.id}
+                    data-profile-row={profile.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open profile for ${profile.fullName}`}
+                    data-state={isSelected ? "selected" : undefined}
+                    className={cn(
+                      "cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                      isSelected && "bg-muted/30",
+                    )}
+                    onClick={() => openProfile(profile.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openProfile(profile.id);
+                      }
+                    }}
+                  >
+                    <TableCell
+                      className="w-10"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        role="checkbox"
+                        className="size-4 rounded border"
+                        aria-label={`Select ${profile.fullName}`}
+                        checked={isSelected}
+                        disabled={!profile.canDelete}
+                        title={
+                          profile.canDelete
+                            ? undefined
+                            : "Team member profiles cannot be deleted"
+                        }
+                        onChange={(event) => {
+                          toggleProfile(profile.id, event.target.checked);
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      {profile.fullName}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {profile.organisationName ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {profile.occupation ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {profile.location ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      {profile.primaryOwner ? (
+                        <span className="inline-flex items-center gap-2">
+                          <OwnerDot userId={profile.primaryOwner.userId} />
+                          <span>{profile.primaryOwner.fullName}</span>
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {profile.relationshipStatus
+                        ? formatEnumLabel(profile.relationshipStatus)
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <StrengthBadge strength={profile.strength} />
+                    </TableCell>
+                    <TableCell>
+                      <LastInteractionCell profile={profile} />
+                    </TableCell>
+                    <TableCell>
+                      {profile.tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {profile.tags.map((tag) => (
+                            <Badge key={tag.id} variant="secondary">
+                              {tag.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );
