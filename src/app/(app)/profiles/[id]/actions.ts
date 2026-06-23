@@ -324,6 +324,7 @@ export async function deleteProfilesAction(profileIds: string[]) {
 export async function mergeProfilesAction(
   survivorId: string,
   duplicateIds: string[],
+  retainedEmail?: string | null,
 ) {
   const survivor = survivorId.trim();
   const duplicates = [...new Set(duplicateIds.map((id) => id.trim()))].filter(
@@ -339,7 +340,7 @@ export async function mergeProfilesAction(
   }
 
   try {
-    const result = await mergeProfiles(survivor, duplicates);
+    const result = await mergeProfiles(survivor, duplicates, { retainedEmail });
 
     revalidatePath("/");
     revalidatePath("/profiles");

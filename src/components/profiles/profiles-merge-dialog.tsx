@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { mergeProfilesAction } from "@/app/(app)/profiles/[id]/actions";
 import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import type { ProfileListItem } from "@/lib/data/profiles";
 import { handleFocusTrap } from "@/lib/focus-trap";
+import {
+  collectMergeEmailOptions,
+  hasMergeEmailConflict,
+} from "@/lib/profiles/merge-email-options";
 import { toastSuccess } from "@/lib/toast";
 import { useAsyncAction } from "@/lib/use-async-action";
 import { cn } from "@/lib/utils";
@@ -17,6 +21,20 @@ type ProfilesMergeDialogProps = {
   onOpenChange: (open: boolean) => void;
   onMerged: (survivorId: string) => void;
 };
+
+function defaultRetainedEmail(
+  profiles: ProfileListItem[],
+  survivorId: string,
+): string | null {
+  const emailOptions = collectMergeEmailOptions(profiles);
+  const survivorEmail = profiles.find((profile) => profile.id === survivorId)?.email?.trim();
+
+  if (survivorEmail) {
+    return survivorEmail;
+  }
+
+  return emailOptions[0]?.email ?? null;
+}
 
 export function ProfilesMergeDialog({
   profiles,
@@ -31,10 +49,16 @@ export function ProfilesMergeDialog({
   const { alert } = useAppDialog();
   const { isPending, run } = useAsyncAction();
   const [survivorId, setSurvivorId] = useState(profiles[0]?.id ?? "");
+  const [retainedEmail, setRetainedEmail] = useState<string | null>(null);
+
+  const emailOptions = useMemo(() => collectMergeEmailOptions(profiles), [profiles]);
+  const emailConflict = hasMergeEmailConflict(profiles);
 
   useEffect(() => {
     if (open && profiles.length > 0) {
-      setSurvivorId(profiles[0]?.id ?? "");
+      const nextSurvivorId = profiles[0]?.id ?? "";
+      setSurvivorId(nextSurvivorId);
+      setRetainedEmail(defaultRetainedEmail(profiles, nextSurvivorId));
     }
   }, [open, profiles]);
 
@@ -73,6 +97,10 @@ export function ProfilesMergeDialog({
   const duplicateCount = profiles.length - 1;
   const nonSurvivorProfiles = profiles.filter((profile) => profile.id !== survivorId);
   const blockedDuplicates = nonSurvivorProfiles.filter((profile) => !profile.canDelete);
+  const canSubmit =
+    Boolean(survivorId) &&
+    blockedDuplicates.length === 0 &&
+    (!emailConflict || Boolean(retainedEmail));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -107,7 +135,9 @@ export function ProfilesMergeDialog({
 
         <div className="max-h-[min(24rem,60vh)] overflow-auto px-6 py-4">
           <fieldset className="space-y-3">
-            <legend className="sr-only">Primary profile</legend>
+            <legend className="mb-2 text-caption font-medium text-foreground">
+              Primary profile
+            </legend>
             {profiles.map((profile) => {
               const isSelected = survivorId === profile.id;
 
@@ -138,6 +168,15 @@ export function ProfilesMergeDialog({
                         .filter(Boolean)
                         .join(" · ") || "No company or role"}
                     </span>
+                    {profile.email ? (
+                      <span className="mt-1 block text-caption text-muted-foreground">
+                        {profile.email}
+                      </span>
+                    ) : (
+                      <span className="mt-1 block text-caption text-muted-foreground">
+                        No email
+                      </span>
+                    )}
                     {!profile.canDelete ? (
                       <span className="mt-1 block text-caption text-muted-foreground">
                         Team member profile
@@ -148,6 +187,50 @@ export function ProfilesMergeDialog({
               );
             })}
           </fieldset>
+
+          {emailConflict ? (
+            <fieldset className="mt-6 space-y-3">
+              <legend className="mb-2 text-caption font-medium text-foreground">
+                Email to keep
+              </legend>
+              <p className="text-caption text-muted-foreground">
+                These profiles have different email addresses. Choose which one the
+                merged profile should use.
+              </p>
+              {emailOptions.map((option) => {
+                const isSelected = retainedEmail === option.email;
+
+                return (
+                  <label
+                    key={option.email}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors",
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/20",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="merge-email"
+                      className="mt-1"
+                      checked={isSelected}
+                      disabled={isPending}
+                      onChange={() => setRetainedEmail(option.email)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-foreground">
+                        {option.email}
+                      </span>
+                      <span className="mt-0.5 block text-caption text-muted-foreground">
+                        From {option.profileName}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </fieldset>
+          ) : null}
 
           {blockedDuplicates.length > 0 ? (
             <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-caption text-destructive">
@@ -169,14 +252,18 @@ export function ProfilesMergeDialog({
           </Button>
           <Button
             type="button"
-            disabled={isPending || !survivorId || blockedDuplicates.length > 0}
+            disabled={isPending || !canSubmit}
             onClick={() => {
               void run(async () => {
                 const duplicateIds = profiles
                   .map((profile) => profile.id)
                   .filter((profileId) => profileId !== survivorId);
 
-                const result = await mergeProfilesAction(survivorId, duplicateIds);
+                const result = await mergeProfilesAction(
+                  survivorId,
+                  duplicateIds,
+                  emailConflict ? retainedEmail : undefined,
+                );
 
                 if ("error" in result && result.error) {
                   await alert({

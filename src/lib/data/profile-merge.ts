@@ -41,13 +41,14 @@ function strongerStrength(
 function mergeProfileFields(
   survivor: ProfileRow,
   duplicate: ProfileRow,
+  retainedEmail: string | null,
 ): Partial<ProfileRow> {
   const organisationName =
     survivor.organisation_name?.trim() || duplicate.organisation_name?.trim() || null;
 
-  const update: Partial<ProfileRow> = {
+  return {
     full_name: survivor.full_name?.trim() || duplicate.full_name,
-    email: survivor.email?.trim() || duplicate.email?.trim() || null,
+    email: retainedEmail,
     phone: survivor.phone?.trim() || duplicate.phone?.trim() || null,
     linkedin_url: survivor.linkedin_url?.trim() || duplicate.linkedin_url?.trim() || null,
     website_url: survivor.website_url?.trim() || duplicate.website_url?.trim() || null,
@@ -60,18 +61,44 @@ function mergeProfileFields(
       survivor.location_country?.trim() || duplicate.location_country?.trim() || null,
     bio: survivor.bio?.trim() || duplicate.bio?.trim() || null,
   };
+}
 
-  if (
-    survivor.email?.trim() &&
-    duplicate.email?.trim() &&
-    survivor.email.trim().toLowerCase() !== duplicate.email.trim().toLowerCase()
-  ) {
+function resolveRetainedEmail(
+  profiles: ProfileRow[],
+  chosenEmail?: string | null,
+): string | null {
+  const byNormalized = new Map<string, string>();
+
+  for (const profile of profiles) {
+    const email = profile.email?.trim();
+    if (!email) {
+      continue;
+    }
+
+    byNormalized.set(email.toLowerCase(), email);
+  }
+
+  const uniqueEmails = [...byNormalized.values()];
+  if (uniqueEmails.length === 0) {
+    return null;
+  }
+
+  if (uniqueEmails.length === 1) {
+    return uniqueEmails[0]!;
+  }
+
+  if (!chosenEmail?.trim()) {
+    throw new Error("Choose which email address to keep.");
+  }
+
+  const resolved = byNormalized.get(chosenEmail.trim().toLowerCase());
+  if (!resolved) {
     throw new Error(
-      `Cannot merge profiles with different emails (${survivor.email} and ${duplicate.email}). Pick the profile with the correct email as primary.`,
+      "Chosen email must belong to one of the profiles being merged.",
     );
   }
 
-  return update;
+  return resolved;
 }
 
 async function getOrCreateSurvivorRelationship(
@@ -511,6 +538,7 @@ async function reassignProfileReferences(
 export async function mergeProfiles(
   survivorId: string,
   duplicateIds: string[],
+  options?: { retainedEmail?: string | null },
 ): Promise<{ mergedCount: number }> {
   const currentUser = await requireUser();
   const orgId = await getOrgId();
@@ -569,10 +597,15 @@ export async function mergeProfiles(
     }
   }
 
+  const retainedEmail = resolveRetainedEmail(
+    [survivor, ...duplicates],
+    options?.retainedEmail,
+  );
+
   let mergedCount = 0;
 
   for (const duplicate of duplicates) {
-    const mergedFields = mergeProfileFields(survivor, duplicate);
+    const mergedFields = mergeProfileFields(survivor, duplicate, retainedEmail);
     const { error: updateProfileError } = await supabase
       .from("profiles")
       .update(mergedFields)

@@ -77,6 +77,7 @@ Edge and empty states
 
 ### Future considerations (P2)
 
+- Split profiles table name into first / last columns (deferred — see `docs/information-architecture.md` § Profiles).
 - Computed relationship strength and last_interaction replacing manual fields.
 - pgvector semantic search.
 - Claude reasoning layer (Phase 3).

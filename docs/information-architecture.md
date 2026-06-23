@@ -52,9 +52,11 @@ Sidebar order, matching the validated prototype:
 - Filters: tag, sector, location, owner, status, relationship type.
 
 ### Profiles (table)
-- Columns: name, company, occupation, location, primary owner, strength, last interaction, tags.
+- Columns: name, company, occupation, location, primary owner, status, strength, last interaction (date), last meeting, calendar source, tags.
 - Row click opens the profile drawer or page.
-- Bulk: tag, add to watch list, assign owner.
+- Bulk: merge, delete, tag, add to watch list, assign owner.
+
+**Deferred — first / last name columns.** V1 stores a single `profiles.full_name` (no `first_name` / `last_name` in schema). A display-only split in the table (first word vs remainder) is straightforward; proper separate fields need a schema change, backfill, and updates to create/edit, import, merge, and search. Revisit once the core platform UX feels more settled — not worth the ambiguity cost until then.
 
 ### Profile (drawer or page)
 

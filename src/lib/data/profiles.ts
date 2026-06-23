@@ -11,7 +11,8 @@ import {
 import { getOrgId, requireUser } from "@/lib/auth/session";
 import { formatLocation } from "@/lib/format/location";
 import { PROFILE_ACTIVITY_LIMIT } from "@/lib/format/provenance";
-import { resolveCalendarSourceLabelsForRefs } from "@/lib/integrations/calendar/resolve-source-labels";
+import { resolveCalendarMeetingMetadataForRefs } from "@/lib/integrations/calendar/resolve-meeting-metadata";
+import type { CalendarTeamParticipant } from "@/lib/integrations/calendar/internal-team-participants";
 import {
   isInternalParticipant,
   loadOrgParticipantFilters,
@@ -49,6 +50,7 @@ type EventType = Database["public"]["Enums"]["event_type"];
 export type ProfileListItem = {
   id: string;
   fullName: string;
+  email: string | null;
   organisationName: string | null;
   occupation: string | null;
   location: string | null;
@@ -64,6 +66,7 @@ export type ProfileListItem = {
     title: string;
     activityDate: string;
     calendarSource: string | null;
+    teamParticipants: CalendarTeamParticipant[];
   } | null;
   canDelete: boolean;
   tags: Array<{ id: string; name: string; category: string }>;
@@ -258,6 +261,7 @@ function mapProfileRow(
   return {
     id: profile.id,
     fullName: profile.full_name,
+    email: profile.email,
     organisationName: profile.organisation_name,
     occupation: profile.occupation,
     location: formatLocation(profile.location_city, profile.location_country),
@@ -280,10 +284,16 @@ async function loadLatestCalendarMeetingsForProfiles(
   supabase: SupabaseClient<Database>,
   orgId: string,
   profileIds: string[],
+  participantFilters: OrgParticipantFilters,
 ): Promise<
   Map<
     string,
-    { title: string; activityDate: string; calendarSource: string | null }
+    {
+      title: string;
+      activityDate: string;
+      calendarSource: string | null;
+      teamParticipants: CalendarTeamParticipant[];
+    }
   >
 > {
   const uniqueIds = [...new Set(profileIds)];
@@ -334,23 +344,29 @@ async function loadLatestCalendarMeetingsForProfiles(
     .map(([, meeting]) => meeting.sourceRef)
     .filter((sourceRef): sourceRef is string => Boolean(sourceRef?.trim()));
 
-  const sourceLabels = await resolveCalendarSourceLabelsForRefs(
+  const meetingMetadata = await resolveCalendarMeetingMetadataForRefs(
     supabase,
     orgId,
     sourceRefs,
+    participantFilters,
   );
 
   return new Map(
-    validEntries.map(([profileId, meeting]) => [
-      profileId,
-      {
-        title: meeting.title,
-        activityDate: meeting.activityDate,
-        calendarSource: meeting.sourceRef
-          ? (sourceLabels.get(meeting.sourceRef) ?? null)
-          : null,
-      },
-    ]),
+    validEntries.map(([profileId, meeting]) => {
+      const metadata = meeting.sourceRef
+        ? meetingMetadata.get(meeting.sourceRef)
+        : undefined;
+
+      return [
+        profileId,
+        {
+          title: meeting.title,
+          activityDate: meeting.activityDate,
+          calendarSource: metadata?.calendarSource ?? null,
+          teamParticipants: metadata?.teamParticipants ?? [],
+        },
+      ];
+    }),
   );
 }
 
@@ -358,7 +374,12 @@ function attachLatestCalendarMeetings(
   profiles: ProfileListItem[],
   meetings: Map<
     string,
-    { title: string; activityDate: string; calendarSource: string | null }
+    {
+      title: string;
+      activityDate: string;
+      calendarSource: string | null;
+      teamParticipants: CalendarTeamParticipant[];
+    }
   >,
 ): ProfileListItem[] {
   return profiles.map((profile) => ({
@@ -608,6 +629,7 @@ export async function listProfiles(options?: {
         supabase,
         orgId,
         rows.map((row) => row.id),
+        participantFilters,
       ),
     );
     const total = count ?? profiles.length;
@@ -638,6 +660,7 @@ export async function listProfiles(options?: {
       supabase,
       orgId,
       page.map((profile) => profile.id),
+      participantFilters,
     ),
   );
   const total = count ?? sorted.length;
