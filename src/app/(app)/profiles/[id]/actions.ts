@@ -13,6 +13,7 @@ import {
   searchProfilesForPicker,
   updateProfile,
 } from "@/lib/data/profiles";
+import { mergeProfiles } from "@/lib/data/profile-merge";
 import {
   assignRelationshipOwner,
   updateRelationship,
@@ -316,6 +317,46 @@ export async function deleteProfilesAction(profileIds: string[]) {
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Failed to delete profiles",
+    };
+  }
+}
+
+export async function mergeProfilesAction(
+  survivorId: string,
+  duplicateIds: string[],
+) {
+  const survivor = survivorId.trim();
+  const duplicates = [...new Set(duplicateIds.map((id) => id.trim()))].filter(
+    (id) => /^[0-9a-f-]{36}$/i.test(id) && id !== survivor,
+  );
+
+  if (!/^[0-9a-f-]{36}$/i.test(survivor)) {
+    return { error: "Choose a primary profile to keep" };
+  }
+
+  if (duplicates.length === 0) {
+    return { error: "Select at least one other profile to merge" };
+  }
+
+  try {
+    const result = await mergeProfiles(survivor, duplicates);
+
+    revalidatePath("/");
+    revalidatePath("/profiles");
+    revalidatePath(`/profiles/${survivor}`);
+
+    for (const profileId of duplicates) {
+      revalidatePath(`/profiles/${profileId}`);
+    }
+
+    return {
+      success: true as const,
+      survivorId: survivor,
+      mergedCount: result.mergedCount,
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to merge profiles",
     };
   }
 }

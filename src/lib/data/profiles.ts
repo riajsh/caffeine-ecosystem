@@ -11,6 +11,7 @@ import {
 import { getOrgId, requireUser } from "@/lib/auth/session";
 import { formatLocation } from "@/lib/format/location";
 import { PROFILE_ACTIVITY_LIMIT } from "@/lib/format/provenance";
+import { resolveCalendarSourceLabelsForRefs } from "@/lib/integrations/calendar/resolve-source-labels";
 import {
   isInternalParticipant,
   loadOrgParticipantFilters,
@@ -62,6 +63,7 @@ export type ProfileListItem = {
   lastCalendarMeeting: {
     title: string;
     activityDate: string;
+    calendarSource: string | null;
   } | null;
   canDelete: boolean;
   tags: Array<{ id: string; name: string; category: string }>;
@@ -278,7 +280,12 @@ async function loadLatestCalendarMeetingsForProfiles(
   supabase: SupabaseClient<Database>,
   orgId: string,
   profileIds: string[],
-): Promise<Map<string, { title: string; activityDate: string }>> {
+): Promise<
+  Map<
+    string,
+    { title: string; activityDate: string; calendarSource: string | null }
+  >
+> {
   const uniqueIds = [...new Set(profileIds)];
   if (uniqueIds.length === 0) {
     return new Map();
@@ -289,7 +296,7 @@ async function loadLatestCalendarMeetingsForProfiles(
     uniqueIds.map(async (profileId) => {
       const { data, error } = await supabase
         .from("activities")
-        .select("title, activity_date")
+        .select("title, activity_date, source_ref")
         .eq("org_id", orgId)
         .eq("profile_id", profileId)
         .eq("source", "calendar_sync")
@@ -305,22 +312,54 @@ async function loadLatestCalendarMeetingsForProfiles(
 
       return [
         profileId,
-        { title: data.title, activityDate: data.activity_date },
+        {
+          title: data.title,
+          activityDate: data.activity_date,
+          sourceRef: data.source_ref,
+        },
       ] as const;
     }),
   );
 
+  const validEntries = entries.filter(
+    (
+      entry,
+    ): entry is [
+      string,
+      { title: string; activityDate: string; sourceRef: string | null },
+    ] => entry !== null,
+  );
+
+  const sourceRefs = validEntries
+    .map(([, meeting]) => meeting.sourceRef)
+    .filter((sourceRef): sourceRef is string => Boolean(sourceRef?.trim()));
+
+  const sourceLabels = await resolveCalendarSourceLabelsForRefs(
+    supabase,
+    orgId,
+    sourceRefs,
+  );
+
   return new Map(
-    entries.filter(
-      (entry): entry is [string, { title: string; activityDate: string }] =>
-        entry !== null,
-    ),
+    validEntries.map(([profileId, meeting]) => [
+      profileId,
+      {
+        title: meeting.title,
+        activityDate: meeting.activityDate,
+        calendarSource: meeting.sourceRef
+          ? (sourceLabels.get(meeting.sourceRef) ?? null)
+          : null,
+      },
+    ]),
   );
 }
 
 function attachLatestCalendarMeetings(
   profiles: ProfileListItem[],
-  meetings: Map<string, { title: string; activityDate: string }>,
+  meetings: Map<
+    string,
+    { title: string; activityDate: string; calendarSource: string | null }
+  >,
 ): ProfileListItem[] {
   return profiles.map((profile) => ({
     ...profile,

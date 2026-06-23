@@ -21,7 +21,9 @@ import type { ProfileListItem } from "@/lib/data/profiles";
 import type { ProfileSortKey, SortOrder } from "@/lib/profiles/list-sort";
 import { cn } from "@/lib/utils";
 
-import { LastInteractionCell } from "./last-interaction-cell";
+import { CalendarSourceCell } from "./calendar-source-cell";
+import { LastInteractionDateCell } from "./last-interaction-date-cell";
+import { LastMeetingCell } from "./last-meeting-cell";
 import { OwnerDot } from "./owner-dot";
 import { ProfilesBulkActions } from "./profiles-bulk-actions";
 import { StrengthBadge } from "./strength-badge";
@@ -286,6 +288,8 @@ export function ProfilesTable({
                   currentOrder={order}
                   searchParams={searchParams}
                 />
+                <TableHead>Last meeting</TableHead>
+                <TableHead>Calendar</TableHead>
                 <TableHead>Tags</TableHead>
               </TableRow>
             </TableHeader>
@@ -366,7 +370,13 @@ export function ProfilesTable({
                       <StrengthBadge strength={profile.strength} />
                     </TableCell>
                     <TableCell>
-                      <LastInteractionCell profile={profile} />
+                      <LastInteractionDateCell profile={profile} />
+                    </TableCell>
+                    <TableCell>
+                      <LastMeetingCell profile={profile} />
+                    </TableCell>
+                    <TableCell>
+                      <CalendarSourceCell profile={profile} />
                     </TableCell>
                     <TableCell>
                       {profile.tags.length > 0 ? (

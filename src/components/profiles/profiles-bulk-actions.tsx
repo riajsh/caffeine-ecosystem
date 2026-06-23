@@ -10,6 +10,8 @@ import type { ProfileListItem } from "@/lib/data/profiles";
 import { toastSuccess } from "@/lib/toast";
 import { useAsyncAction } from "@/lib/use-async-action";
 
+import { ProfilesMergeDialog } from "./profiles-merge-dialog";
+
 type ProfilesBulkActionsProps = {
   profiles: ProfileListItem[];
   selectedIds: ReadonlySet<string>;
@@ -25,6 +27,7 @@ export function ProfilesBulkActions({
   const searchParams = useSearchParams();
   const { confirm, alert } = useAppDialog();
   const { isPending, run } = useAsyncAction();
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   const selectedProfiles = useMemo(
     () => profiles.filter((profile) => selectedIds.has(profile.id)),
@@ -41,7 +44,33 @@ export function ProfilesBulkActions({
   }
 
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
+    <>
+      <ProfilesMergeDialog
+        profiles={selectedProfiles}
+        open={mergeOpen}
+        onOpenChange={setMergeOpen}
+        onMerged={(survivorId) => {
+          onClearSelection();
+
+          const openProfileId = searchParams.get("profile");
+          if (openProfileId && openProfileId !== survivorId) {
+            const mergedAway = selectedProfiles.some(
+              (profile) => profile.id === openProfileId,
+            );
+            if (mergedAway) {
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete("profile");
+              const query = params.toString();
+              router.replace(query ? `/profiles?${query}` : "/profiles", {
+                scroll: false,
+              });
+            }
+          }
+
+          router.refresh();
+        }}
+      />
+      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
       <p className="text-body text-foreground">
         {selectedIds.size} selected
         {deletableProfiles.length < selectedIds.size
@@ -49,6 +78,17 @@ export function ProfilesBulkActions({
           : ""}
       </p>
       <div className="flex flex-wrap gap-2">
+        {selectedProfiles.length >= 2 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={() => setMergeOpen(true)}
+          >
+            Merge profiles
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="destructive"
@@ -142,5 +182,6 @@ export function ProfilesBulkActions({
         </Button>
       </div>
     </div>
+    </>
   );
 }
