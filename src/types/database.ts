@@ -1315,6 +1315,15 @@ export type Database = {
           profile_id: string
         }[]
       }
+      get_latest_calendar_meetings_for_profiles: {
+        Args: { p_before?: string; p_org_id: string; p_profile_ids: string[] }
+        Returns: {
+          activity_date: string
+          profile_id: string
+          source_ref: string
+          title: string
+        }[]
+      }
       merge_one_profile_duplicate: {
         Args: {
           p_duplicate_id: string
