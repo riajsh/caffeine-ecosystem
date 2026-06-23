@@ -16,12 +16,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatInteractionDate } from "@/lib/format/date";
 import { formatEnumLabel } from "@/lib/format/enum";
 import type { ProfileListItem } from "@/lib/data/profiles";
 import type { ProfileSortKey, SortOrder } from "@/lib/profiles/list-sort";
 import { cn } from "@/lib/utils";
 
+import { LastInteractionCell } from "./last-interaction-cell";
 import { OwnerDot } from "./owner-dot";
 import { StrengthBadge } from "./strength-badge";
 
@@ -254,8 +254,8 @@ export function ProfilesTable({
                 <TableCell>
                   <StrengthBadge strength={profile.strength} />
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatInteractionDate(profile.lastInteractionAt)}
+                <TableCell>
+                  <LastInteractionCell profile={profile} />
                 </TableCell>
                 <TableCell>
                   {profile.tags.length > 0 ? (

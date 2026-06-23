@@ -2,6 +2,8 @@ import "server-only";
 
 import { notFound } from "next/navigation";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import {
   isPastOrPresentActivityDate,
   pastActivityCutoffIso,
@@ -56,6 +58,10 @@ export type ProfileListItem = {
   } | null;
   strength: OwnerStrength | null;
   lastInteractionAt: string | null;
+  lastCalendarMeeting: {
+    title: string;
+    activityDate: string;
+  } | null;
   tags: Array<{ id: string; name: string; category: string }>;
 };
 
@@ -254,8 +260,63 @@ function mapProfileRow(profile: ProfileRow): ProfileListItem {
       : null,
     strength: primaryOwnerRow?.strength ?? null,
     lastInteractionAt: primaryOwnerRow?.last_interaction_at ?? null,
+    lastCalendarMeeting: null,
     tags: mapTags(profile.profile_tags),
   };
+}
+
+async function loadLatestCalendarMeetingsForProfiles(
+  supabase: SupabaseClient<Database>,
+  orgId: string,
+  profileIds: string[],
+): Promise<Map<string, { title: string; activityDate: string }>> {
+  const uniqueIds = [...new Set(profileIds)];
+  if (uniqueIds.length === 0) {
+    return new Map();
+  }
+
+  const cutoff = pastActivityCutoffIso();
+  const entries = await Promise.all(
+    uniqueIds.map(async (profileId) => {
+      const { data, error } = await supabase
+        .from("activities")
+        .select("title, activity_date")
+        .eq("org_id", orgId)
+        .eq("profile_id", profileId)
+        .eq("source", "calendar_sync")
+        .eq("activity_type", "meeting")
+        .lte("activity_date", cutoff)
+        .order("activity_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) {
+        return null;
+      }
+
+      return [
+        profileId,
+        { title: data.title, activityDate: data.activity_date },
+      ] as const;
+    }),
+  );
+
+  return new Map(
+    entries.filter(
+      (entry): entry is [string, { title: string; activityDate: string }] =>
+        entry !== null,
+    ),
+  );
+}
+
+function attachLatestCalendarMeetings(
+  profiles: ProfileListItem[],
+  meetings: Map<string, { title: string; activityDate: string }>,
+): ProfileListItem[] {
+  return profiles.map((profile) => ({
+    ...profile,
+    lastCalendarMeeting: meetings.get(profile.id) ?? null,
+  }));
 }
 
 function mapConnectionRow(
@@ -487,7 +548,15 @@ export async function listProfiles(options?: {
       throw new Error(`Failed to list profiles: ${error.message}`);
     }
 
-    const profiles = ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
+    const rows = (data ?? []) as unknown as ProfileRow[];
+    const profiles = attachLatestCalendarMeetings(
+      rows.map(mapProfileRow),
+      await loadLatestCalendarMeetingsForProfiles(
+        supabase,
+        orgId,
+        rows.map((row) => row.id),
+      ),
+    );
     const total = count ?? profiles.length;
 
     return {
@@ -507,7 +576,15 @@ export async function listProfiles(options?: {
 
   const mapped = ((data ?? []) as unknown as ProfileRow[]).map(mapProfileRow);
   const sorted = sortProfiles(mapped, sort, order);
-  const profiles = sorted.slice(offset, offset + limit);
+  const page = sorted.slice(offset, offset + limit);
+  const profiles = attachLatestCalendarMeetings(
+    page,
+    await loadLatestCalendarMeetingsForProfiles(
+      supabase,
+      orgId,
+      page.map((profile) => profile.id),
+    ),
+  );
   const total = count ?? sorted.length;
 
   return {

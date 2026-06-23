@@ -7,7 +7,7 @@ import type { CalendarParticipant } from "@/lib/integrations/calendar/types";
 import { isBeyondCalendarLookahead } from "@/lib/integrations/calendar/env";
 import { calendarActivitySourceRef } from "@/lib/integrations/calendar/occurrence";
 import { canAutoCreateProfileFromCalendarParticipant, parseCalendarDisplayName } from "@/lib/integrations/calendar/parse-display-name";
-import { isPostgresUniqueViolation } from "@/lib/integrations/calendar/idempotent-insert";
+import { isPostgresUniqueViolation, calendarActivityExistsForOccurrence } from "@/lib/integrations/calendar/idempotent-insert";
 import { resolveCalendarReviewsForEmail } from "@/lib/integrations/calendar/resolve-calendar-reviews";
 import {
   ensureRelationshipsForProfiles,
@@ -183,6 +183,18 @@ export async function processCalendarParticipants(
     );
 
     for (const profileId of profileIds) {
+      const alreadyLogged = await calendarActivityExistsForOccurrence(supabase, {
+        orgId: params.orgId,
+        profileId,
+        icalUid: params.icalUid,
+        startAt: params.startAt,
+        googleEventId: params.googleEventId,
+      });
+
+      if (alreadyLogged) {
+        continue;
+      }
+
       const { error: activityError } = await supabase.from("activities").insert({
         org_id: params.orgId,
         profile_id: profileId,

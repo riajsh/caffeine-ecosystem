@@ -20,3 +20,24 @@ export function calendarActivitySourceRef(
 ): string {
   return calendarOccurrenceKey(icalUid, startAt) ?? googleEventId;
 }
+
+/** All source_ref values that may refer to the same meeting occurrence (legacy + canonical). */
+export function calendarActivitySourceRefCandidates(
+  icalUid: string | null | undefined,
+  startAt: string | null | undefined,
+  googleEventId: string,
+): string[] {
+  const refs = new Set<string>();
+  const trimmedEventId = googleEventId.trim();
+
+  if (trimmedEventId) {
+    refs.add(trimmedEventId);
+  }
+
+  const occurrence = calendarOccurrenceKey(icalUid, startAt);
+  if (occurrence) {
+    refs.add(occurrence);
+  }
+
+  return [...refs];
+}

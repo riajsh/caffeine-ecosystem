@@ -2,7 +2,10 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { calendarActivitySourceRef } from "@/lib/integrations/calendar/occurrence";
+import {
+  calendarActivitySourceRef,
+  calendarActivitySourceRefCandidates,
+} from "@/lib/integrations/calendar/occurrence";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
@@ -16,14 +19,18 @@ export async function removeCalendarEventDerivedData(
   icalUid?: string | null,
   startAt?: string | null,
 ): Promise<void> {
-  const sourceRef = calendarActivitySourceRef(icalUid, startAt, googleEventId);
+  const sourceRefs = calendarActivitySourceRefCandidates(
+    icalUid,
+    startAt,
+    googleEventId,
+  );
 
   const { error: activitiesError } = await supabase
     .from("activities")
     .delete()
     .eq("org_id", orgId)
     .eq("source", "calendar_sync")
-    .eq("source_ref", sourceRef);
+    .in("source_ref", sourceRefs);
 
   if (activitiesError) {
     throw new Error(
