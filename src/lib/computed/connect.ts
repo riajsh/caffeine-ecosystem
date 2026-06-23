@@ -263,16 +263,6 @@ export async function getIntroduceSuggestions(
     throw new Error(`Failed to load event pairs: ${eventRows.error.message}`);
   }
 
-  const profileNames = new Map<string, string>();
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, full_name")
-    .eq("org_id", orgId);
-
-  for (const profile of profiles ?? []) {
-    profileNames.set(profile.id, profile.full_name);
-  }
-
   const suggestions: IntroduceSuggestion[] = [];
   const seen = new Set<string>();
 
@@ -286,6 +276,58 @@ export async function getIntroduceSuggestions(
     const group = tagGroups.get(tag.id) ?? { name: tag.name, profileIds: [] };
     group.profileIds.push(row.profile_id);
     tagGroups.set(tag.id, group);
+  }
+
+  const eventGroups = new Map<string, { title: string; profileIds: string[] }>();
+  for (const row of eventRows.data ?? []) {
+    const event = row.events;
+    if (!event) {
+      continue;
+    }
+
+    const group = eventGroups.get(event.id) ?? {
+      title: event.title,
+      profileIds: [],
+    };
+    group.profileIds.push(row.profile_id);
+    eventGroups.set(event.id, group);
+  }
+
+  const profileIdsNeeded = new Set<string>();
+  for (const group of tagGroups.values()) {
+    if (group.profileIds.length < 2) {
+      continue;
+    }
+    for (const profileId of group.profileIds) {
+      profileIdsNeeded.add(profileId);
+    }
+  }
+  for (const group of eventGroups.values()) {
+    if (group.profileIds.length < 2) {
+      continue;
+    }
+    for (const profileId of group.profileIds) {
+      profileIdsNeeded.add(profileId);
+    }
+  }
+
+  const profileNames = new Map<string, string>();
+  if (profileIdsNeeded.size > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("org_id", orgId)
+      .in("id", [...profileIdsNeeded]);
+
+    if (profilesError) {
+      throw new Error(
+        `Failed to load profile names for introduce suggestions: ${profilesError.message}`,
+      );
+    }
+
+    for (const profile of profiles ?? []) {
+      profileNames.set(profile.id, profile.full_name);
+    }
   }
 
   for (const group of tagGroups.values()) {
@@ -302,21 +344,6 @@ export async function getIntroduceSuggestions(
       `Shared tag: ${group.name}`,
       limit,
     );
-  }
-
-  const eventGroups = new Map<string, { title: string; profileIds: string[] }>();
-  for (const row of eventRows.data ?? []) {
-    const event = row.events;
-    if (!event) {
-      continue;
-    }
-
-    const group = eventGroups.get(event.id) ?? {
-      title: event.title,
-      profileIds: [],
-    };
-    group.profileIds.push(row.profile_id);
-    eventGroups.set(event.id, group);
   }
 
   for (const group of eventGroups.values()) {

@@ -88,6 +88,30 @@ export function ImportCommitPanel({ detail }: ImportCommitPanelProps) {
     );
   }
 
+  if (detail.status === "processing") {
+    return (
+      <div className="space-y-2 rounded-lg border border-border bg-card p-6">
+        <h2 className="text-heading font-medium text-foreground">Commit in progress</h2>
+        <p className="text-body text-muted-foreground">
+          {detail.metadata.commit_checkpoint
+            ? "A previous commit was interrupted. Click below to resume from the last checkpoint."
+            : "This import is being committed. If it stalled, refresh and try again."}
+        </p>
+        <form action={handleSubmit}>
+          <input type="hidden" name="importId" value={detail.id} />
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Resuming…" : "Resume commit"}
+          </Button>
+        </form>
+        {error ? (
+          <p className="text-body text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   if (detail.status === "failed") {
     return (
       <div className="space-y-2 rounded-lg border border-destructive/30 bg-card p-6">

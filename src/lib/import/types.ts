@@ -1,4 +1,5 @@
 import type { Database } from "@/types/database";
+import type { Json } from "@/types/database";
 
 import type { EcosystemFieldKey } from "./constants";
 
@@ -23,12 +24,22 @@ export type CommitSummary = {
 
 export type SoftMatchAction = "confirm" | "create" | "skip";
 
+export type ImportCommitCheckpoint = {
+  next_row_index: number;
+  created_profile_ids: string[];
+  updated_profile_snapshots: Record<string, Json>;
+  graph_rollbacks: Json;
+  partial_summary: CommitSummary;
+  profile_id_by_row_number: Record<string, string>;
+};
+
 export type ImportMetadata = {
   headers?: string[];
   column_mapping?: ColumnMapping;
   mapping_confirmed?: boolean;
   dedup_summary?: DedupSummary;
   commit_summary?: CommitSummary;
+  commit_checkpoint?: ImportCommitCheckpoint;
   storage_path?: string;
   storage_warning?: string;
   errors?: string[];

@@ -843,6 +843,27 @@ export type Database = {
           },
         ]
       }
+      login_rate_limit_buckets: {
+        Row: {
+          attempt_count: number
+          bucket_key: string
+          reset_at: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          bucket_key: string
+          reset_at: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          bucket_key?: string
+          reset_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       organisations: {
         Row: {
           created_at: string
@@ -1304,6 +1325,14 @@ export type Database = {
     Functions: {
       auth_is_admin: { Args: never; Returns: boolean }
       auth_org_id: { Args: never; Returns: string }
+      consume_login_rate_limit: {
+        Args: {
+          p_bucket_key: string
+          p_limit: number
+          p_window_seconds?: number
+        }
+        Returns: boolean
+      }
       get_email_message_body: {
         Args: { p_message_id: string }
         Returns: string

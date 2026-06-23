@@ -81,7 +81,7 @@ export async function getOrbitNodes(options?: {
         id,
         full_name,
         organisation_name,
-        relationships (
+        relationships!inner (
           relationship_owners (
             strength,
             is_primary,
@@ -94,7 +94,8 @@ export async function getOrbitNodes(options?: {
         )
       `,
       )
-      .eq("org_id", orgId),
+      .eq("org_id", orgId)
+      .range(0, 4_999),
     getLatestActivityByProfile(),
   ]);
 

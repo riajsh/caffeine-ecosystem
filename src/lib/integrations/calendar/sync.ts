@@ -557,6 +557,8 @@ export async function runCalendarSyncChunk(
     progress.status === "complete" ||
     progress.status === "failed";
 
+  let syncContext: Awaited<ReturnType<typeof loadSyncContext>> | undefined;
+
   if (startingFresh) {
     const queue =
       options.queueItems ??
@@ -573,11 +575,11 @@ export async function runCalendarSyncChunk(
 
     progress = initCalendarSyncProgress(queue);
 
-    const context = await loadSyncContext(supabase, account);
+    syncContext = await loadSyncContext(supabase, account);
     await purgeInternalCalendarSyncData(
       supabase,
       account.org_id,
-      context.participantFilters,
+      syncContext.participantFilters,
     );
     await purgeBeyondLookaheadCalendarData(supabase, account.org_id);
   }
@@ -592,7 +594,7 @@ export async function runCalendarSyncChunk(
     progress.last_error = null;
   }
 
-  const context = await loadSyncContext(supabase, account);
+  const context = syncContext ?? (await loadSyncContext(supabase, account));
 
   if (!progress.current) {
     if (progress.queue.length === 0) {

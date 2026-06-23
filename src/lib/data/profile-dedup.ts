@@ -227,49 +227,70 @@ export async function findDuplicateProfileGroups(): Promise<{
     }
   }
 
-  for (let left = 0; left < profiles.length; left += 1) {
-    for (let right = left + 1; right < profiles.length; right += 1) {
-      const leftProfile = profiles[left]!;
-      const rightProfile = profiles[right]!;
+  const profilesByOrganisation = new Map<string, ProfileRow[]>();
 
-      if (
-        assignedProfileIds.has(leftProfile.id) &&
-        assignedProfileIds.has(rightProfile.id)
-      ) {
+  for (const profile of profiles) {
+    if (assignedProfileIds.has(profile.id)) {
+      continue;
+    }
+
+    const orgKey = normaliseOrganisationName(profile.organisation_name);
+    if (!orgKey) {
+      continue;
+    }
+
+    const bucket = profilesByOrganisation.get(orgKey) ?? [];
+    bucket.push(profile);
+    profilesByOrganisation.set(orgKey, bucket);
+  }
+
+  for (const orgProfiles of profilesByOrganisation.values()) {
+    if (orgProfiles.length < 2) {
+      continue;
+    }
+
+    for (let left = 0; left < orgProfiles.length; left += 1) {
+      const leftProfile = orgProfiles[left]!;
+
+      if (assignedProfileIds.has(leftProfile.id)) {
         continue;
       }
 
-      const leftOrg = normaliseOrganisationName(leftProfile.organisation_name);
-      const rightOrg = normaliseOrganisationName(rightProfile.organisation_name);
+      for (let right = left + 1; right < orgProfiles.length; right += 1) {
+        const rightProfile = orgProfiles[right]!;
 
-      if (!leftOrg || leftOrg !== rightOrg) {
-        continue;
+        if (
+          assignedProfileIds.has(leftProfile.id) &&
+          assignedProfileIds.has(rightProfile.id)
+        ) {
+          continue;
+        }
+
+        if (
+          leftProfile.full_name.trim().toLowerCase() ===
+          rightProfile.full_name.trim().toLowerCase()
+        ) {
+          continue;
+        }
+
+        if (!namesAreFuzzyMatch(leftProfile.full_name, rightProfile.full_name)) {
+          continue;
+        }
+
+        const members = [leftProfile, rightProfile].map((profile) =>
+          toEntry(profile, participantFilters),
+        );
+
+        groupIndex = addGroup(groups, groupIndex, {
+          reason: "fuzzy_name_organisation",
+          reasonLabel: `Similar name + same organisation: ${leftProfile.full_name} / ${rightProfile.full_name} · ${leftProfile.organisation_name ?? "Unknown company"}`,
+          hasConflictingEmails: hasConflictingEmails(members),
+          profiles: members,
+        });
+
+        assignedProfileIds.add(leftProfile.id);
+        assignedProfileIds.add(rightProfile.id);
       }
-
-      if (
-        leftProfile.full_name.trim().toLowerCase() ===
-        rightProfile.full_name.trim().toLowerCase()
-      ) {
-        continue;
-      }
-
-      if (!namesAreFuzzyMatch(leftProfile.full_name, rightProfile.full_name)) {
-        continue;
-      }
-
-      const members = [leftProfile, rightProfile].map((profile) =>
-        toEntry(profile, participantFilters),
-      );
-
-      groupIndex = addGroup(groups, groupIndex, {
-        reason: "fuzzy_name_organisation",
-        reasonLabel: `Similar name + same organisation: ${leftProfile.full_name} / ${rightProfile.full_name} · ${leftProfile.organisation_name ?? "Unknown company"}`,
-        hasConflictingEmails: hasConflictingEmails(members),
-        profiles: members,
-      });
-
-      assignedProfileIds.add(leftProfile.id);
-      assignedProfileIds.add(rightProfile.id);
     }
   }
 

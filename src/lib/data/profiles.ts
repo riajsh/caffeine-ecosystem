@@ -517,7 +517,11 @@ export async function listProfiles(options?: {
   const offset = options?.offset ?? 0;
   const sort = options?.sort ?? "name";
   const order = options?.order ?? "asc";
-  const canSortInDatabase = sort === "name" || sort === "company";
+  const canSortInDatabase =
+    sort === "name" ||
+    sort === "company" ||
+    sort === "status" ||
+    sort === "last_interaction";
 
   const useRelationshipInner = Boolean(options?.ownerUserId || options?.status);
   const useOwnerInner = Boolean(options?.ownerUserId);
@@ -602,9 +606,23 @@ export async function listProfiles(options?: {
   query = applyCompletenessFilter(query, options?.complete);
 
   if (canSortInDatabase) {
-    query = query.order(sort === "name" ? "full_name" : "organisation_name", {
-      ascending: order === "asc",
-    });
+    if (sort === "status") {
+      query = query.order("status", {
+        foreignTable: "relationships",
+        ascending: order === "asc",
+        nullsFirst: order === "asc",
+      });
+    } else if (sort === "last_interaction") {
+      query = query.order("last_interaction_at", {
+        foreignTable: "relationships.relationship_owners",
+        ascending: order === "asc",
+        nullsFirst: order === "asc",
+      });
+    } else {
+      query = query.order(sort === "name" ? "full_name" : "organisation_name", {
+        ascending: order === "asc",
+      });
+    }
     query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;

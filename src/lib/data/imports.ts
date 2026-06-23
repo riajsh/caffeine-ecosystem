@@ -40,6 +40,7 @@ import type {
   ColumnMapping,
   CommitSummary,
   DedupSummary,
+  ImportCommitCheckpoint,
   ImportDetail,
   ImportListItem,
   ImportMetadata,
@@ -56,7 +57,7 @@ import {
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { Database } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 
 type DedupStatus = Database["public"]["Enums"]["dedup_status"];
 type RelationshipStatus = Database["public"]["Enums"]["relationship_status"];
@@ -440,7 +441,8 @@ export async function getImportDetail(importId: string): Promise<ImportDetail> {
     Boolean(metadata.dedup_summary) &&
     unresolvedSoftMatches === 0 &&
     pendingRowCount === 0 &&
-    committableRowCount > 0;
+    committableRowCount > 0 &&
+    !metadata.commit_checkpoint;
 
   return {
     id: importRecord.id,
@@ -1264,41 +1266,84 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
     fullName: user.full_name,
   }));
 
-  const summary: CommitSummary = {
-    created: 0,
-    updated: 0,
-    skipped: rows.length - commitRows.length,
-    ownerWarnings: 0,
-  };
+  const COMMIT_ROWS_PER_CHUNK = 150;
+  const isResume =
+    importRecord.status === "processing" && Boolean(metadata.commit_checkpoint);
 
   const sourceLabel = `${importRecord.source} import ${new Date(importRecord.created_at).toLocaleDateString("en-GB")}`;
   const mapping = metadata.column_mapping ?? {};
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
 
+  const skippedCount = rows.length - commitRows.length;
+  let summary: CommitSummary;
   const createdProfileIds: string[] = [];
   const updatedProfileSnapshots = new Map<
     string,
     Database["public"]["Tables"]["profiles"]["Update"]
   >();
   const graphRollbacks: RelationshipGraphRollback[] = [];
+  const profileIdByRowNumber = new Map<number, string>();
+  let startIndex = 0;
 
-  const { error: processingError } = await supabase
-    .from("imports")
-    .update({ status: "processing" })
-    .eq("id", importId)
-    .eq("org_id", orgId);
+  if (isResume && metadata.commit_checkpoint) {
+    const checkpoint = metadata.commit_checkpoint;
+    startIndex = checkpoint.next_row_index;
+    summary = { ...checkpoint.partial_summary };
+    createdProfileIds.push(...checkpoint.created_profile_ids);
+    for (const [profileId, snapshot] of Object.entries(
+      checkpoint.updated_profile_snapshots,
+    )) {
+      updatedProfileSnapshots.set(
+        profileId,
+        snapshot as Database["public"]["Tables"]["profiles"]["Update"],
+      );
+    }
+    graphRollbacks.push(
+      ...(checkpoint.graph_rollbacks as RelationshipGraphRollback[]),
+    );
+    for (const [rowNumber, profileId] of Object.entries(
+      checkpoint.profile_id_by_row_number,
+    )) {
+      profileIdByRowNumber.set(Number(rowNumber), profileId);
+    }
+  } else {
+    summary = {
+      created: 0,
+      updated: 0,
+      skipped: skippedCount,
+      ownerWarnings: 0,
+    };
 
-  if (processingError) {
-    throw new Error(`Failed to mark import as processing: ${processingError.message}`);
+    const { error: processingError } = await supabase
+      .from("imports")
+      .update({
+        status: "processing",
+        metadata: {
+          ...metadata,
+          commit_checkpoint: undefined,
+          errors: undefined,
+        },
+      })
+      .eq("id", importId)
+      .eq("org_id", orgId);
+
+    if (processingError) {
+      throw new Error(`Failed to mark import as processing: ${processingError.message}`);
+    }
   }
 
-  try {
-    const profileIdByRowNumber = new Map<number, string>();
-    const sortedCommitRows = [...commitRows].sort(
-      (left, right) => left.row_number - right.row_number,
-    );
+  const sortedCommitRows = [...commitRows].sort(
+    (left, right) => left.row_number - right.row_number,
+  );
 
-    for (const row of sortedCommitRows) {
+  type ImportCommitRow = (typeof sortedCommitRows)[number];
+
+  async function flushMatchedBatch(batch: ImportCommitRow[]) {
+    if (batch.length === 0) {
+      return;
+    }
+
+    const matchedResults = await runConcurrentMap(batch, 6, async (row) => {
       const normalized = normalizeRowFromImport(
         row.raw,
         headers,
@@ -1306,32 +1351,18 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
         row.normalized,
       );
 
-      if (row.dedup_status === "new") {
-        const { profileId, ownerWarnings } = await createProfileFromImportRow({
-          orgId,
-          importId,
-          userId: user.id,
-          normalized,
-          sourceLabel,
-          orgUsers: orgUserRecords,
-        });
-        profileIdByRowNumber.set(row.row_number, profileId);
-        createdProfileIds.push(profileId);
-        summary.created += 1;
-        summary.ownerWarnings += ownerWarnings;
-      } else if (row.dedup_status === "matched_email") {
-        const profileId =
-          row.matched_profile_id ??
-          profileIdByRowNumber.get(getInFileMatchRowNumber(normalized) ?? -1);
+      const profileId =
+        row.matched_profile_id ??
+        profileIdByRowNumber.get(getInFileMatchRowNumber(normalized) ?? -1);
 
-        if (!profileId) {
-          throw new Error(
-            `Could not resolve profile for import row ${row.row_number}`,
-          );
-        }
+      if (!profileId) {
+        throw new Error(
+          `Could not resolve profile for import row ${row.row_number}`,
+        );
+      }
 
-        const { ownerWarnings, profileSnapshot, graphRollback } =
-          await updateProfileFromImportRow({
+      const { ownerWarnings, profileSnapshot, graphRollback } =
+        await updateProfileFromImportRow({
           orgId,
           importId,
           userId: user.id,
@@ -1340,14 +1371,109 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           sourceLabel,
           orgUsers: orgUserRecords,
         });
-        if (profileSnapshot) {
-          updatedProfileSnapshots.set(profileId, profileSnapshot);
+
+      return { ownerWarnings, profileSnapshot, graphRollback, profileId };
+    });
+
+    for (const result of matchedResults) {
+      if (result.profileSnapshot) {
+        updatedProfileSnapshots.set(result.profileId, result.profileSnapshot);
+      }
+      if (result.graphRollback) {
+        graphRollbacks.push(result.graphRollback);
+      }
+      summary.updated += 1;
+      summary.ownerWarnings += result.ownerWarnings;
+    }
+  }
+
+  async function persistCheckpoint(nextRowIndex: number) {
+    const checkpoint: ImportCommitCheckpoint = {
+      next_row_index: nextRowIndex,
+      created_profile_ids: [...createdProfileIds],
+      updated_profile_snapshots: Object.fromEntries(
+        [...updatedProfileSnapshots.entries()].map(([profileId, snapshot]) => [
+          profileId,
+          snapshot as Json,
+        ]),
+      ),
+      graph_rollbacks: graphRollbacks as unknown as Json,
+      partial_summary: { ...summary },
+      profile_id_by_row_number: Object.fromEntries(
+        [...profileIdByRowNumber.entries()].map(([rowNumber, profileId]) => [
+          String(rowNumber),
+          profileId,
+        ]),
+      ),
+    };
+
+    const { error: checkpointError } = await supabase
+      .from("imports")
+      .update({
+        metadata: {
+          ...metadata,
+          commit_checkpoint: checkpoint,
+        },
+      })
+      .eq("id", importId)
+      .eq("org_id", orgId);
+
+    if (checkpointError) {
+      throw new Error(`Failed to save import checkpoint: ${checkpointError.message}`);
+    }
+  }
+
+  try {
+    if (!isResume) {
+      await persistCheckpoint(0);
+    }
+
+    while (startIndex < sortedCommitRows.length) {
+      const endIndex = Math.min(
+        startIndex + COMMIT_ROWS_PER_CHUNK,
+        sortedCommitRows.length,
+      );
+      const chunk = sortedCommitRows.slice(startIndex, endIndex);
+      let matchedBatch: ImportCommitRow[] = [];
+
+      for (const row of chunk) {
+        if (row.dedup_status === "new") {
+          await flushMatchedBatch(matchedBatch);
+          matchedBatch = [];
+
+          const normalized = normalizeRowFromImport(
+            row.raw,
+            headers,
+            mapping,
+            row.normalized,
+          );
+
+          const { profileId, ownerWarnings } = await createProfileFromImportRow({
+            orgId,
+            importId,
+            userId: user.id,
+            normalized,
+            sourceLabel,
+            orgUsers: orgUserRecords,
+          });
+          profileIdByRowNumber.set(row.row_number, profileId);
+          createdProfileIds.push(profileId);
+          summary.created += 1;
+          summary.ownerWarnings += ownerWarnings;
+        } else {
+          matchedBatch.push(row);
+          if (matchedBatch.length >= 6) {
+            await flushMatchedBatch(matchedBatch);
+            matchedBatch = [];
+          }
         }
-        if (graphRollback) {
-          graphRollbacks.push(graphRollback);
-        }
-        summary.updated += 1;
-        summary.ownerWarnings += ownerWarnings;
+      }
+
+      await flushMatchedBatch(matchedBatch);
+      startIndex = endIndex;
+
+      if (startIndex < sortedCommitRows.length) {
+        await persistCheckpoint(startIndex);
       }
     }
 
@@ -1357,6 +1483,7 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
         status: "complete",
         metadata: {
           ...metadata,
+          commit_checkpoint: undefined,
           commit_summary: summary,
           committed_at: new Date().toISOString(),
         },
@@ -1394,6 +1521,7 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
         status: "failed",
         metadata: {
           ...metadata,
+          commit_checkpoint: undefined,
           errors: [
             error instanceof Error ? error.message : "Commit failed unexpectedly",
           ],
