@@ -4,7 +4,7 @@
 - Status: Accepted — **Phase 1.1 shipped 2026-06-21**
 - Related: ADR 0008, ADR 0010 (Tier A auto-writes), domain-model-v1.md §5.10, `docs/specs/gmail-sync.md` (participant matching pattern), `src/lib/integrations/calendar/`
 
-Daily incremental sync of Google Calendar events for connected PU team accounts. Store event metadata, match external participants to profiles, generate meeting activities, record provenance, and queue unmatched participants for admin review.
+Daily incremental sync of Google Calendar events for connected team calendar accounts. Store event metadata, match external participants to profiles, generate meeting activities, record provenance, and queue unmatched participants for admin review.
 
 ---
 
@@ -22,7 +22,7 @@ Ecosystem owns this entirely (ADR 0007 pattern). Separate OAuth client and token
 
 - Multiple connected calendar accounts (`calendar_accounts`)
 - Incremental sync via Google Calendar `nextSyncToken`
-- **Multi-calendar sync:** primary plus subscribed `@previously.co` calendars and PU room resources (`CALENDAR_SYNC_DOMAINS` / `ORG_INTERNAL_EMAIL_DOMAINS`); per-calendar tokens in `calendar_accounts.metadata.sync_cursors`
+- **Multi-calendar sync:** primary plus subscribed `@caffeine.co` calendars and team room resources (`CALENDAR_SYNC_DOMAINS` / `ORG_INTERNAL_EMAIL_DOMAINS`); per-calendar tokens in `calendar_accounts.metadata.sync_cursors`
 - Cross-calendar dedup on `(org_id, ical_uid, start_at)`; activities keyed by iCalUID occurrence
 - Initial backfill: **12 months back**, **3 months forward**
 - Ongoing cron keeps the forward window rolling; events beyond lookahead are skipped and purged
@@ -123,7 +123,7 @@ Same rules as Gmail sync (`docs/specs/gmail-sync.md` §5.1). Implementation shar
 
 ### 6.1 Internal identification
 
-1. `ORG_INTERNAL_EMAIL_DOMAINS` env var (comma-separated, e.g. `previously.co`)
+1. `ORG_INTERNAL_EMAIL_DOMAINS` env var (comma-separated, e.g. `caffeine.co`)
 2. All `users.email` for the org (loaded at sync start)
 
 Internal participants: stored in event `participants` jsonb for context; **no** profile, activity, or review row.
@@ -212,7 +212,7 @@ Cron uses service role; all writes include explicit `org_id`.
 - [ ] External participant with matching profile email gets meeting activity + relationship_source
 - [ ] Unmatched participant creates `calendar_participant_reviews` row, not profile
 - [ ] Internal-only meetings produce no activities and no review rows
-- [ ] Team member emails (`@previously.co`) never queue reviews
+- [ ] Team member emails (`@caffeine.co`) never queue reviews
 - [ ] Events beyond 3-month lookahead are not ingested as activities
 - [ ] Re-running sync purges stale far-future and internal-profile calendar data
 - [ ] Cancelled events tombstoned; existing activities preserved

@@ -27,10 +27,10 @@ const GROUP_TITLES: Record<(typeof GROUP_ORDER)[number], string> = {
 };
 
 const EXAMPLE_SEARCHES = [
-  "investor",
-  "previously unavailable",
-  "London",
+  "network",
   "partner",
+  "London",
+  "founder",
 ] as const;
 
 type SearchResultsProps = {

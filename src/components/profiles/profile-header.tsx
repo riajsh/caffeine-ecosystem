@@ -18,7 +18,7 @@ export function ProfileHeader({ profile }: ProfileHeaderProps) {
     <div className="space-y-6">
       {profile.isInternalProfile ? (
         <p className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-body text-muted-foreground">
-          PU team member — calendar sync does not track internal meetings on
+          Team member — calendar sync does not track internal meetings on
           this profile.
         </p>
       ) : null}

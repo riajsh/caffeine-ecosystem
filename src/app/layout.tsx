@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Ecosystem",
-  description: "Relationship intelligence for Previously Unavailable",
+  description: "Relationship intelligence for your network",
 };
 
 export default function RootLayout({

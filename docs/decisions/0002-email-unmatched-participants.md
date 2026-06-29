@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-06-20
-- Deciders: PU team (Chris)
+- Deciders: Caffeine team
 
 ## Context
 
@@ -10,7 +10,7 @@ The Gmail sync pulls full project-related threads. Thread participants are match
 
 ## Options
 
-1. **Skip.** Ignore unmatched participants. Simple, but we lose evidence of who is in PU's orbit.
+1. **Skip.** Ignore unmatched participants. Simple, but we lose evidence of who is in the org's orbit.
 2. **Auto-create stub profiles.** Every unmatched email becomes a profile. Captures everything, but pollutes the database with vendors, no-reply addresses and one-off contacts.
 3. **Review queue.** Create lightweight pending records surfaced in Admin. A human links to an existing profile, creates a profile, or ignores.
 

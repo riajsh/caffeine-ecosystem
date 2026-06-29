@@ -30,7 +30,7 @@ export function TeamMembersList({ users }: TeamMembersListProps) {
       <EmptyState
         variant="dashed"
         title="No team members yet"
-        description="V1 provisions sign-in via Supabase Auth and scripts/sync-pu-team.mjs. Run the sync script after adding someone in Supabase Auth."
+        description="V1 provisions sign-in via Supabase Auth and npm run sync:team. Run the sync script after adding someone in Supabase Auth."
       >
         <Button
           type="button"
@@ -52,8 +52,9 @@ export function TeamMembersList({ users }: TeamMembersListProps) {
         </h2>
         <p className="mt-2 text-body text-muted-foreground">
           V1 provisions sign-in via Supabase Auth and{" "}
-          <code className="text-caption">scripts/sync-pu-team.mjs</code>. Inline
-          add/edit ships in a later pass.
+          <code className="text-caption">npm run sync:team</code>. Edit{" "}
+          <code className="text-caption">src/config/team-members.json</code>{" "}
+          then sync. Inline add/edit ships in a later pass.
         </p>
       </section>
 

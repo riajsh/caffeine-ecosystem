@@ -6,7 +6,7 @@
 
 ---
 
-This document describes the five core jobs a PU team member comes to Ecosystem to do. Every screen, every empty state, and every UI decision should be traceable to at least one of these workflows. If a design serves none of them, it should not be built in Phase 1.
+This document describes the five core jobs a team member comes to Ecosystem to do. Every screen, every empty state, and every UI decision should be traceable to at least one of these workflows. If a design serves none of them, it should not be built in Phase 1.
 
 These are flows, not feature lists. Each describes the trigger, the steps, the data needed at each step, and what the system should surface.
 
@@ -16,13 +16,13 @@ These are flows, not feature lists. Each describes the trigger, the steps, the d
 
 **Trigger:** You have a meeting in the next few hours with someone external. You want to walk in with context.
 
-**Who:** Any PU team member. Happens multiple times per week.
+**Who:** Any team member. Happens multiple times per week.
 
 **Steps:**
 1. Open Ecosystem. Search the person's name or company.
 2. Find their profile in results. See immediately: relationship strength, primary owner, last interaction date.
 3. Open the profile drawer. Scan the Activity tab: what emails have been exchanged, what meetings logged, what notes exist.
-4. Check the Connections tab: does PU know anyone else at their company? Does anyone else at PU also know this person?
+4. Check the Connections tab: does the org know anyone else at their company? Does anyone else on the team also know this person?
 5. Close the drawer and go to the meeting.
 
 **What the system must surface at each step:**
@@ -35,7 +35,7 @@ These are flows, not feature lists. Each describes the trigger, the steps, the d
 - Search returns bare results with no owner or last interaction.
 - Opening the profile drawer navigates away, losing search context.
 - The activity timeline is empty because Gmail sync hasn't run yet (Phase 1 risk — empty state must explain this).
-- There's a connection PU has that isn't visible because it's held in someone's head, not logged.
+- There's a connection the org has that isn't visible because it's held in someone's head, not logged.
 
 **Empty state for this workflow:**
 Activity tab with no activities: "No activity logged yet for this person. If Gmail sync is connected, email threads will appear here after the next sync. You can also log a meeting or note using the input above."
@@ -44,19 +44,19 @@ Activity tab with no activities: "No activity logged yet for this person. If Gma
 
 ## Workflow 2: Introduction routing
 
-**Trigger:** Someone asks PU "can you intro me to X?" or PU wants to make an introduction to support a portfolio company or partner.
+**Trigger:** Someone asks the team "can you intro me to X?" or the team wants to make an introduction to support a portfolio company or partner.
 
 **Who:** James, Henry, Simon, Ria. Daily.
 
 **Steps:**
 1. Search the person by name or company.
-2. Find their profile. See: strength, who at PU owns the relationship, when PU last interacted.
-3. Decide: is the relationship warm enough to use? Who at PU is best placed to make the intro?
+2. Find their profile. See: strength, who on the team owns the relationship, when the org last interacted.
+3. Decide: is the relationship warm enough to use? Who on the team is best placed to make the intro?
 4. If the person isn't in the system yet, create a profile and note the potential connection.
 
 **What the system must surface at each step:**
 - Search: all profiles matching the name, immediately. If there's more than one person with similar names, show company to disambiguate.
-- Profile header: all PU owners visible simultaneously, each with their own strength indicator and last interaction date. Not just "primary owner" — all owners at a glance.
+- Profile header: all team owners visible simultaneously, each with their own strength indicator and last interaction date. Not just "primary owner" — all owners at a glance.
 - Relationship status: active vs dormant matters. A dormant relationship with a strong historical strength is different from a never-interacted-with contact.
 
 **What makes this workflow fail:**
@@ -71,7 +71,7 @@ This is the highest-value thing Ecosystem enables. The answer to "who should mak
 
 ## Workflow 3: Post-event triage
 
-**Trigger:** A PU event has just run. The event is in Ecosystem. There are attendees who either matched to existing profiles or need processing.
+**Trigger:** A community event has just run. The event is in Ecosystem. There are attendees who either matched to existing profiles or need processing.
 
 **Who:** Whoever runs events. Admin role likely, but any team member may need to process attendees.
 

@@ -20,7 +20,7 @@ export default async function EventsPage() {
     <CreateEventProvider>
       <PageHeader
         title="Events"
-        description="PU community events — attendance feeds profile timelines and connection signals."
+        description="Community events — attendance feeds profile timelines and connection signals."
       >
         <CreateEventTrigger />
       </PageHeader>

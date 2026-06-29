@@ -2,7 +2,7 @@
  * Phase 1 — Step 3: relationships, relationship_owners, relationship_sources
  *
  * relationships is the org→profile spine (one row per profile). relationship_owners
- * captures who at PU holds each relationship and at what strength. relationship_sources
+ * captures who on the team holds each relationship and at what strength. relationship_sources
  * is append-only provenance — why we know this person (import, email, event, etc.).
  * Owner strength is user-entered Layer 1 data, not a computed score.
  */

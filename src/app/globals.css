@@ -36,17 +36,9 @@
   --color-interactive-hover: var(--color-blue-700);
   --color-interactive-subtle: var(--color-blue-50);
 
-  /* Owner palette */
-  --color-owner-chris-e: oklch(62% 0.18 25);
-  --color-owner-james: oklch(62% 0.18 250);
-  --color-owner-henry: oklch(62% 0.18 145);
-  --color-owner-simon: oklch(62% 0.18 310);
-  --color-owner-ed: oklch(62% 0.18 35);
-  --color-owner-chris-p: oklch(58% 0.16 200);
-  --color-owner-phoebe-s: oklch(62% 0.16 70);
-  --color-owner-phoebe-d: oklch(58% 0.14 55);
+  /* Owner palette — add tokens here when extending team-members.json */
   --color-owner-ria: oklch(62% 0.18 330);
-  --color-owner-wider-pu: oklch(52% 0.06 250);
+  --color-owner-team: oklch(52% 0.06 250);
   --color-owner-default: var(--color-neutral-400);
 
   /* Relationship strength */

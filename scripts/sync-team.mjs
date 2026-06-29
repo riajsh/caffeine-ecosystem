@@ -1,73 +1,22 @@
 /**
- * Sync PU team users to Supabase (local or remote).
- * Usage: node --env-file=.env.local scripts/sync-pu-team.mjs
+ * Sync team users to Supabase (local or remote).
+ * Source of truth: src/config/team-members.json
+ *
+ * Usage: npm run sync:team
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { createClient } from "@supabase/supabase-js";
 
-const ORG_ID = "11111111-1111-1111-1111-111111111111";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const teamConfig = JSON.parse(
+  readFileSync(join(__dirname, "../src/config/team-members.json"), "utf8"),
+);
 
-const TEAM = [
-  {
-    id: "22222222-2222-2222-2222-222222222229",
-    email: "ce@previously.co",
-    fullName: "Chris E",
-    role: "admin",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222221",
-    email: "jh@previously.co",
-    fullName: "James",
-    role: "admin",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222222",
-    email: "hk@previously.co",
-    fullName: "Henry",
-    role: "member",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222223",
-    email: "sp@previously.co",
-    fullName: "Simon",
-    role: "member",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222230",
-    email: "rs@previously.co",
-    fullName: "Ria",
-    role: "admin",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222224",
-    email: "ed@previously.co",
-    fullName: "Ed",
-    role: "member",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222225",
-    email: "cp@previously.co",
-    fullName: "Chris P",
-    role: "member",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222226",
-    email: "ps@previously.co",
-    fullName: "Phoebe S",
-    role: "member",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222227",
-    email: "pd@previously.co",
-    fullName: "Phoebe D",
-    role: "member",
-  },
-  {
-    id: "22222222-2222-2222-2222-222222222228",
-    email: "team@previously.co",
-    fullName: "Wider PU",
-    role: "member",
-  },
-];
+const ORG_ID = teamConfig.localDevOrgId;
+const TEAM = teamConfig.members;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,

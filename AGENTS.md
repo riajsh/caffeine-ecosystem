@@ -1,11 +1,19 @@
 # AGENTS.md
 
-Ecosystem is a relationship intelligence platform for Previously Unavailable. It answers: who do we know, who at PU knows them, how strong is the relationship, and how do we create value through the network.
+Ecosystem is a relationship intelligence platform. This repository is the **Caffeine Daily** instance. It answers: who do we know, who on the team knows them, how strong is the relationship, and how do we create value through the network.
+
+## Setup (read first)
+
+**[SETUP.md](./SETUP.md)** — step-by-step setup for local dev and production. When helping a new user or setup task, follow SETUP.md phase by phase and verify each step before continuing.
+
+Handover context: [docs/handover-caffeine.md](./docs/handover-caffeine.md)
 
 ## Read these before building
 
 Doc index: `docs/README.md`
 
+- `SETUP.md` — **start here** for local/production setup (Cursor onboarding)
+- `docs/handover-caffeine.md` — handover context, infra, extended notes
 - `docs/domain-model-v1.md` — the data model and source of truth.
 - `docs/product-brief-v1.md` — what V1 is and is not.
 - `docs/information-architecture.md` — navigation and screens.
@@ -32,7 +40,7 @@ Doc index: `docs/README.md`
 - RLS on every table. `org_id` comes from the session, never the client.
 - Three layers stay separate: user-entered, computed (views), AI (Phase 3). Write policy ADR 0010: sync facts auto-write; humans for identity, linking, connections, enrichment.
 - No subjective scoring fields, no AI chat, no scoring in V1.
-- Never hard-code PU anywhere except the `organisations` row. The platform gets cloned for Caffeine.
+- Never hard-code org name or team emails outside `src/config/team-members.json`, seed, and the `organisations` row.
 - Imports and syncs are idempotent.
 
 When in doubt, follow `docs/ai-conventions.md`. If a decision is missing, add an ADR rather than guessing in code.

@@ -50,6 +50,8 @@ Accepted decisions in [decisions/](./decisions/) — 0001 through 0010.
 
 | Doc | Purpose |
 |---|---|
+| [../SETUP.md](../SETUP.md) | **Step-by-step setup** — Cursor onboarding checklist |
+| [handover-caffeine.md](./handover-caffeine.md) | Handover context and infra notes |
 | [pre-migration-gate.md](./pre-migration-gate.md) | Pre-migration sign-off (2026-06-20) + post-gate notes |
 
 ## Cursor rules

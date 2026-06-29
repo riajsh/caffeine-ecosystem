@@ -10,7 +10,7 @@
 
 The product has one spine and a small set of lenses onto it.
 
-- **Spine:** people we know, the relationships PU holds with them, who owns those relationships, and the evidence (activities, emails, events).
+- **Spine:** people we know, the relationships the org holds with them, who owns those relationships, and the evidence (activities, emails, events).
 - **Lenses:** Search, Profiles, Orbit, Connect, Events, Watch List. Each is a different way of looking at the same graph. None is a separate data silo.
 
 If a screen invents its own data instead of reading the spine, it is wrong.
@@ -20,11 +20,11 @@ If a screen invents its own data instead of reading the spine, it is wrong.
 | Object | What it is | Where it lives |
 |---|---|---|
 | Profile | An external person | Profiles, Search, Orbit nodes |
-| Relationship | PU's relationship with a person | Inside a profile |
-| Owner | A PU user who holds a relationship | Profile header, Orbit colour |
+| Relationship | the org's relationship with a person | Inside a profile |
+| Owner | A team member who holds a relationship | Profile header, Orbit colour |
 | Activity | Evidence of interaction | Profile timeline, Search |
 | Connection | A person-to-person edge | Profile, Orbit, Connect |
-| Event | A PU community event | Events, profile timeline |
+| Event | A community event | Events, profile timeline |
 | Tag | Sector, role, interest | Profile, Search filters |
 
 ## Navigation
@@ -36,7 +36,7 @@ Sidebar order, matching the validated prototype:
 3. **Connect** — computed suggestions: reconnect, introduce, emerging. Phase 2.
 4. **Profiles** — the table view. Filterable, sortable, the workhorse for browsing and bulk actions.
 5. **Orbit** — the relationship radar. Strength and recency as distance from centre, owner as colour. Phase 2.
-6. **Events** — PU community events and attendance.
+6. **Events** — community events and attendance.
 7. **Admin** — import, users, tags, review queues (unmatched email participants, soft-match dedup).
 
 ## Screen map

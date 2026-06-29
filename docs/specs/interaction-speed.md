@@ -6,7 +6,7 @@
 
 ---
 
-Ecosystem is a tool the PU team opens multiple times per day. Every second of unnecessary friction compounds. This document establishes hard rules that every screen must follow — not aspirational guidelines, but constraints Cursor enforces at build time the same way RLS is enforced at data time.
+Ecosystem is a tool the team opens multiple times per day. Every second of unnecessary friction compounds. This document establishes hard rules that every screen must follow — not aspirational guidelines, but constraints Cursor enforces at build time the same way RLS is enforced at data time.
 
 ---
 
@@ -34,7 +34,7 @@ The profiles table is used dozens of times per session. Row actions must be avai
 On hover (or keyboard focus), each row exposes a contextual action bar in the rightmost column:
 
 - **Quick-log** — opens an inline popover anchored to the row. Type a short note, press Enter. One interaction total after the hover. The activity type defaults to `note`; a small segmented control lets the user change it to `meeting` or `email` before submitting.
-- **Quick-assign** — opens an owner picker popover. Select a PU team member. Closes on selection.
+- **Quick-assign** — opens an owner picker popover. Select a team member. Closes on selection.
 
 These are the only hover actions in Phase 1. Do not add more until usage proves the need.
 

@@ -8,7 +8,7 @@ export default async function TeamMembersPage() {
   return (
     <AdminPage
       title="Team Members"
-      description="People at PU who can be assigned as Relationship Owners on profiles."
+      description="People on your team who can be assigned as Relationship Owners on profiles."
     >
       <TeamMembersList users={users} />
     </AdminPage>

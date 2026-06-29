@@ -11,7 +11,7 @@ These rules apply to import pipeline, Gmail sync, calendar sync, search, and all
 
 Implementation: `src/lib/integrations/participant-email.ts`
 
-- **`ORG_INTERNAL_EMAIL_DOMAINS`** — comma-separated domains (e.g. `previously.co`). Team addresses are never external contacts.
+- **`ORG_INTERNAL_EMAIL_DOMAINS`** — comma-separated domains (e.g. `caffeine.co`). Team addresses are never external contacts.
 - **`users.email`** — loaded at sync start; merged with env domains for internal filter.
 - **Ignore patterns** — hardcoded noreply/mailer-daemon patterns in `participant-email.ts` (org-configurable list deferred; see gmail-sync.md §12).
 - Internal participants: no profile, activity, or review row. Internal-only threads/events: skip entirely.

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-06-21
-- Deciders: PU team (Chris)
+- Deciders: Caffeine team
 - **Write policy amended by [0010-automation-boundaries.md](./0010-automation-boundaries.md)** (2026-06-22): Tier A sync facts auto-write; human confirmation required for identity, linking, connections, and profile enrichment — not for every calendar meeting activity.
 
 ## Context
@@ -55,7 +55,7 @@ The specificity of the proposed action is what makes this useful. A bare recency
 
 ### Agent 3: Event preparation
 
-**Trigger:** A PU event appears in the calendar within 48 hours, or an event record in Ecosystem moves to confirmed status.
+**Trigger:** A community event appears in the calendar within 48 hours, or an event record in Ecosystem moves to confirmed status.
 
 **What it does:**
 

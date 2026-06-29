@@ -104,31 +104,25 @@ These are unique to this product. Every component that renders relationship data
 
 ### 4.1 Owner palette
 
-Four colours for James, Henry, Simon, Ria — used in Orbit nodes, profile headers, and anywhere owner attribution appears. Defined as CSS tokens and mirrored in `src/config/owner-colours.ts`.
+One colour per team member in `src/config/team-members.json` — used in Orbit nodes, profile headers, and anywhere owner attribution appears. Defined as CSS tokens in `src/app/globals.css` and mirrored dynamically in `src/config/owner-colours.ts`.
 
 ```css
 @theme {
-  --color-owner-james: oklch(62% 0.18 250);   /* blue */
-  --color-owner-henry: oklch(62% 0.18 145);   /* green */
-  --color-owner-simon: oklch(62% 0.18 310);   /* purple */
-  --color-owner-ria:   oklch(62% 0.18 35);    /* amber-orange */
-  --color-owner-default: var(--color-neutral-400); /* fallback for team members without a colour */
+  --color-owner-ria: oklch(62% 0.18 330);
+  --color-owner-team: oklch(52% 0.06 250);
+  --color-owner-default: var(--color-neutral-400); /* fallback for members without a colour */
 }
 ```
 
-TypeScript mirror — `src/config/owner-colours.ts`:
+TypeScript mirror — `src/config/owner-colours.ts` builds from `TEAM_MEMBERS`:
 
 ```ts
-// Keyed by users.id. Update when team changes — one file, everything updates.
-export const OWNER_COLOURS: Record<string, string> = {
-  'uuid-james': 'var(--color-owner-james)',
-  'uuid-henry': 'var(--color-owner-henry)',
-  'uuid-simon': 'var(--color-owner-simon)',
-  'uuid-ria':   'var(--color-owner-ria)',
-}
+export const OWNER_COLOURS: Record<string, string> = Object.fromEntries(
+  TEAM_MEMBERS.map((member) => [member.id, member.colourToken]),
+);
 
 export function ownerColour(userId: string): string {
-  return OWNER_COLOURS[userId] ?? 'var(--color-owner-default)'
+  return OWNER_COLOURS[userId] ?? "var(--color-owner-default)";
 }
 ```
 

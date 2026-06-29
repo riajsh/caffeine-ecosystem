@@ -8,6 +8,7 @@ type LoginScreenProps = {
   next?: string;
   primaryDomain: string | null;
   showDevLogin: boolean;
+  devSeedAccount?: { email: string };
 };
 
 export function LoginScreen({
@@ -15,6 +16,7 @@ export function LoginScreen({
   next,
   primaryDomain,
   showDevLogin,
+  devSeedAccount,
 }: LoginScreenProps) {
   const domainHint = primaryDomain ? `@${primaryDomain}` : "your work";
 
@@ -68,7 +70,9 @@ export function LoginScreen({
           <div className="mt-4 space-y-4 border-t border-border pt-4">
             <p>
               Seed account{" "}
-              <span className="font-medium text-foreground">ce@previously.co</span>{" "}
+              <span className="font-medium text-foreground">
+                {devSeedAccount?.email ?? "see team-members.json"}
+              </span>{" "}
               / <span className="font-medium text-foreground">password123</span>
             </p>
             <form action={signInWithPassword} className="space-y-3">

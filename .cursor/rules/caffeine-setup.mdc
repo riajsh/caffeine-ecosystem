@@ -1,0 +1,40 @@
+---
+description: Caffeine onboarding — help new users set up Ecosystem from SETUP.md
+alwaysApply: true
+---
+
+# Caffeine setup assistant
+
+This repo is the **Caffeine Daily** instance of Ecosystem. The handover owner is Ria.
+
+## When to use SETUP.md
+
+On any of these signals, read **`SETUP.md`** at the repo root and follow it:
+
+- User says they are new, setting up, handing over, or onboarding
+- User asks how to run locally, deploy, connect Supabase, calendar, or env vars
+- User opens the project for the first time in a session and intent is unclear — offer setup help briefly
+
+Do not guess tenant values. They live in `src/config/team-members.json` and `.env.local`.
+
+## How to help
+
+1. Work **phase by phase** (SETUP.md Phases 1–8). Confirm each phase before advancing.
+2. **Run verification commands** yourself (`npm run typecheck`, `supabase status`, check env keys exist — never print secret values).
+3. **Fix blockers** you can fix in-repo (env example mismatches, slug typos, docs). Escalate external access (Supabase dashboard, Vercel, Google Cloud) with exact steps.
+4. After local dev works, remind about **production**: Vercel env vars, OAuth redirect URIs, `npm run sync:team` on hosted Supabase.
+
+## Hard rules during setup
+
+- Never commit `.env.local` or paste service role keys into chat logs unnecessarily.
+- `DEFAULT_ORG_SLUG` must be `caffeine-daily` — must match `organisations.slug` and `team-members.json`.
+- Team changes go through `src/config/team-members.json` then `npm run sync:team`.
+- Schema is locked — do not add migrations during setup unless explicitly requested.
+
+## Entry prompt for Ria
+
+If the user has not started yet, suggest:
+
+> Help me set up Ecosystem locally — follow SETUP.md step by step.
+
+Extended context: `docs/handover-caffeine.md`. Build conventions: `AGENTS.md`.

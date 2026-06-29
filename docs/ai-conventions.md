@@ -32,7 +32,7 @@ Mirror the three layers of truth in the folder structure and the code.
 - Never take `org_id` from the client. Derive it from the authenticated session, server side.
 - Never write a computed value as if it were user-entered fact.
 - Never ship a table without an RLS policy. RLS from day one, on every table.
-- Never hard-code "Previously Unavailable" or PU-specific ids anywhere except the `organisations` row. The clone to Caffeine depends on this.
+- Never hard-code org name or team emails outside `src/config/team-members.json`, seed, and the `organisations` row.
 - Never put a subjective score field (Influence, Trust, Warmth, etc.) in front of a user in V1.
 - Never store secrets in the repo or pass an API key from the client.
 

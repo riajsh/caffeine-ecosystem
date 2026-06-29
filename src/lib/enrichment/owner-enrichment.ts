@@ -114,8 +114,8 @@ function resolveOwnerSuggestionFromTeamMeetings(
     meetingCount: pick.meetingCount,
     reason:
       pick.meetingCount === 1
-        ? "Sole PU attendee in 1 meeting"
-        : `Sole PU attendee in ${pick.meetingCount} meetings`,
+        ? "Sole team attendee in 1 meeting"
+        : `Sole team attendee in ${pick.meetingCount} meetings`,
   };
 }
 

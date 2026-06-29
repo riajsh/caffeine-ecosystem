@@ -579,7 +579,7 @@ function PersonalEmailCleanupSection({
       <p className="mt-1 text-body text-muted-foreground">
         Colleague calendars pull in gmail.com and similar addresses from other
         people&apos;s meetings. Clear the review queue, remove auto-created
-        personal-email profiles, and stop syncing PU colleague calendars.
+        personal-email profiles, and stop syncing colleague calendars.
         Profiles with a relationship owner are always kept.
         {pendingReviewCount > 0
           ? ` ${pendingReviewCount} people still in the review queue.`
@@ -724,7 +724,7 @@ function TeamReviewSection({ groups }: { groups: CalendarUnmatchedGroup[] }) {
   return (
     <details className="rounded-lg border border-border bg-muted/20 p-4">
       <summary className="cursor-pointer text-body font-medium text-foreground">
-        PU team ({groups.length})
+        Team ({groups.length})
       </summary>
       <div className="mt-4 space-y-3">
         <p className="text-body text-muted-foreground">
@@ -868,7 +868,7 @@ export function CalendarSyncReviewWizard({
         summary.internalMatchedMeetingCount > 0 ? (
           <p className="text-caption text-muted-foreground">
             {summary.internalPendingReviewCount > 0
-              ? `${summary.internalPendingReviewCount} PU team addresses are in the review queue (see collapsed section on Review people). `
+              ? `${summary.internalPendingReviewCount} team addresses are in the review queue (see collapsed section on Review people). `
               : ""}
             {summary.internalMatchedMeetingCount > 0
               ? `${summary.internalMatchedMeetingCount} matched meetings are on internal profiles (see Matched meetings tab).`
@@ -925,7 +925,7 @@ export function CalendarSyncReviewWizard({
             {matchedMeetings.internal.length > 0 ? (
               <details className="rounded-lg border border-border bg-muted/20 p-4">
                 <summary className="cursor-pointer text-body font-medium text-foreground">
-                  PU team profiles ({matchedMeetings.internal.length})
+                  Team profiles ({matchedMeetings.internal.length})
                 </summary>
                 <div className="mt-4 space-y-3">
                   <p className="text-body text-muted-foreground">

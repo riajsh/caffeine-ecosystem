@@ -4,7 +4,7 @@
  * Removes:
  * - calendar_sync activities beyond the 3-month lookahead window
  * - far-future calendar_events and their meeting provenance
- * - calendar_sync activities and meeting provenance on internal (@previously.co) profiles
+ * - calendar_sync activities and meeting provenance on internal team-domain profiles
  * - pending calendar_participant_reviews for internal addresses
  *
  * Usage:

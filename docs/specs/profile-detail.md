@@ -10,7 +10,7 @@ The most-used screen in the product. Every lens (Search, Profiles, Orbit, Connec
 
 ## 1. Purpose
 
-Show everything PU knows about one external person: identity, relationship, owners, provenance, timeline evidence, connections, and event attendance. Support inline editing of Layer 1 facts without exposing Layer 2 computed values as editable fields.
+Show everything the org knows about one external person: identity, relationship, owners, provenance, timeline evidence, connections, and event attendance. Support inline editing of Layer 1 facts without exposing Layer 2 computed values as editable fields.
 
 ---
 
@@ -56,7 +56,7 @@ Also loaded per request: `listOrgUsers()`, `listOrgTags()`, `getProfileNetworkIn
 ### 4.1 Header (`ProfileHeader`)
 
 - **Page mode:** "← Back to profiles" link.
-- **Internal profile banner:** if `isInternalProfile`, show muted callout — PU team members are not tracked as external contacts; calendar sync does not attach meetings here.
+- **Internal profile banner:** if `isInternalProfile`, show muted callout — team members are not tracked as external contacts; calendar sync does not attach meetings here.
 - **Title block:** full name + tag badges (secondary).
 - **Subtitle:** occupation, organisation, location (muted).
 - **Bio:** full width when present.
@@ -83,7 +83,7 @@ Status, type, org-level relationship notes.
 
 ### 4.5 Owners (`ProfileOwnersSection`)
 
-All owners listed simultaneously — not just the primary. This is a Workflow 2 requirement: intro routing requires seeing every owner and their individual strength at a glance. Each row: owner colour dot, name, strength badge (inline-editable — click to change), last interaction date, "Make primary" control, remove control. Strength changes via optimistic update. All PU owners must be visible without expanding or scrolling within this section.
+All owners listed simultaneously — not just the primary. This is a Workflow 2 requirement: intro routing requires seeing every owner and their individual strength at a glance. Each row: owner colour dot, name, strength badge (inline-editable — click to change), last interaction date, "Make primary" control, remove control. Strength changes via optimistic update. All team owners must be visible without expanding or scrolling within this section.
 
 ### 4.6 Tags (`ProfileTagsSection`)
 
@@ -123,7 +123,7 @@ Each activity row shows: date, activity type badge, introduction outcome badge (
 
 ### Events
 
-List of PU community events this profile attended (`event_attendees.attended = true`). Each row: title (link to `/events/[id]`), type, date, location.
+List of community events this profile attended (`event_attendees.attended = true`). Each row: title (link to `/events/[id]`), type, date, location.
 
 **Empty state:** "No events attended" with link to `/events`.
 
@@ -155,7 +155,7 @@ All mutations: `requireUser()` → Zod validate → repository write → `revali
 ## 7. Visual rules
 
 - Use `@theme` tokens only (`docs/design-tokens.md`).
-- Owner dots use `ownerColour(userId)` — never hardcode PU names.
+- Owner dots use `ownerColour(userId)` — never hardcode owner names.
 - Generated / inferred blocks: secondary badge + optional dashed border.
 - Strength badge uses CVA variants from design tokens — not arbitrary colours.
 

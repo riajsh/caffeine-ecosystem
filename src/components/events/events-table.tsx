@@ -27,7 +27,7 @@ export function EventsTable({ events }: EventsTableProps) {
     return (
       <EmptyState
         title="No events yet"
-        description="Create PU dinners, roundtables, and workshops — then add attendees to build the attendance graph."
+        description="Create dinners, roundtables, and workshops — then add attendees to build the attendance graph."
       >
         <p className="text-caption text-muted-foreground">
           Use the New event button above to get started.

@@ -2,23 +2,23 @@
 
 - Version: 1.0
 - Status: Accepted
-- Owner: Previously Unavailable
+- Owner: Caffeine Daily
 - Related: domain-model-v1.md, information-architecture.md, design-principles.md
 
 ---
 
 ## Problem statement
 
-PU's most valuable asset is its network, and right now that network lives in inboxes, heads, spreadsheets and a Lovable prototype that stalled. Nobody can reliably answer "who do we know in X, who at PU knows them best, and when did we last talk to them". The cost is missed introductions, relationships that quietly go cold, and leadership making network decisions on memory rather than evidence.
+The org's most valuable asset is its network, and right now that network lives in inboxes, heads, spreadsheets and a Lovable prototype that stalled. Nobody can reliably answer "who do we know in X, who on the team knows them best, and when did we last talk to them". The cost is missed introductions, relationships that quietly go cold, and leadership making network decisions on memory rather than evidence.
 
 ## Who this is for
 
-V1 is an internal tool for the PU team. Primary users are the people who hold relationships (James, Henry, Simon, Ria and the wider team) and leadership making network and opportunity decisions. It is not a go-to-market SaaS. Once stable, the platform is cloned, stripped of PU data and handed to Caffeine Daily as a separate instance.
+V1 is an internal tool for the Caffeine team. Primary users are the people who hold relationships and leadership making network and opportunity decisions. It is not a go-to-market SaaS.
 
 ## Goals
 
 1. Make "who do we know in X" answerable in seconds, with evidence behind every result.
-2. Surface who at PU owns each relationship and how warm it is, not just whether a contact exists.
+2. Surface who on the team owns each relationship and how warm it is, not just whether a contact exists.
 3. Catch relationship decay automatically, so important people stop going dark unnoticed.
 4. Give leadership an operating view of the network: ownership concentration, dormant clusters, event-driven opportunities.
 5. Build the graph so that AI reasoning in Phase 3 has rich, traceable evidence to work from.
@@ -27,7 +27,7 @@ V1 is an internal tool for the PU team. Primary users are the people who hold re
 
 1. **Subjective scoring fields** (Influence, Trust, Alignment, Warmth, Momentum). Humans will not maintain these. Out until the system can compute them from evidence.
 2. **Claude chat or copilot.** AI is Phase 3, over a populated graph, not a day-one chat box.
-3. **Multi-tenant SaaS, billing, public signup, self-serve onboarding.** Single org, clone for Caffeine. No commercial surface.
+3. **Multi-tenant SaaS, billing, public signup, self-serve onboarding.** Single org per deployment. No commercial surface.
 4. **Custom field builder UI.** Deferred. The `profiles.extended` jsonb is the interim escape hatch.
 5. **Polished graph visualisation.** Orbit's interaction model gets validated before any visual systemisation.
 
@@ -35,7 +35,7 @@ V1 is an internal tool for the PU team. Primary users are the people who hold re
 
 Owners (the team)
 - As a relationship owner, I want to find everyone we know in a sector or location so that I can answer an opportunity quickly.
-- As a relationship owner, I want to see who else at PU knows a person and how well, so that I route an introduction through the warmest path.
+- As a relationship owner, I want to see who else on the team knows a person and how well, so that I route an introduction through the warmest path.
 - As a relationship owner, I want a person's full timeline (emails, meetings, events, notes) so that I walk into a conversation with context.
 - As a relationship owner, I want to log a note, meeting or introduction in a few seconds so that the record stays current.
 
@@ -57,7 +57,7 @@ Edge and empty states
 ### Must have (P0)
 
 - **Auth and org scoping.** Supabase auth, every row org-scoped, RLS on from day one.
-  - Given a logged-in PU user, when they query any table, then they only ever see PU rows.
+  - Given a logged-in team member, when they query any table, then they only ever see org rows.
 - **Profiles.** Create, read, edit, shared across the org.
 - **Relationships and owners.** One relationship per profile, multiple owners with per-owner strength and a primary owner.
 - **Activities timeline.** Per-profile chronological feed from manual entry, email sync, and calendar sync.
@@ -96,7 +96,7 @@ Leading (weeks)
 Lagging (months)
 - Leadership uses Orbit or Connect in network and opportunity decisions, not memory.
 - Measurable re-engagement of dormant relationships flagged by the system.
-- The Caffeine clone stands up cleanly with zero PU data leakage.
+- Org scoping holds: no cross-tenant data leakage and no hard-coded tenant IDs in application code.
 
 ## Open questions
 

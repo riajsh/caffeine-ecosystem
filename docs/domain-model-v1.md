@@ -3,7 +3,7 @@
 - Version: 1.2
 - Status: Accepted
 - Changelog: v1.2 adds calendar_accounts, calendar_events, calendar_participant_reviews (Phase 1.1 Google Calendar sync, ADR 0008). v1.1 adds organisation_name_normalised (profiles), introduced_by + introduction_outcome (activities), source_event_id + introduced_by (connections), calendar_sync source type. All additions are nullable and non-breaking.
-- Owner: Previously Unavailable
+- Owner: Caffeine Daily
 - Purpose of this file: single source of truth for the data model. Schema, APIs and UI are generated from this, not the other way around.
 
 ---
@@ -12,7 +12,7 @@
 
 The platform exists to answer one question:
 
-> Who do we know, who at PU knows them, how strong is that relationship, and how can we create value through the network?
+> Who do we know, who on the team knows them, how strong is that relationship, and how can we create value through the network?
 
 Profiles are participants. Activities are evidence. Events are catalysts. Search is the interface. AI is a reasoning layer that comes last. The thing at the centre is the relationship.
 
@@ -27,7 +27,7 @@ Profiles are participants. Activities are evidence. Events are catalysts. Search
    - Layer 2 Inference: things the system derives (strength, ring, overlap, suggestions).
    - Layer 3 AI: things Claude reasons about, once Layers 1 and 2 are populated.
    We never let Layer 2 or 3 write back into Layer 1 as if it were fact.
-4. **Build for one, structure to clone.** V1 is PU only, but every table is org-scoped from day one so the Caffeine handover is a clean strip-and-rehome, not a rebuild.
+4. **Single tenant, org-scoped from day one.** V1 serves one organisation per deployment. Every table carries `org_id` so the platform can be re-hosted for another team without a rebuild.
 5. **Low automation now.** Manual entry is acceptable for V1. Automation and agents come once the graph holds real data.
 
 ---
@@ -36,8 +36,8 @@ Profiles are participants. Activities are evidence. Events are catalysts. Search
 
 Three relationship axes, all required:
 
-- **Org to person:** PU has a relationship with Aaron. This is the spine. One row per profile.
-- **User to person:** James, Henry, Simon and Ria each hold the Aaron relationship at different strengths. This is the asset that most CRMs miss.
+- **Org to person:** The org has a relationship with Aaron. This is the spine. One row per profile.
+- **User to person:** Team members each hold the Aaron relationship at different strengths. This is the asset that most CRMs miss.
 - **Person to person:** Aaron knows Henry (both external). This is the graph that powers introductions and the outer structure of Orbit.
 
 If we only model org to person, we get a contact database. Modelling all three is what makes it a relationship intelligence platform.
@@ -82,12 +82,12 @@ Conventions: every table has `id uuid pk default gen_random_uuid()`, `org_id uui
 
 ### 5.1 organisations
 
-Tenant boundary. V1 has exactly one row (Previously Unavailable). Present from the start so the clone is trivial.
+Tenant boundary. V1 has exactly one row per deployment (Caffeine Daily in this repo). Org name and slug live here — never hard-code them elsewhere.
 
 | column | type | notes |
 |---|---|---|
-| name | text | "Previously Unavailable" |
-| slug | text | unique, used in code paths, never hard-code "PU" anywhere else |
+| name | text | e.g. "Caffeine Daily" |
+| slug | text | unique, e.g. `caffeine-daily`; used for auth bootstrap via `DEFAULT_ORG_SLUG` |
 | email_access_level | enum | `metadata_only` / `restricted_body_access` / `full_body_access`. V1 default: `restricted_body_access` (ADR 0003) |
 
 ### 5.2 users
@@ -129,7 +129,7 @@ Rules:
 
 ### 5.4 relationships (org to profile)
 
-The spine. "PU has a relationship with this person." Exactly one per profile.
+The spine. "The org has a relationship with this person." Exactly one per profile.
 
 | column | type | notes |
 |---|---|---|
@@ -140,11 +140,11 @@ The spine. "PU has a relationship with this person." Exactly one per profile.
 
 Constraint: `unique(org_id, profile_id)`.
 
-Note: because this is 1:1 with profile, some teams collapse it into the profile table. I am keeping it separate because status and type are about PU's relationship, not about the person, and it gives us a clean place to attach owners.
+Note: because this is 1:1 with profile, some teams collapse it into the profile table. I am keeping it separate because status and type are about the org's relationship, not about the person, and it gives us a clean place to attach owners.
 
 ### 5.5 relationship_owners (user to profile)
 
-Who at PU holds the relationship, and how warm it is for them specifically. This is the high-value bit.
+Who on the team holds the relationship, and how warm it is for them specifically. This is the high-value bit.
 
 | column | type | notes |
 |---|---|---|
@@ -157,7 +157,7 @@ Who at PU holds the relationship, and how warm it is for them specifically. This
 
 Constraint: `unique(relationship_id, user_id)`.
 
-This lets the system answer "who at PU knows Aaron best?", which is usually more actionable than "do we know Aaron?".
+This lets the system answer "who on the team knows Aaron best?", which is usually more actionable than "do we know Aaron?".
 
 ### 5.6 relationship_sources (provenance)
 
@@ -188,8 +188,8 @@ The inter-person graph. "Aaron knows Henry", where both are external. This is th
 | connection_type | enum | `colleague` / `cofounder` / `introduced` / `met_at_event` / `personal` / `unknown` |
 | strength | enum | `strong` / `warm` / `weak` / `unknown` |
 | source | enum | `manual` / `inferred_company` / `inferred_event` / `inferred_email` / `import` |
-| source_event_id | uuid | nullable; references events; set when `connection_type = 'met_at_event'` — links the connection to the specific event where they met. Enables "Aaron and Henry met at PU Dinner March 2024". |
-| introduced_by | uuid | nullable; references users; set when `connection_type = 'introduced'` — the PU team member who facilitated the connection. Enables introduction attribution and outcome tracking. |
+| source_event_id | uuid | nullable; references events; set when `connection_type = 'met_at_event'` — links the connection to the specific event where they met. Enables "Aaron and Henry met at Community Dinner March 2024". |
+| introduced_by | uuid | nullable; references users; set when `connection_type = 'introduced'` — the team member who facilitated the connection. Enables introduction attribution and outcome tracking. |
 | notes | text | |
 
 Constraints:
@@ -211,7 +211,7 @@ The heartbeat. Every meaningful interaction becomes one row, attributed to one p
 | activity_date | timestamptz | |
 | source | enum | `gmail_sync` / `calendar_sync` / `manual` / `event_system` / `import` — `calendar_sync` reserved for Phase 1.1 Google Calendar integration (ADR 0008) |
 | source_ref | text | e.g. gmail_thread_id, calendar_event_id, or event_id, for idempotent re-sync |
-| introduced_by | uuid | nullable; references users; set only when `activity_type = 'introduction'`. The PU team member who made the introduction. Enables attribution and conversion tracking. |
+| introduced_by | uuid | nullable; references users; set only when `activity_type = 'introduction'`. The team member who made the introduction. Enables attribution and conversion tracking. |
 | introduction_outcome | enum | nullable; `pending` / `accepted` / `led_to_meeting` / `no_response`. Set only when `activity_type = 'introduction'`. Research shows warm intros convert 3–5× faster — this field makes that measurable. |
 | metadata | jsonb | |
 | created_by | uuid | nullable, null when system generated; references users |
@@ -226,7 +226,7 @@ Raw communications, kept separate from activities. Dedicated Ecosystem sync (ADR
 
 | column | type | notes |
 |---|---|---|
-| user_id | uuid | references users; the PU team member who connected this inbox |
+| user_id | uuid | references users; the team member who connected this inbox |
 | email | text | the Gmail address |
 | refresh_token | text | encrypted; server-side only |
 | sync_enabled | boolean | admin can pause without disconnecting |
@@ -287,7 +287,7 @@ Raw calendar data from Google Calendar sync (ADR 0008). Same org-scoped, idempot
 
 | column | type | notes |
 |---|---|---|
-| user_id | uuid | references users; the PU team member who connected this calendar |
+| user_id | uuid | references users; the team member who connected this calendar |
 | email | text | the Google account email |
 | refresh_token | text | encrypted; server-side only |
 | sync_enabled | boolean | admin or owner can pause without disconnecting |
@@ -332,7 +332,7 @@ Resolution: match `participants[].email` to `profiles.email`. On match, generate
 
 ### 5.11 events and event_attendees
 
-PU community events as a first-class object. This is where a lot of the network value originates for PU.
+community events as a first-class object. This is where a lot of the network value originates for the org.
 
 **events**
 
@@ -452,11 +452,11 @@ Implementation: see ADR 0006 and `docs/specs/search.md` (Postgres FTS in Phase 1
 
 ---
 
-## 10. Permissions, RLS and the clone strategy
+## 10. Permissions and RLS
 
 - Every table carries `org_id`. RLS policy on all tables: a user sees rows only where `org_id` equals their org.
-- Within PU, profiles and relationships are shared and visible to all members. Ownership is informational, it does not restrict read access in V1 (except email bodies per ADR 0003).
-- **Clone to Caffeine**: provision a fresh org (new Supabase project or new `org_id`), run the same migrations, import none of PU's rows. Because everything is org-scoped and nothing hard-codes PU beyond the `organisations` row, the handover is a clean empty instance, not a rebuild. This is not a go-to-market SaaS, so no billing, signup or self-serve onboarding.
+- Within the org, profiles and relationships are shared and visible to all members. Ownership is informational, it does not restrict read access in V1 (except email bodies per ADR 0003).
+- Org name, slug, and team roster are configured in `src/config/team-members.json` and the `organisations` row — not hard-coded in application code.
 
 See ADR 0001.
 

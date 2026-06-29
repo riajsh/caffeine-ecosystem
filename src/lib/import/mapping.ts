@@ -130,7 +130,7 @@ function normalizeImportEnums(normalized: NormalizedImportRow): void {
         typeToken as (typeof RELATIONSHIP_STATUSES)[number],
       )
     ) {
-      // PU exports often put status values in a "Relationship Type" column.
+      // Some exports put status values in a "Relationship Type" column.
       if (!normalized.relationship_status) {
         normalized.relationship_status = typeToken;
       }

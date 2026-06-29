@@ -9,7 +9,7 @@
 
 ## Goal
 
-Get Ria operating Ecosystem as the PU relationship ops hub: triage contacts, track chief-owned relationships, monitor meeting cadence, and prepare for event-driven onboarding — without manual LinkedIn stalking or Notion shadow systems.
+Get Ria operating Ecosystem as the org relationship ops hub: triage contacts, track chief-owned relationships, monitor meeting cadence, and prepare for event-driven onboarding — without manual LinkedIn stalking or Notion shadow systems.
 
 Success looks like Ria using Profiles + Calendar review daily within two weeks, with role/company completeness improving week over week.
 
@@ -77,7 +77,7 @@ Work through these in a focused session. Note URL + screenshot for anything brok
 - [ ] Vercel: add Ria to project; confirm preview deploys work
 - [ ] Supabase: add Ria to org/project; document which keys live where (no secrets in repo)
 - [ ] Google OAuth: confirm Ria can connect her calendar under admin (or document who holds the integration)
-- [ ] Brief on clone path for Caffeine (duplicate repo, fresh DB, no PU hard-coding)
+- [x] Caffeine instance configured (see [handover-caffeine.md](../handover-caffeine.md))
 
 ### Deliverable
 
@@ -222,7 +222,7 @@ Prerequisite: Phases 1–4 — especially profile completeness and reliable cale
 | Calendar sync window | All past meetings (12-month backfill) **plus 4 weeks** of upcoming invites. Upcoming events stay in `calendar_events` and the review queue; they do **not** appear as profile activities or on Overview recent activity until the meeting date has passed. |
 | Recent activity on Overview | Past relationship events only — notes, past meetings, imports, manual logs. Not future calendar invites. |
 | Screens to fix | **All:** Overview recent activity, calendar review context (past-first sample), profile activity timeline, last-interaction recency RPC. |
-| Ria admin role | **Admin** (`rs@previously.co`). New logins bootstrap as `member`; promote via sync script or SQL (see below). |
+| Ria admin role | **Admin** (`rs@caffeine.co`). New logins bootstrap as `member`; promote via sync script or SQL (see below). |
 | Email connect for team | Defer; calendar is the primary auto-capture path. |
 
 ### Promote Ria to admin (production)
@@ -232,10 +232,10 @@ If Ria already logged in (bootstrap created a `member` row under her auth UUID):
 ```sql
 update public.users
 set role = 'admin'
-where lower(email) = 'rs@previously.co';
+where lower(email) = 'rs@caffeine.co';
 ```
 
-Or run `node --env-file=.env.local scripts/sync-pu-team.mjs` (includes Ria as admin; matches auth user by email).
+Or run `npm run sync:team` (includes Ria as admin; matches auth user by email).
 
 **Verify:** Ria sees **Admin** in the sidebar and can open `/admin/calendar-sync/review`. On `/me`, the admin section appears when `role = 'admin'`.
 

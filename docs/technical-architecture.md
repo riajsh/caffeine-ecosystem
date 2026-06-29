@@ -68,7 +68,7 @@ Ecosystem/
 │   └── config.toml
 ├── scripts/
 │   ├── purge-calendar-sync.mjs    # npm run purge:calendar
-│   ├── sync-pu-team.mjs           # npm run sync:team
+│   ├── sync-team.mjs              # npm run sync:team
 │   └── backfill-import-owners.mjs # npm run backfill:import-owners
 ├── src/
 │   ├── middleware.ts              # Session guard + Supabase cookie refresh
@@ -172,7 +172,7 @@ Prefer server reads. Client-side Supabase only where interactivity requires it (
 
 On first login after Supabase Auth signup:
 
-1. Upsert `users` row: `id = auth.users.id`, `org_id` from invite metadata (V1: seeded PU org).
+1. Upsert `users` row: `id = auth.users.id`, `org_id` from invite metadata (V1: seeded org from `team-members.json`).
 2. All subsequent requests resolve org via `users.org_id`.
 
 ### 5.3 RLS pattern
@@ -188,7 +188,7 @@ Exceptions (additional policies):
 
 - All schema changes via `supabase/migrations/*.sql`.
 - Generate types after every migration: `supabase gen types typescript`.
-- Seed script for local dev; never seed production with PU test data.
+- Seed script for local dev; never seed production with test fixture data.
 
 ---
 
@@ -277,7 +277,7 @@ Calendar sync is **incremental** using `nextSyncToken` stored on `calendar_accou
 | `GOOGLE_CALENDAR_REDIRECT_URI` | Calendar OAuth callback (Phase 1.1) | Server only |
 | `TOKEN_ENCRYPTION_KEY` | OAuth refresh token storage | Server only |
 | `GMAIL_SYNC_LABELS` | Gmail sync label filter | Server only; comma-separated label names/IDs |
-| `ORG_INTERNAL_EMAIL_DOMAINS` | Gmail + Calendar participant matching | Server only; comma-separated domains (e.g. `previously.co`). Addresses on these domains are team/internal — no profile, activity, or review row. Also merged with `users.email` at runtime. See `src/lib/integrations/participant-email.ts`. |
+| `ORG_INTERNAL_EMAIL_DOMAINS` | Gmail + Calendar participant matching | Server only; comma-separated domains (e.g. `caffeine.co`). Addresses on these domains are team/internal — no profile, activity, or review row. Also merged with `users.email` at runtime. See `src/lib/integrations/participant-email.ts`. |
 | `ANTHROPIC_API_KEY` | Phase 3 AI | Server only |
 
 Validated at boot for core app vars (`src/lib/env/public.ts`, `src/lib/env.ts`). Calendar OAuth vars validate lazily in `getCalendarEnv()` when calendar sync runs. Gmail env vars are not validated until Gmail sync is implemented.
@@ -290,7 +290,7 @@ Validated at boot for core app vars (`src/lib/env/public.ts`, `src/lib/env.ts`).
 |---|---|---|
 | **Local** | Supabase CLI / Docker | Development, migrations, seed |
 | **Preview** | Branch or staging project | PR previews |
-| **Production** | Production project | PU live instance |
+| **Production** | Production project | Caffeine live instance |
 
 Caffeine clone: new Supabase project (or new `org_id`), same migrations, empty data (ADR 0001).
 

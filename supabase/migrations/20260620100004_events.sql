@@ -1,7 +1,7 @@
 /*
  * Phase 1 — Step 5: events and event_attendees
  *
- * PU community events as first-class objects. event_attendees links profiles
+ * Community events as first-class objects. event_attendees links profiles
  * to events and enables co-attendance signals for inferred connections.
  * Also adds the deferred FK from connections.source_event_id → events.id.
  */

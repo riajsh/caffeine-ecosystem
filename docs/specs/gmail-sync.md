@@ -10,7 +10,7 @@ The highest-risk subsystem. Privacy, permissions, and relationship attribution i
 
 ## 1. Purpose
 
-Daily incremental sync of Gmail threads labelled with PU project labels. Store raw email data, match participants to profiles, generate activities, record relationship provenance, and queue unmatched participants for human review.
+Daily incremental sync of Gmail threads labelled with project labels. Store raw email data, match participants to profiles, generate activities, record relationship provenance, and queue unmatched participants for human review.
 
 Ecosystem owns this entirely (ADR 0007). Not shared with Pathway PM.
 
@@ -20,7 +20,7 @@ Ecosystem owns this entirely (ADR 0007). Not shared with Pathway PM.
 
 ### In scope (V1)
 
-- Multiple connected PU team inboxes (`gmail_accounts`)
+- Multiple connected team inboxes (`gmail_accounts`)
 - Incremental sync via Gmail `historyId`
 - Threads filtered by configured project labels
 - Full message bodies stored (access restricted per ADR 0003)
@@ -44,13 +44,13 @@ Ecosystem owns this entirely (ADR 0007). Not shared with Pathway PM.
 
 ## 3. Whose inbox?
 
-**Multiple inboxes.** Each PU team member who holds relationships may connect their Gmail account.
+**Multiple inboxes.** Each team member who holds relationships may connect their Gmail account.
 
 | Question | Answer |
 |---|---|
 | One inbox or many? | **Many.** One row per connected account in `gmail_accounts`. |
 | Who can connect? | Any org member; admin can disable `sync_enabled` per account. |
-| Which mail is synced? | Only threads carrying a configured **project label** (e.g. Gmail labels matching PU projects). |
+| Which mail is synced? | Only threads carrying a configured **project label** (e.g. Gmail labels matching configured projects). |
 | Shared inbox (hello@pu.com)? | Supported as a separate `gmail_accounts` row; typically connected by admin. |
 
 Label configuration (V1): `GMAIL_SYNC_LABELS` env var — comma-separated Gmail label names or IDs (e.g. `GMAIL_SYNC_LABELS=ProjectA,ProjectB,Client-X`). Set in `.env.local` before first sync. Admin UI for managing labels deferred to Phase 1.1 if needed.
@@ -130,7 +130,7 @@ Re-running sync for the same thread must not duplicate activities or sources.
 
 **Match key:** `lower(participant.email) = lower(profiles.email)`.
 
-For each external participant on a thread (not a PU team member address):
+For each external participant on a thread (not a team member address):
 
 1. Normalise email (lowercase, trim).
 2. Check org ignore list → skip if matched.
@@ -148,11 +148,11 @@ For each external participant on a thread (not a PU team member address):
    - Create `email_participant_reviews` row: `status=pending`.
    - Do **not** create profile or relationship.
 
-### 5.1 PU internal addresses
+### 5.1 org internal addresses
 
 Internal (team) participants are identified by:
 
-1. **`ORG_INTERNAL_EMAIL_DOMAINS`** — comma-separated domains in env (e.g. `previously.co`). Set in `.env.local` / Vercel env. Documented in `docs/technical-architecture.md` §8.
+1. **`ORG_INTERNAL_EMAIL_DOMAINS`** — comma-separated domains in env (e.g. `caffeine.co`). Set in `.env.local` / Vercel env. Documented in `docs/technical-architecture.md` §8.
 2. **`users.email`** — all org member emails are treated as internal at runtime (loaded from DB during sync).
 
 Implementation: `src/lib/integrations/participant-email.ts` (`loadOrgParticipantFilters`, `isInternalParticipant`).
@@ -171,7 +171,7 @@ Threads or events with **only** internal participants: store metadata if labelle
 
 A **relationship** is org→profile (one per profile). Email evidence strengthens provenance; it does not create duplicate relationships.
 
-**Owner attribution:** when a PU user appears as sender or recipient on a thread involving an external profile:
+**Owner attribution:** when a team member appears as sender or recipient on a thread involving an external profile:
 
 - If that user is not already a `relationship_owner`, optionally suggest adding them (Phase 2). V1: no auto-add.
 - If they are an owner, update `last_interaction_at` on that owner row (manual field V1; computed V2).
@@ -205,14 +205,14 @@ One thread can therefore produce multiple activities and multiple review rows. T
 
 ## 8. External-only threads
 
-Thread where all external participants are unmatched and no PU user sent/received project-labelled mail in a meaningful way:
+Thread where all external participants are unmatched and no team member sent/received project-labelled mail in a meaningful way:
 
 - Still store thread and messages (metadata always; bodies per ADR 0003).
 - Create review rows for each external participant.
 - No activities until a participant is linked or a profile created.
 - Thread remains searchable by subject (org-wide metadata).
 
-If thread contains **only PU internal addresses** (no externals): store for audit if labelled, but generate no activities and no review rows.
+If thread contains **only org internal addresses** (no externals): store for audit if labelled, but generate no activities and no review rows.
 
 ---
 
@@ -293,7 +293,7 @@ Minimum Gmail scopes:
 
 Request incremental auth. Store refresh token encrypted with `TOKEN_ENCRYPTION_KEY`.
 
-**OAuth verification status:** `gmail.readonly` is a sensitive scope but **verification is not required** — the Google Cloud project OAuth app is configured as Internal user type (PU Google Workspace only). Internal apps bypass Google's OAuth verification process. Each integration (Gmail, Calendar) uses a separate OAuth client ID within the same GCP project.
+**OAuth verification status:** `gmail.readonly` is a sensitive scope but **verification is not required** — the Google Cloud project OAuth app is configured as Internal user type (org Google Workspace only). Internal apps bypass Google's OAuth verification process. Each integration (Gmail, Calendar) uses a separate OAuth client ID within the same GCP project.
 
 ---
 
@@ -303,7 +303,7 @@ Request incremental auth. Store refresh token encrypted with `TOKEN_ENCRYPTION_K
 |---|---|
 | Label configuration | `GMAIL_SYNC_LABELS` env var. Starting list set in `.env.local` at deploy time. Admin UI in Phase 1.1. |
 | Backfill window | 12 months on first connect, incremental daily after. Stage the backfill to avoid contention (process in batches, respect Gmail rate limits). |
-| Auto-suggest relationship_owner | No in V1. PU user presence on thread does not auto-add them as an owner. Owner management is manual. |
+| Auto-suggest relationship_owner | No in V1. team member presence on thread does not auto-add them as an owner. Owner management is manual. |
 | Sync audit logging | Dedicated `sync_runs` table if sync volume warrants; otherwise log to `gmail_accounts.metadata.last_run` in V1. Implementation decision for builder — either is acceptable, `sync_runs` preferred for observability. |
 
 ---

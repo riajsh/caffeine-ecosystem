@@ -27,7 +27,7 @@ Grow the relationship graph without noise. Unmatched email participants, unmatch
 |---|---|
 | Who can access | **Admins only** — every review route calls `requireAdmin()` |
 | RLS | Review tables are org-scoped (any org member can SELECT at DB level); UI enforcement is app-layer |
-| Clone safety | No hard-coded PU IDs; all queries scoped by `getOrgId()` |
+| Clone safety | No hard-coded tenant IDs; all queries scoped by `getOrgId()` |
 
 Routes:
 
@@ -51,7 +51,7 @@ One person at a time, full attention. The card shows:
 
 - **Person identifier:** display name (from calendar/email) + email address, large and prominent.
 - **Meeting context:** "3 meetings · last 18 Jun 2026 · [meeting title]" — the most important context for deciding link vs create vs ignore. Never force opening a separate view to see why this person is in the queue.
-- **PU context:** "Met with: Chris, Tom" — which PU team members' calendars surfaced this person.
+- **Team context:** "Met with: Chris, Tom" — which team members' calendars surfaced this person.
 - **Search results:** automatic profile search runs on load. Shows the top 3 candidates with name, company, email match indicator. If zero results, shows nothing (create path).
 - **Suggested action badge:** based on search results:
   - Exact email match → "Suggested: Link to [Name]" as primary button.
@@ -123,7 +123,7 @@ When search returns zero results and the person has a display name from the cale
 
 - Show a single large primary button: **"Create [Display Name]"** — not generic "Create new profile".
 - Pre-fill: name from display name, email from review row, source = `calendar_sync`.
-- Optional: owner dropdown showing PU attendees on the same meeting. If there was only one PU attendee, default to them as primary owner.
+- Optional: owner dropdown showing team attendees on the same meeting. If there was only one team attendee, default to them as primary owner.
 - Create immediately on click. No intermediate form unless the user wants to add more detail.
 
 After creation: auto-advance to next person. The new profile is in the system; they can enrich it later via the profile drawer.
@@ -156,7 +156,7 @@ When an admin ignores an email, make it explicit: "Ignored — won't appear agai
 |---|---|
 | Who can access | **Admins only** — every review route calls `requireAdmin()` |
 | RLS | Review tables are org-scoped (any org member can SELECT at DB level); UI enforcement is app-layer |
-| Clone safety | No hard-coded PU IDs; all queries scoped by `getOrgId()` |
+| Clone safety | No hard-coded tenant IDs; all queries scoped by `getOrgId()` |
 
 Routes:
 
@@ -174,7 +174,7 @@ Admin hub: `/admin` links to each surface.
 
 ### 9.1 Internal / team filtering
 
-Separate external unmatched participants from internal (PU team) addresses:
+Separate external unmatched participants from internal (the team) addresses:
 - External: full link / create / ignore actions.
 - Internal: collapsed section; "Ignore all team" bulk action. Team addresses should not become external profiles.
 
@@ -236,7 +236,7 @@ Auto-link at sync for exact email is the largest engineering win. Triage mode is
 - [ ] Bulk "link all exact matches" resolves correct rows and shows count
 - [ ] Bulk "ignore all from domain" works for any domain appearing in the queue
 - [ ] Queue ordered by meeting count desc, then last meeting date desc
-- [ ] One-click create pre-fills name and email; defaults owner to PU attendee when unambiguous
+- [ ] One-click create pre-fills name and email; defaults owner to team attendee when unambiguous
 - [ ] Ingest-time skip patterns prevent @lu.ma and generic inbox addresses entering the queue
 - [ ] "Ignore and remember" label shown on ignore action
 - [ ] Calendar review: link action backfills meeting activity idempotently

@@ -1,5 +1,5 @@
 /*
- * Ecosystem local seed data
+ * Ecosystem local seed data — Caffeine instance
  *
  * Exercises org/users/tags, Gmail review queue, and import pipeline states.
  * Sample profiles are not seeded — import real contacts via Admin → Import.
@@ -7,14 +7,14 @@
  * Fixed UUIDs are stable across resets so UI and tests can reference them.
  *
  * Local auth (password, optional):
- *   ce@previously.co / password123  (admin)
- *   jh@previously.co / password123  (admin)
+ *   rs@caffeine.co / password123  (admin)
  *
  * Password sign-in works for seed users once auth.users exists.
  * Bootstrap reads app_metadata.org_id — no manual users row needed on first login
  * when seed has already inserted public.users.
  *
- * DEFAULT_ORG_SLUG must match: previously-unavailable
+ * DEFAULT_ORG_SLUG must match: caffeine-daily
+ * Team roster source of truth: src/config/team-members.json
  */
 
 begin;
@@ -27,25 +27,18 @@ begin;
 -- 11111111-1111-1111-1111-111111111111
 
 -- users (auth + public)
--- chris e  22222222-2222-2222-2222-222222222229  admin
--- james     22222222-2222-2222-2222-222222222221  admin
--- henry     22222222-2222-2222-2222-222222222222  member
--- simon     22222222-2222-2222-2222-222222222223  member
--- ed        22222222-2222-2222-2222-222222222224  member
--- chris p   22222222-2222-2222-2222-222222222225  member
--- phoebe s  22222222-2222-2222-2222-222222222226  member
--- phoebe d  22222222-2222-2222-2222-222222222227  member
--- wider pu  22222222-2222-2222-2222-222222222228  member
+-- ria   22222222-2222-2222-2222-222222222230  admin
+-- team  22222222-2222-2222-2222-222222222228  member (placeholder owner)
 
 -- ---------------------------------------------------------------------------
--- Organisation (tenant boundary — only place the PU name lives)
+-- Organisation (tenant boundary — only place the org display name lives)
 -- ---------------------------------------------------------------------------
 
 insert into public.organisations (id, name, slug, email_access_level)
 values (
   '11111111-1111-1111-1111-111111111111',
-  'Previously Unavailable',
-  'previously-unavailable',
+  'Caffeine Daily',
+  'caffeine-daily',
   'restricted_body_access'
 );
 
@@ -75,10 +68,10 @@ insert into auth.users (
 values
   (
     '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222229',
+    '22222222-2222-2222-2222-222222222230',
     'authenticated',
     'authenticated',
-    'ce@previously.co',
+    'rs@caffeine.co',
     extensions.crypt('password123', extensions.gen_salt('bf')),
     now(),
     now(),
@@ -88,191 +81,7 @@ values
       'providers', jsonb_build_array('email'),
       'org_id', '11111111-1111-1111-1111-111111111111'
     ),
-    jsonb_build_object('full_name', 'Chris E'),
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222221',
-    'authenticated',
-    'authenticated',
-    'jh@previously.co',
-    extensions.crypt('password123', extensions.gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    jsonb_build_object(
-      'provider', 'email',
-      'providers', jsonb_build_array('email'),
-      'org_id', '11111111-1111-1111-1111-111111111111'
-    ),
-    jsonb_build_object('full_name', 'James'),
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222222',
-    'authenticated',
-    'authenticated',
-    'hk@previously.co',
-    extensions.crypt('password123', extensions.gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    jsonb_build_object(
-      'provider', 'email',
-      'providers', jsonb_build_array('email'),
-      'org_id', '11111111-1111-1111-1111-111111111111'
-    ),
-    jsonb_build_object('full_name', 'Henry'),
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222223',
-    'authenticated',
-    'authenticated',
-    'sp@previously.co',
-    extensions.crypt('password123', extensions.gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    jsonb_build_object(
-      'provider', 'email',
-      'providers', jsonb_build_array('email'),
-      'org_id', '11111111-1111-1111-1111-111111111111'
-    ),
-    jsonb_build_object('full_name', 'Simon'),
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222224',
-    'authenticated',
-    'authenticated',
-    'ed@previously.co',
-    extensions.crypt('password123', extensions.gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    jsonb_build_object(
-      'provider', 'email',
-      'providers', jsonb_build_array('email'),
-      'org_id', '11111111-1111-1111-1111-111111111111'
-    ),
-    jsonb_build_object('full_name', 'Ed'),
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222225',
-    'authenticated',
-    'authenticated',
-    'cp@previously.co',
-    extensions.crypt('password123', extensions.gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    jsonb_build_object(
-      'provider', 'email',
-      'providers', jsonb_build_array('email'),
-      'org_id', '11111111-1111-1111-1111-111111111111'
-    ),
-    jsonb_build_object('full_name', 'Chris P'),
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222226',
-    'authenticated',
-    'authenticated',
-    'ps@previously.co',
-    extensions.crypt('password123', extensions.gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    jsonb_build_object(
-      'provider', 'email',
-      'providers', jsonb_build_array('email'),
-      'org_id', '11111111-1111-1111-1111-111111111111'
-    ),
-    jsonb_build_object('full_name', 'Phoebe S'),
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222227',
-    'authenticated',
-    'authenticated',
-    'pd@previously.co',
-    extensions.crypt('password123', extensions.gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    jsonb_build_object(
-      'provider', 'email',
-      'providers', jsonb_build_array('email'),
-      'org_id', '11111111-1111-1111-1111-111111111111'
-    ),
-    jsonb_build_object('full_name', 'Phoebe D'),
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  ),
-  (
-    '00000000-0000-0000-0000-000000000000',
-    '22222222-2222-2222-2222-222222222228',
-    'authenticated',
-    'authenticated',
-    'team@previously.co',
-    extensions.crypt('password123', extensions.gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    jsonb_build_object(
-      'provider', 'email',
-      'providers', jsonb_build_array('email'),
-      'org_id', '11111111-1111-1111-1111-111111111111'
-    ),
-    jsonb_build_object('full_name', 'Wider PU'),
+    jsonb_build_object('full_name', 'Ria'),
     now(),
     now(),
     '',
@@ -293,127 +102,15 @@ insert into auth.identities (
 )
 values
   (
-    '22222222-2222-2222-2222-222222222229',
-    '22222222-2222-2222-2222-222222222229',
+    '22222222-2222-2222-2222-222222222230',
+    '22222222-2222-2222-2222-222222222230',
     jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222229',
-      'email', 'ce@previously.co',
+      'sub', '22222222-2222-2222-2222-222222222230',
+      'email', 'rs@caffeine.co',
       'email_verified', true
     ),
     'email',
-    '22222222-2222-2222-2222-222222222229',
-    now(),
-    now(),
-    now()
-  ),
-  (
-    '22222222-2222-2222-2222-222222222221',
-    '22222222-2222-2222-2222-222222222221',
-    jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222221',
-      'email', 'jh@previously.co',
-      'email_verified', true
-    ),
-    'email',
-    '22222222-2222-2222-2222-222222222221',
-    now(),
-    now(),
-    now()
-  ),
-  (
-    '22222222-2222-2222-2222-222222222222',
-    '22222222-2222-2222-2222-222222222222',
-    jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222222',
-      'email', 'hk@previously.co',
-      'email_verified', true
-    ),
-    'email',
-    '22222222-2222-2222-2222-222222222222',
-    now(),
-    now(),
-    now()
-  ),
-  (
-    '22222222-2222-2222-2222-222222222223',
-    '22222222-2222-2222-2222-222222222223',
-    jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222223',
-      'email', 'sp@previously.co',
-      'email_verified', true
-    ),
-    'email',
-    '22222222-2222-2222-2222-222222222223',
-    now(),
-    now(),
-    now()
-  ),
-  (
-    '22222222-2222-2222-2222-222222222224',
-    '22222222-2222-2222-2222-222222222224',
-    jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222224',
-      'email', 'ed@previously.co',
-      'email_verified', true
-    ),
-    'email',
-    '22222222-2222-2222-2222-222222222224',
-    now(),
-    now(),
-    now()
-  ),
-  (
-    '22222222-2222-2222-2222-222222222225',
-    '22222222-2222-2222-2222-222222222225',
-    jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222225',
-      'email', 'cp@previously.co',
-      'email_verified', true
-    ),
-    'email',
-    '22222222-2222-2222-2222-222222222225',
-    now(),
-    now(),
-    now()
-  ),
-  (
-    '22222222-2222-2222-2222-222222222226',
-    '22222222-2222-2222-2222-222222222226',
-    jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222226',
-      'email', 'ps@previously.co',
-      'email_verified', true
-    ),
-    'email',
-    '22222222-2222-2222-2222-222222222226',
-    now(),
-    now(),
-    now()
-  ),
-  (
-    '22222222-2222-2222-2222-222222222227',
-    '22222222-2222-2222-2222-222222222227',
-    jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222227',
-      'email', 'pd@previously.co',
-      'email_verified', true
-    ),
-    'email',
-    '22222222-2222-2222-2222-222222222227',
-    now(),
-    now(),
-    now()
-  ),
-  (
-    '22222222-2222-2222-2222-222222222228',
-    '22222222-2222-2222-2222-222222222228',
-    jsonb_build_object(
-      'sub', '22222222-2222-2222-2222-222222222228',
-      'email', 'team@previously.co',
-      'email_verified', true
-    ),
-    'email',
-    '22222222-2222-2222-2222-222222222228',
+    '22222222-2222-2222-2222-222222222230',
     now(),
     now(),
     now()
@@ -426,73 +123,17 @@ values
 insert into public.users (id, org_id, email, full_name, role)
 values
   (
-    '22222222-2222-2222-2222-222222222229',
-    '11111111-1111-1111-1111-111111111111',
-    'ce@previously.co',
-    'Chris E',
-    'admin'
-  ),
-  (
-    '22222222-2222-2222-2222-222222222221',
-    '11111111-1111-1111-1111-111111111111',
-    'jh@previously.co',
-    'James',
-    'admin'
-  ),
-  (
-    '22222222-2222-2222-2222-222222222222',
-    '11111111-1111-1111-1111-111111111111',
-    'hk@previously.co',
-    'Henry',
-    'member'
-  ),
-  (
-    '22222222-2222-2222-2222-222222222223',
-    '11111111-1111-1111-1111-111111111111',
-    'sp@previously.co',
-    'Simon',
-    'member'
-  ),
-  (
     '22222222-2222-2222-2222-222222222230',
     '11111111-1111-1111-1111-111111111111',
-    'rs@previously.co',
+    'rs@caffeine.co',
     'Ria',
     'admin'
   ),
   (
-    '22222222-2222-2222-2222-222222222224',
-    '11111111-1111-1111-1111-111111111111',
-    'ed@previously.co',
-    'Ed',
-    'member'
-  ),
-  (
-    '22222222-2222-2222-2222-222222222225',
-    '11111111-1111-1111-1111-111111111111',
-    'cp@previously.co',
-    'Chris P',
-    'member'
-  ),
-  (
-    '22222222-2222-2222-2222-222222222226',
-    '11111111-1111-1111-1111-111111111111',
-    'ps@previously.co',
-    'Phoebe S',
-    'member'
-  ),
-  (
-    '22222222-2222-2222-2222-222222222227',
-    '11111111-1111-1111-1111-111111111111',
-    'pd@previously.co',
-    'Phoebe D',
-    'member'
-  ),
-  (
     '22222222-2222-2222-2222-222222222228',
     '11111111-1111-1111-1111-111111111111',
-    'team@previously.co',
-    'Wider PU',
+    'team@caffeine.co',
+    'Team',
     'member'
   );
 
@@ -543,8 +184,8 @@ insert into public.gmail_accounts (
 values (
   'cccccccc-cccc-cccc-cccc-cccccccccc01',
   '11111111-1111-1111-1111-111111111111',
-  '22222222-2222-2222-2222-222222222221',
-  'jh@previously.co',
+  '22222222-2222-2222-2222-222222222230',
+  'rs@caffeine.co',
   'seed-refresh-token-not-real',
   true,
   '2026-06-19 08:00:00+00',
@@ -569,7 +210,7 @@ values (
   'cccccccc-cccc-cccc-cccc-cccccccccc01',
   'Intro request — unknown participant',
   jsonb_build_array(
-    jsonb_build_object('email', 'jh@previously.co', 'name', 'James', 'role', 'from'),
+    jsonb_build_object('email', 'rs@caffeine.co', 'name', 'Ria', 'role', 'from'),
     jsonb_build_object('email', 'unknown@external-startup.io', 'name', 'Alex Unknown', 'role', 'to')
   ),
   'Projects',
@@ -593,7 +234,7 @@ values (
   'dddddddd-dddd-dddd-dddd-dddddddddd02',
   'seed-message-unknown-001',
   'unknown@external-startup.io',
-  jsonb_build_array(jsonb_build_object('email', 'jh@previously.co', 'role', 'to')),
+  jsonb_build_array(jsonb_build_object('email', 'rs@caffeine.co', 'role', 'to')),
   'Great to meet you at the event — would love to connect.',
   '2026-06-18 14:00:00+00'
 );
@@ -643,7 +284,7 @@ values
     'clay',
     2,
     'pending',
-    '22222222-2222-2222-2222-222222222221',
+    '22222222-2222-2222-2222-222222222230',
     jsonb_build_object('note', 'Awaiting column mapping')
   ),
   (
@@ -653,7 +294,7 @@ values
     'csv',
     3,
     'processing',
-    '22222222-2222-2222-2222-222222222221',
+    '22222222-2222-2222-2222-222222222230',
     jsonb_build_object('note', 'Dedup in progress')
   ),
   (
@@ -663,7 +304,7 @@ values
     'clay',
     4,
     'complete',
-    '22222222-2222-2222-2222-222222222222',
+    '22222222-2222-2222-2222-222222222230',
     jsonb_build_object('committed_at', '2026-06-01T10:00:00Z')
   ),
   (
@@ -673,7 +314,7 @@ values
     'airtable',
     2,
     'failed',
-    '22222222-2222-2222-2222-222222222221',
+    '22222222-2222-2222-2222-222222222230',
     jsonb_build_object('error', 'Invalid header row')
   );
 

@@ -13,6 +13,7 @@ import { CalendarConnectButton } from "@/components/admin/calendar-connect-butto
 import { DeployChecklist } from "@/components/admin/deploy-checklist";
 import { RunCalendarSyncButton } from "@/components/admin/run-calendar-sync-button";
 import { Button } from "@/components/ui/button";
+import { getPrimaryLoginDomain } from "@/lib/auth/allowed-email";
 import { requireAdmin } from "@/lib/auth/session";
 import { listCalendarAccountsForOrg } from "@/lib/data/calendar-accounts";
 import { countIncompleteProfiles } from "@/lib/data/profiles";
@@ -29,6 +30,7 @@ type AdminPageProps = {
 export default async function AdminOverviewPage({ searchParams }: AdminPageProps) {
   const user = await requireAdmin();
   const params = await searchParams;
+  const internalDomain = getPrimaryLoginDomain();
   const [deployChecks, incompleteCounts] = await Promise.all([
     getDeployChecklist(),
     countIncompleteProfiles(),
@@ -122,9 +124,9 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
         </h2>
         <p className="max-w-2xl text-body text-muted-foreground">
           Connect a Google Calendar account to sync your primary calendar plus
-          subscribed @previously.co calendars and PU room bookings. Matched
-          external attendees become meeting activities; unmatched emails go to
-          review.
+          subscribed team calendars
+          {internalDomain ? ` (@${internalDomain})` : ""}. Matched external
+          attendees become meeting activities; unmatched emails go to review.
         </p>
         <AutomationTierReference variant="compact" />
         {(params.calendar_connected ?? params.connected) ? (

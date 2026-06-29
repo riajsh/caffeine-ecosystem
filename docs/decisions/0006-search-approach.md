@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-06-20
-- Deciders: PU team
+- Deciders: Caffeine team
 
 ## Context
 

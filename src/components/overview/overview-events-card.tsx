@@ -30,7 +30,7 @@ export function OverviewEventsCard({
         description={
           ownerName
             ? `No events where ${ownerName}'s profiles are attending yet.`
-            : "Create PU dinners and roundtables to build the attendance graph."
+            : "Create community events and roundtables to build the attendance graph."
         }
       >
         <Link href="/events" className="text-body text-interactive-primary hover:underline">

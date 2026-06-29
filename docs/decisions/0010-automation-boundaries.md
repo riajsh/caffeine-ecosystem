@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-06-22
-- Deciders: PU team (Chris)
+- Deciders: Caffeine team
 - Amends: [0009-agent-workflows.md](./0009-agent-workflows.md) (write policy only — agent workflows unchanged)
 - Related: [0008-calendar-sync.md](./0008-calendar-sync.md), [0004-import-dedup.md](./0004-import-dedup.md), [calendar-sync.md](../specs/calendar-sync.md), [ai-conventions.md](../ai-conventions.md)
 
@@ -60,7 +60,7 @@ Phase 3+ optional. Must not block sync or profile saves. Must not overwrite exis
 | Company hint from email domain | Domain is organisational (not gmail/outlook/etc.); profile `organisation_name` is null | Write to `profiles.extended` jsonb key e.g. `suggested_company` OR surface in triage only — **do not** set `organisation_name` until human confirms |
 | Role hint from meeting title | Profile `occupation` is null; pattern match only (no LLM) | Same — suggestion field or triage queue, not `occupation` |
 
-LLM-generated enrichment that could state false facts (role, company, relationship quality) stays **Tier C** unless eval set proves ≥99% precision on PU sample data.
+LLM-generated enrichment that could state false facts (role, company, relationship quality) stays **Tier C** unless eval set proves ≥99% precision on org sample data.
 
 ---
 

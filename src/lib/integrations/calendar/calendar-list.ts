@@ -44,7 +44,7 @@ export function shouldExcludeCalendar(
   return loadIgnorePatterns().some((pattern) => haystack.includes(pattern));
 }
 
-/** PU colleague calendars (@previously.co etc.) — not the connected user's own calendar. */
+/** Colleague calendars on the org internal domain — not the connected user's own calendar. */
 export function isColleagueCalendarId(
   calendarId: string,
   accountEmail: string,

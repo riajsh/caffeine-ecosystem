@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# cursor — local MCP config (copy from .cursor/mcp.json.example)
+.cursor/mcp.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

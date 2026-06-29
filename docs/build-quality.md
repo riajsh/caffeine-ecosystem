@@ -86,7 +86,7 @@ After a significant Cursor session (new subsystem, new migration, new component)
 A second AI reviewing what the first AI built catches drift that you'd never notice while you're in flow. This is especially valuable for:
 - RLS policy completeness (every table covered?)
 - Layer 2 / Layer 1 separation (any computed value written as a fact?)
-- Clone safety (any hard-coded PU references?)
+- Clone safety (any hard-coded tenant references?)
 
 ---
 
@@ -174,16 +174,16 @@ Each feature from `docs/specs/` has acceptance criteria. Run them manually befor
 
 ---
 
-## 6. Caffeine canary clone — test in week two
+## 6. Org isolation check — test in week two
 
-Your entire org-scoping architecture rests on the claim that "the clone to Caffeine is trivially a fresh `org_id` and the same migrations." That claim has never been tested in running code.
+Org-scoping architecture should guarantee that a fresh `org_id` sees only its own rows. Verify in local dev:
 
-**The test:** in week two of Phase 1 build, create a second org row in local dev with a different `org_id`. Run `seed.sql` against it. Verify:
-- No PU data bleeds into the Caffeine org
-- All queries return empty results for the new org
-- No hard-coded PU IDs appear in the result set
+**The test:** create a second org row with a different `org_id`. Seed minimal data against it. Verify:
+- No data bleeds across org boundaries
+- All queries return empty results for the new org until seeded
+- No hard-coded tenant IDs appear in the result set
 
-If anything breaks the clone, the fix is a one-line change. Finding out at actual handover time means months of accumulated data shaped around an incorrect assumption.
+If anything breaks isolation, fix it early — not at handover time.
 
 ---
 

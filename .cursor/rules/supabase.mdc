@@ -45,7 +45,7 @@ Every ingested record carries `source` and `source_ref`. Do not omit these.
 
 ## Clone safety
 
-Never hard-code "Previously Unavailable", "PU", or any PU-specific ID outside the `organisations` row. The Caffeine clone depends on this. Org identity always resolves from `users.org_id`.
+Never hard-code org name, team emails, or tenant-specific IDs outside `src/config/team-members.json`, seed, and the `organisations` row. Org identity always resolves from `users.org_id`.
 
 ## Schema-locked mode
 

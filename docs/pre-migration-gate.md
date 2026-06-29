@@ -135,6 +135,6 @@ Views are read-only derived concepts. They do not block Phase 1 functionality an
 **Schema is now locked.** The schema-locked rule in `.cursor/rules/supabase.mdc` is active. Do not suggest new tables or columns without an explicit ADR.
 
 **Next steps:**
-1. Write `supabase/seed.sql` — PU org row, team users, sample profiles, relationships in each state, a pending import, email review rows (see `docs/build-quality.md §1`)
+1. Write `supabase/seed.sql` — org row, team users, sample profiles, relationships in each state, a pending import, email review rows (see `docs/build-quality.md §1`)
 2. UI foundation — `@theme` tokens in `globals.css`, shadcn/ui init, `src/config/owner-colours.ts`, app shell with sidebar
 3. Phase 1 feature build — Profiles → Relationships → Tags → Search → Events → Import → Gmail sync
