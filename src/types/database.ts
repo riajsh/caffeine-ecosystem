@@ -1365,7 +1365,7 @@ export type Database = {
       merge_profiles_atomic: {
         Args: {
           p_duplicate_ids: string[]
-          p_retained_email: string
+          p_retained_email: string | null
           p_survivor_fields: Json
           p_survivor_id: string
         }

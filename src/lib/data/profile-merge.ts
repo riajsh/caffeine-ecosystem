@@ -196,7 +196,7 @@ export async function mergeProfiles(
     {
       p_survivor_id: survivorId,
       p_duplicate_ids: uniqueDuplicateIds,
-      p_retained_email: retainedEmail ?? "",
+      p_retained_email: retainedEmail,
       p_survivor_fields: survivorFields,
     },
   );

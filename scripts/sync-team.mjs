@@ -148,10 +148,17 @@ async function ensurePublicUser(member, userId) {
 }
 
 async function main() {
+  const synced = [];
+
   for (const member of TEAM) {
     const { result, userId } = await ensureAuthUser(member);
+    synced.push({ member, userId });
+    console.log(`${member.fullName}: auth ${result} (${userId})`);
+  }
+
+  for (const { member, userId } of synced) {
     await ensurePublicUser(member, userId);
-    console.log(`${member.fullName}: auth ${result}, public.users ok (${userId})`);
+    console.log(`${member.fullName}: public.users ok (${userId})`);
   }
 
   const { data: users } = await supabase
