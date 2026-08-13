@@ -13,7 +13,7 @@ These items are **outside the repo** but block Ria from going live:
 
 1. **Supabase org row** — Update or recreate so `name` / `slug` match `team-members.json` (`Caffeine Daily` / `caffeine-daily`). If the project still contains legacy seed data from another tenant, prefer a **fresh Supabase project** (see setup below).
 2. **Vercel project** — Link this repo to a Caffeine deployment (or rename/reconfigure). Update env vars; register Caffeine redirect URLs in Google OAuth.
-3. **Google Cloud OAuth** — Internal app for `@caffeine.co`. Replace any legacy OAuth client IDs in `.env.local` / Vercel with Caffeine GCP credentials.
+3. **Google Cloud OAuth** — Internal app for `@caffeinedaily.co`. Replace any legacy OAuth client IDs in `.env.local` / Vercel with Caffeine GCP credentials.
 4. **Run `npm run sync:team`** against the target Supabase project after Ria confirms team roster in `team-members.json`.
 5. **Secrets** — Do not commit `.env.local`. Ria copies `.env.example` → `.env.local` and fills in **new** Caffeine credentials (not Chris's PU Supabase/Google/Vercel tokens). Optional: `.cursor/mcp.json` for Supabase MCP — see `.cursor/mcp.json.example`.
 
@@ -45,8 +45,8 @@ Full checklist, troubleshooting, and Cursor prompts: **[SETUP.md](../SETUP.md)**
 Current defaults:
 
 - Org: **Caffeine Daily** (`slug: caffeine-daily`)
-- Internal domain: **caffeine.co**
-- Dev login (local only): `rs@caffeine.co` / `password123`
+- Internal domain: **caffeinedaily.co**
+- Dev login (local only): `ria@caffeinedaily.co` / `password123`
 
 ---
 
@@ -60,7 +60,7 @@ Copy `.env.example` → `.env.local`. Required for local dev:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser / RSC client |
 | `SUPABASE_SERVICE_ROLE_KEY` | Scripts, cron, sync jobs |
 | `DEFAULT_ORG_SLUG` | Must be `caffeine-daily` (match seed + `team-members.json`) |
-| `ORG_INTERNAL_EMAIL_DOMAINS` | e.g. `caffeine.co` |
+| `ORG_INTERNAL_EMAIL_DOMAINS` | e.g. `caffeinedaily.co` |
 | `NEXT_PUBLIC_SITE_URL` | `http://localhost:3000` locally |
 | `TOKEN_ENCRYPTION_KEY` | OAuth refresh token encryption |
 | `CRON_SECRET` | Protects `/api/cron/*` routes |
@@ -111,13 +111,13 @@ npm run dev
 1. Edit `src/config/team-members.json` — add `id` (stable UUID), `email`, `fullName`, `role`, `colourToken`.
 2. Add a matching `--color-owner-*` token in `src/app/globals.css` if they need a distinct owner colour.
 3. Run `npm run sync:team`.
-4. For Google sign-in: add the user in Supabase Auth (or let them sign in with Google if their `@caffeine.co` account is allowed).
+4. For Google sign-in: add the user in Supabase Auth (or let them sign in with Google if their `@caffeinedaily.co` account is allowed).
 
 Promote to admin:
 
 ```sql
 update public.users set role = 'admin'
-where lower(email) = 'someone@caffeine.co';
+where lower(email) = 'someone@caffeinedaily.co';
 ```
 
 ---
@@ -126,7 +126,7 @@ where lower(email) = 'someone@caffeine.co';
 
 Set up a dedicated Google Cloud project and OAuth clients for Caffeine:
 
-1. A Google Cloud project (Internal app type if using Google Workspace `@caffeine.co`).
+1. A Google Cloud project (Internal app type if using Google Workspace `@caffeinedaily.co`).
 2. OAuth clients for Calendar (and Gmail when implemented).
 3. Redirect URIs for each deployment environment.
 4. New client IDs/secrets in Vercel env vars.

@@ -4,16 +4,8 @@
   "orgSlug": "caffeine-daily",
   "members": [
     {
-      "id": "22222222-2222-2222-2222-222222222230",
-      "email": "rs@caffeine.co",
-      "fullName": "Ria",
-      "role": "admin",
-      "colourToken": "var(--color-owner-ria)",
-      "title": "Admin"
-    },
-    {
       "id": "22222222-2222-2222-2222-222222222231",
-      "email": "rs@previously.co",
+      "email": "ria@caffeinedaily.co",
       "fullName": "Ria",
       "role": "admin",
       "colourToken": "var(--color-owner-ria)",
@@ -21,12 +13,36 @@
       "devLogin": true
     },
     {
-      "id": "22222222-2222-2222-2222-222222222228",
-      "email": "team@caffeine.co",
-      "fullName": "Team",
-      "role": "member",
-      "colourToken": "var(--color-owner-team)",
-      "title": "Member"
+      "id": "22222222-2222-2222-2222-222222222232",
+      "email": "jh@previously.co",
+      "fullName": "James",
+      "role": "admin",
+      "colourToken": "var(--color-owner-james)",
+      "title": "Admin"
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222233",
+      "email": "georgia@caffeinedaily.co",
+      "fullName": "Georgia",
+      "role": "admin",
+      "colourToken": "var(--color-owner-georgia)",
+      "title": "Admin"
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222234",
+      "email": "courteney@caffeinedaily.co",
+      "fullName": "Courteney",
+      "role": "admin",
+      "colourToken": "var(--color-owner-courteney)",
+      "title": "Admin"
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222235",
+      "email": "maggie@caffeinedaily.co",
+      "fullName": "Maggie",
+      "role": "admin",
+      "colourToken": "var(--color-owner-maggie)",
+      "title": "Admin"
     }
   ]
 }

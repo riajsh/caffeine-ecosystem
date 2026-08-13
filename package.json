@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "purge:calendar": "node --env-file=.env.local scripts/purge-calendar-sync.mjs",
     "sync:team": "node --env-file=.env.local scripts/sync-team.mjs",
-    "backfill:import-owners": "node --env-file=.env.local scripts/backfill-import-owners.mjs"
+    "backfill:import-owners": "node --env-file=.env.local scripts/backfill-import-owners.mjs",
+    "cleanup:legacy-team": "node --env-file=.env.local scripts/cleanup-legacy-team-members.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

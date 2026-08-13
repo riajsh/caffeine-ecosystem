@@ -13,7 +13,7 @@ The agent should walk through each phase below, run verification commands, and f
 ## What this repo is
 
 - **Product:** Ecosystem — relationship intelligence (who we know, who owns the relationship, evidence from calendar/import).
-- **Tenant:** Caffeine Daily (`slug: caffeine-daily`, domain `@caffeine.co`).
+- **Tenant:** Caffeine Daily (`slug: caffeine-daily`, domain `@caffeinedaily.co`).
 - **Stack:** Next.js 16, Supabase (Postgres + Auth + RLS), Vercel deployment.
 
 Deeper context: [docs/handover-caffeine.md](./docs/handover-caffeine.md) · [AGENTS.md](./AGENTS.md)
@@ -63,7 +63,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same page (anon/public key) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Same page (service role — server only, never commit) |
 | `DEFAULT_ORG_SLUG` | Must be `caffeine-daily` |
-| `ORG_INTERNAL_EMAIL_DOMAINS` | `caffeine.co` (comma-separated if multiple) |
+| `ORG_INTERNAL_EMAIL_DOMAINS` | `caffeinedaily.co` (comma-separated if multiple) |
 | `NEXT_PUBLIC_SITE_URL` | `http://localhost:3000` locally |
 | `TOKEN_ENCRYPTION_KEY` | Generate: `openssl rand -base64 32` |
 | `CRON_SECRET` | Generate: `openssl rand -base64 32` |
@@ -108,9 +108,9 @@ npm run sync:team
 **Verify:**
 
 - Org row exists: `name = Caffeine Daily`, `slug = caffeine-daily`
-- User `rs@caffeine.co` exists in Auth and `public.users` with `role = admin`
+- User `ria@caffeinedaily.co` exists in Auth and `public.users` with `role = admin`
 
-Local password login (dev only): `rs@caffeine.co` / `password123`
+Local password login (dev only): `ria@caffeinedaily.co` / `password123`
 
 ### Path B — Hosted Supabase project
 
@@ -154,15 +154,15 @@ Open [http://localhost:3000](http://localhost:3000).
 
 **Verify:**
 
-- Login page shows `@caffeine.co` domain hint
-- Dev sign-in (development only): `rs@caffeine.co` / `password123`
+- Login page shows `@caffeinedaily.co` domain hint
+- Dev sign-in (development only): `ria@caffeinedaily.co` / `password123`
 - After login: Profiles, Search, Admin (for admin users) visible in nav
 
 ---
 
 ## Phase 5 — Google Calendar (production path)
 
-1. Create a Google Cloud project (Internal app if using Workspace `@caffeine.co`).
+1. Create a Google Cloud project (Internal app if using Workspace `@caffeinedaily.co`).
 2. Enable Google Calendar API.
 3. Create OAuth 2.0 client (Web application).
 4. Add redirect URIs:
@@ -181,7 +181,7 @@ Single source of truth: **`src/config/team-members.json`**
 
 To add someone:
 
-1. Add entry with stable UUID, `@caffeine.co` email, `role`, `colourToken`.
+1. Add entry with stable UUID, `@caffeinedaily.co` email, `role`, `colourToken`.
 2. Add `--color-owner-*` in `src/app/globals.css` if they need a distinct colour.
 3. Run `npm run sync:team`.
 
@@ -189,7 +189,7 @@ Promote to admin in SQL if needed:
 
 ```sql
 update public.users set role = 'admin'
-where lower(email) = 'someone@caffeine.co';
+where lower(email) = 'someone@caffeinedaily.co';
 ```
 
 ---

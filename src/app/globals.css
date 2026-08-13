@@ -38,7 +38,10 @@
 
   /* Owner palette — add tokens here when extending team-members.json */
   --color-owner-ria: oklch(62% 0.18 330);
-  --color-owner-team: oklch(52% 0.06 250);
+  --color-owner-james: oklch(62% 0.18 10);
+  --color-owner-georgia: oklch(62% 0.18 35);
+  --color-owner-courteney: oklch(62% 0.18 175);
+  --color-owner-maggie: oklch(62% 0.18 290);
   --color-owner-default: var(--color-neutral-400);
 
   /* Relationship strength */

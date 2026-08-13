@@ -109,7 +109,10 @@ One colour per team member in `src/config/team-members.json` — used in Orbit n
 ```css
 @theme {
   --color-owner-ria: oklch(62% 0.18 330);
-  --color-owner-team: oklch(52% 0.06 250);
+  --color-owner-james: oklch(62% 0.18 10);
+  --color-owner-georgia: oklch(62% 0.18 35);
+  --color-owner-courteney: oklch(62% 0.18 175);
+  --color-owner-maggie: oklch(62% 0.18 290);
   --color-owner-default: var(--color-neutral-400); /* fallback for members without a colour */
 }
 ```
