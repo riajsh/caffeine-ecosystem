@@ -1,8 +1,12 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { notFound } from "next/navigation";
 
 import { getOrgId, requireAdmin } from "@/lib/auth/session";
+import { inferCoAttendanceForEvent } from "@/lib/computed/infer-connections";
+import { ensureEventAttendanceEvidence } from "@/lib/data/events";
 import {
   guessColumnMapping,
   MAX_IMPORT_ROWS,
@@ -31,10 +35,13 @@ import { nameCompanyDedupKey } from "@/lib/dedup/name-company";
 import {
   getCandidateProfileIds,
   getInFileMatchRowNumber,
+  getReplaceProfileId,
   withCandidateProfileIds,
   withMergeInFileRowNumber,
   withInFileMatchRowNumber,
+  withReplaceProfileId,
 } from "@/lib/import/in-file-dedup";
+import { deleteProfile } from "@/lib/data/profiles";
 import { resolveOrgUserId, type OrgUserRecord } from "@/lib/import/resolve-owner";
 import type {
   ColumnMapping,
@@ -63,6 +70,7 @@ type DedupStatus = Database["public"]["Enums"]["dedup_status"];
 type RelationshipStatus = Database["public"]["Enums"]["relationship_status"];
 type RelationshipType = Database["public"]["Enums"]["relationship_type"];
 type OwnerStrength = Database["public"]["Enums"]["owner_strength"];
+type SupabaseImportClient = SupabaseClient<Database>;
 
 type ImportRowRecord = {
   id: string;
@@ -210,16 +218,16 @@ function importStatusHint(
   }
 
   if (!metadata.mapping_confirmed) {
-    return "Map columns";
+    return "Fix column mapping";
   }
 
   if (!metadata.dedup_summary) {
-    return "Run dedup";
+    return "Checking for duplicates…";
   }
 
   const dedup = metadata.dedup_summary;
   if (dedup.soft_match > 0) {
-    return `${dedup.soft_match} soft match${dedup.soft_match === 1 ? "" : "es"} to review`;
+    return `${dedup.soft_match} row${dedup.soft_match === 1 ? "" : "s"} to review`;
   }
 
   const ready = dedup.matched_email + dedup.new;
@@ -227,7 +235,7 @@ function importStatusHint(
     return "No rows ready — check errors";
   }
 
-  return `Ready to commit (${ready} rows)`;
+  return `Ready to complete (${ready} rows)`;
 }
 
 function emptyDedupSummary(): DedupSummary {
@@ -266,6 +274,12 @@ async function getImportRecord(importId: string, orgId: string) {
       metadata,
       created_at,
       created_by,
+      event_id,
+      events (
+        id,
+        title,
+        event_date
+      ),
       users!imports_created_by_fkey (
         full_name
       )
@@ -425,6 +439,7 @@ export async function getImportDetail(importId: string): Promise<ImportDetail> {
 
   const mappedRows = rows.map((row) => mapImportRow(row, rowsByNumber, profilesById));
   const softMatchRows = mappedRows.filter((row) => row.dedupStatus === "soft_match");
+  const errorRows = mappedRows.filter((row) => row.dedupStatus === "error");
   const unresolvedSoftMatches = softMatchRows.length;
   const dedupSummary =
     metadata.dedup_summary ??
@@ -434,6 +449,14 @@ export async function getImportDetail(importId: string): Promise<ImportDetail> {
       row.dedup_status === "matched_email" || row.dedup_status === "new",
   ).length;
   const pendingRowCount = rows.filter((row) => row.dedup_status === "pending").length;
+  // If the auto-guessed column mapping produced no usable rows at all, the
+  // mapping is almost certainly wrong (e.g. no name column was recognised) —
+  // surface the "fix mapping" option opened by default in that case.
+  const mappingNeedsAttention = Boolean(
+    dedupSummary &&
+      rows.length > 0 &&
+      dedupSummary.matched_email + dedupSummary.soft_match + dedupSummary.new === 0,
+  );
 
   const canCommit =
     importRecord.status === "processing" &&
@@ -456,6 +479,8 @@ export async function getImportDetail(importId: string): Promise<ImportDetail> {
     headers,
     previewRows: mappedRows.slice(0, PREVIEW_ROW_LIMIT),
     softMatchRows,
+    errorRows,
+    mappingNeedsAttention,
     dedupSummary,
     commitSummary: metadata.commit_summary ?? null,
     unresolvedSoftMatches,
@@ -464,6 +489,9 @@ export async function getImportDetail(importId: string): Promise<ImportDetail> {
     statusHint: importStatusHint(importRecord.status, metadata),
     canDelete: canDeleteImport(importRecord.status, metadata.commit_summary),
     canCommit,
+    hasCommitProgress: Boolean(metadata.commit_checkpoint),
+    eventId: importRecord.event_id,
+    eventTitle: importRecord.events?.title ?? null,
   };
 }
 
@@ -512,7 +540,11 @@ export async function uploadAndParseImport(input: {
   const metadata: ImportMetadata = {
     headers: parsed.headers,
     column_mapping: columnMapping,
-    mapping_confirmed: false,
+    // Mapping is guessed automatically and applied to every row below, so
+    // there's no separate "confirm mapping" click in the streamlined flow.
+    // Admins can still fix a bad guess from the review screen, which resaves
+    // this as false while it re-normalises rows.
+    mapping_confirmed: true,
   };
 
   const { data: importRecord, error: importError } = await supabase
@@ -606,6 +638,26 @@ export async function uploadAndParseImport(input: {
       .eq("id", importRecord.id);
   }
 
+  // Dedup runs immediately so the admin lands on a "check & fix" screen
+  // straight away, instead of needing a separate manual step.
+  try {
+    await runImportDedup(importRecord.id);
+  } catch (dedupError) {
+    await supabase
+      .from("imports")
+      .update({
+        metadata: {
+          ...metadata,
+          errors: [
+            dedupError instanceof Error
+              ? dedupError.message
+              : "Automatic duplicate check failed",
+          ],
+        },
+      })
+      .eq("id", importRecord.id);
+  }
+
   return importRecord.id;
 }
 
@@ -691,6 +743,22 @@ export async function applyColumnMappingToImport(importId: string): Promise<void
   if (importError) {
     throw new Error(`Failed to confirm mapping: ${importError.message}`);
   }
+}
+
+/**
+ * One-click fallback for when the auto-guessed column mapping is wrong:
+ * saves the corrected mapping, re-normalises every row against it, and
+ * re-runs dedup — the three separate steps this used to take, combined into
+ * a single action so the streamlined upload flow only needs a "fix mapping"
+ * button rather than a mini multi-step wizard of its own.
+ */
+export async function updateMappingAndRecheck(
+  importId: string,
+  mapping: ColumnMapping,
+): Promise<DedupSummary> {
+  await saveColumnMapping(importId, mapping);
+  await applyColumnMappingToImport(importId);
+  return runImportDedup(importId);
 }
 
 export async function runImportDedup(importId: string): Promise<DedupSummary> {
@@ -937,6 +1005,107 @@ export async function deleteImport(importId: string): Promise<void> {
   }
 }
 
+/**
+ * Undoes whatever a (now-cancelled) commit has written so far: deletes any
+ * profiles it created, restores any it updated back to their prior values,
+ * restores any profile it deleted for a "replace" row, and reverses any
+ * relationship/tag/event-attendee graph changes. Shared between a commit
+ * that fails on its own (commitImport's catch block) and an admin
+ * explicitly cancelling an in-progress import.
+ */
+async function rollbackImportCommitProgress(
+  supabase: SupabaseImportClient,
+  orgId: string,
+  progress: {
+    createdProfileIds: string[];
+    updatedProfileSnapshots: Record<
+      string,
+      Database["public"]["Tables"]["profiles"]["Update"]
+    >;
+    deletedProfileSnapshots: Record<
+      string,
+      Database["public"]["Tables"]["profiles"]["Row"]
+    >;
+    graphRollbacks: RelationshipGraphRollback[];
+  },
+): Promise<void> {
+  if (progress.createdProfileIds.length > 0) {
+    await supabase
+      .from("profiles")
+      .delete()
+      .in("id", progress.createdProfileIds)
+      .eq("org_id", orgId);
+  }
+
+  for (const [profileId, snapshot] of Object.entries(
+    progress.updatedProfileSnapshots,
+  )) {
+    await supabase
+      .from("profiles")
+      .update(snapshot)
+      .eq("id", profileId)
+      .eq("org_id", orgId);
+  }
+
+  for (const snapshot of Object.values(progress.deletedProfileSnapshots)) {
+    // Best-effort: restores the deleted profile row itself. Relationships,
+    // tags, and event attendance that were cascade-deleted with it are not
+    // recreated.
+    await supabase
+      .from("profiles")
+      .insert(snapshot as Database["public"]["Tables"]["profiles"]["Insert"]);
+  }
+
+  await applyImportCommitRollbacks(supabase, orgId, progress.graphRollbacks);
+}
+
+/**
+ * Cancels an import that hasn't finished yet. If nothing has been written
+ * to real profiles, this just removes the staged import. If a commit was
+ * started (even if it's mid-flight or was interrupted), it first undoes
+ * everything that commit has done so far, then removes the import.
+ */
+export async function cancelImport(importId: string): Promise<void> {
+  await requireAdmin();
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+  const importRecord = await getImportRecord(importId, orgId);
+  const metadata = parseMetadata(importRecord.metadata);
+
+  if (
+    importRecord.status === "complete" &&
+    !canDeleteImport(importRecord.status, metadata.commit_summary)
+  ) {
+    throw new Error(
+      "This import already finished and created profiles — it can't be cancelled. Merge or delete individual profiles from Profiles instead.",
+    );
+  }
+
+  const checkpoint = metadata.commit_checkpoint;
+  if (checkpoint) {
+    await rollbackImportCommitProgress(supabase, orgId, {
+      createdProfileIds: checkpoint.created_profile_ids,
+      updatedProfileSnapshots: checkpoint.updated_profile_snapshots as Record<
+        string,
+        Database["public"]["Tables"]["profiles"]["Update"]
+      >,
+      deletedProfileSnapshots: (checkpoint.deleted_profile_snapshots ??
+        {}) as Record<string, Database["public"]["Tables"]["profiles"]["Row"]>,
+      graphRollbacks: checkpoint.graph_rollbacks as unknown as RelationshipGraphRollback[],
+    });
+  }
+
+  const { error } = await supabase
+    .from("imports")
+    .delete()
+    .eq("id", importId)
+    .eq("org_id", orgId);
+
+  if (error) {
+    throw new Error(`Failed to cancel import: ${error.message}`);
+  }
+}
+
 export type ImportBackfillSummary = {
   profilesUpdated: number;
   relationshipsUpdated: number;
@@ -1171,6 +1340,31 @@ export async function resolveSoftMatch(
       matched_profile_id: null,
       error: null,
     };
+  } else if (action === "replace") {
+    const profileId =
+      selectedProfileId?.trim() || row.matched_profile_id || candidateIds[0] || null;
+
+    if (!profileId) {
+      throw new Error("Missing matched profile to replace for this row");
+    }
+
+    if (
+      candidateIds.length > 0 &&
+      !candidateIds.includes(profileId) &&
+      row.matched_profile_id !== profileId
+    ) {
+      throw new Error("Selected profile is not a valid candidate for this row");
+    }
+
+    // The actual delete happens at commit time (so it can still be rolled
+    // back if the commit fails) — here we just mark the row as "create a
+    // fresh profile" and remember which existing profile to remove first.
+    update = {
+      dedup_status: "new",
+      matched_profile_id: null,
+      error: null,
+      normalized: withReplaceProfileId(normalized, profileId),
+    };
   } else {
     update = {
       dedup_status: "error",
@@ -1213,28 +1407,28 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
   const metadata = parseMetadata(importRecord.metadata);
 
   if (importRecord.status === "complete") {
-    throw new Error("Import has already been committed");
+    throw new Error("Import has already been completed");
   }
 
   if (!metadata.mapping_confirmed) {
-    throw new Error("Column mapping must be confirmed before commit");
+    throw new Error("Fix the column mapping before completing this import");
   }
 
   if (!metadata.dedup_summary) {
-    throw new Error("Run dedup before committing");
+    throw new Error("Still checking for duplicates — try again in a moment");
   }
 
   const rows = await loadImportRows(importId, orgId);
   const unresolved = rows.filter((row) => row.dedup_status === "soft_match").length;
 
   if (unresolved > 0) {
-    throw new Error("Resolve all soft matches before committing");
+    throw new Error("Resolve all rows under \"Needs your review\" before completing");
   }
 
   const pendingCount = rows.filter((row) => row.dedup_status === "pending").length;
   if (pendingCount > 0) {
     throw new Error(
-      `Run dedup before committing (${pendingCount} row${pendingCount === 1 ? "" : "s"} still pending)`,
+      `Still checking for duplicates (${pendingCount} row${pendingCount === 1 ? "" : "s"} pending) — try again in a moment`,
     );
   }
 
@@ -1246,8 +1440,8 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
     const errorCount = rows.filter((row) => row.dedup_status === "error").length;
     throw new Error(
       errorCount > 0
-        ? `No rows ready to commit. ${errorCount} row${errorCount === 1 ? "" : "s"} have errors — check that Full name is mapped, then re-run dedup.`
-        : "No rows ready to commit.",
+        ? `No rows are ready. ${errorCount} row${errorCount === 1 ? "" : "s"} have errors — check that Full name (or First name + Last name) is mapped, using "Fix column mapping".`
+        : "No rows are ready to complete.",
     );
   }
 
@@ -1273,6 +1467,13 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
   const sourceLabel = `${importRecord.source} import ${new Date(importRecord.created_at).toLocaleDateString("en-GB")}`;
   const mapping = metadata.column_mapping ?? {};
   const headers = metadata.headers ?? inferHeadersFromRows(rows);
+  const event = importRecord.events
+    ? {
+        id: importRecord.events.id,
+        title: importRecord.events.title,
+        event_date: importRecord.events.event_date,
+      }
+    : null;
 
   const skippedCount = rows.length - commitRows.length;
   let summary: CommitSummary;
@@ -1282,6 +1483,10 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
     Database["public"]["Tables"]["profiles"]["Update"]
   >();
   const graphRollbacks: RelationshipGraphRollback[] = [];
+  const deletedProfileSnapshots = new Map<
+    string,
+    Database["public"]["Tables"]["profiles"]["Row"]
+  >();
   const profileIdByRowNumber = new Map<number, string>();
   let startIndex = 0;
 
@@ -1296,6 +1501,14 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
       updatedProfileSnapshots.set(
         profileId,
         snapshot as Database["public"]["Tables"]["profiles"]["Update"],
+      );
+    }
+    for (const [profileId, snapshot] of Object.entries(
+      checkpoint.deleted_profile_snapshots ?? {},
+    )) {
+      deletedProfileSnapshots.set(
+        profileId,
+        snapshot as Database["public"]["Tables"]["profiles"]["Row"],
       );
     }
     graphRollbacks.push(
@@ -1351,9 +1564,13 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
         row.normalized,
       );
 
+      // Same as above: the in-file-duplicate marker only survives on the
+      // row's stored normalized data, not on a fresh recompute.
       const profileId =
         row.matched_profile_id ??
-        profileIdByRowNumber.get(getInFileMatchRowNumber(normalized) ?? -1);
+        profileIdByRowNumber.get(
+          getInFileMatchRowNumber(asNormalized(row.normalized)) ?? -1,
+        );
 
       if (!profileId) {
         throw new Error(
@@ -1370,6 +1587,7 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           normalized,
           sourceLabel,
           orgUsers: orgUserRecords,
+          event,
         });
 
       return { ownerWarnings, profileSnapshot, graphRollback, profileId };
@@ -1387,6 +1605,64 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
     }
   }
 
+  async function flushNewBatch(batch: ImportCommitRow[]) {
+    if (batch.length === 0) {
+      return;
+    }
+
+    const newResults = await runConcurrentMap(batch, 6, async (row) => {
+      const normalized = normalizeRowFromImport(
+        row.raw,
+        headers,
+        mapping,
+        row.normalized,
+      );
+
+      // Same as flushMatchedBatch: dedup markers only survive on the row's
+      // stored normalized data, not on a fresh recompute.
+      const replaceProfileId = getReplaceProfileId(asNormalized(row.normalized));
+      if (replaceProfileId && !deletedProfileSnapshots.has(replaceProfileId)) {
+        const { data: existingProfile, error: existingProfileError } =
+          await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", replaceProfileId)
+            .eq("org_id", orgId)
+            .maybeSingle();
+
+        if (existingProfileError) {
+          throw new Error(
+            `Failed to load profile to replace: ${existingProfileError.message}`,
+          );
+        }
+
+        if (existingProfile) {
+          deletedProfileSnapshots.set(replaceProfileId, existingProfile);
+          await deleteProfile(replaceProfileId);
+        }
+      }
+
+      const { profileId, ownerWarnings } = await createProfileFromImportRow({
+        orgId,
+        importId,
+        userId: user.id,
+        normalized,
+        sourceLabel,
+        orgUsers: orgUserRecords,
+        event,
+      });
+
+      return { rowNumber: row.row_number, profileId, ownerWarnings };
+    });
+
+    for (const result of newResults) {
+      profileIdByRowNumber.set(result.rowNumber, result.profileId);
+      createdProfileIds.push(result.profileId);
+      summary.created += 1;
+      summary.ownerWarnings += result.ownerWarnings;
+    }
+  }
+
   async function persistCheckpoint(nextRowIndex: number) {
     const checkpoint: ImportCommitCheckpoint = {
       next_row_index: nextRowIndex,
@@ -1395,6 +1671,12 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
         [...updatedProfileSnapshots.entries()].map(([profileId, snapshot]) => [
           profileId,
           snapshot as Json,
+        ]),
+      ),
+      deleted_profile_snapshots: Object.fromEntries(
+        [...deletedProfileSnapshots.entries()].map(([profileId, snapshot]) => [
+          profileId,
+          snapshot as unknown as Json,
         ]),
       ),
       graph_rollbacks: graphRollbacks as unknown as Json,
@@ -1435,32 +1717,27 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
       );
       const chunk = sortedCommitRows.slice(startIndex, endIndex);
       let matchedBatch: ImportCommitRow[] = [];
+      let newBatch: ImportCommitRow[] = [];
 
       for (const row of chunk) {
         if (row.dedup_status === "new") {
+          // A row can only merge into an earlier in-file row (never a later
+          // one), so any "new" rows queued up here are safe to create
+          // together — flush the other kind first so row-number ordering
+          // (and profileIdByRowNumber) stays correct for whichever comes
+          // next.
           await flushMatchedBatch(matchedBatch);
           matchedBatch = [];
 
-          const normalized = normalizeRowFromImport(
-            row.raw,
-            headers,
-            mapping,
-            row.normalized,
-          );
-
-          const { profileId, ownerWarnings } = await createProfileFromImportRow({
-            orgId,
-            importId,
-            userId: user.id,
-            normalized,
-            sourceLabel,
-            orgUsers: orgUserRecords,
-          });
-          profileIdByRowNumber.set(row.row_number, profileId);
-          createdProfileIds.push(profileId);
-          summary.created += 1;
-          summary.ownerWarnings += ownerWarnings;
+          newBatch.push(row);
+          if (newBatch.length >= 6) {
+            await flushNewBatch(newBatch);
+            newBatch = [];
+          }
         } else {
+          await flushNewBatch(newBatch);
+          newBatch = [];
+
           matchedBatch.push(row);
           if (matchedBatch.length >= 6) {
             await flushMatchedBatch(matchedBatch);
@@ -1469,11 +1746,34 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
         }
       }
 
+      await flushNewBatch(newBatch);
       await flushMatchedBatch(matchedBatch);
       startIndex = endIndex;
 
       if (startIndex < sortedCommitRows.length) {
         await persistCheckpoint(startIndex);
+
+        // Cooperative cancellation: if an admin cancelled this import while
+        // this chunk was running, the row is now gone — stop here rather
+        // than keep writing. The catch block below undoes this chunk too.
+        const { data: stillExists } = await supabase
+          .from("imports")
+          .select("id")
+          .eq("id", importId)
+          .eq("org_id", orgId)
+          .maybeSingle();
+
+        if (!stillExists) {
+          throw new Error("Import was cancelled");
+        }
+      }
+    }
+
+    if (event) {
+      try {
+        await inferCoAttendanceForEvent(event.id);
+      } catch {
+        // Co-attendance inference is best-effort, same as the manual add-attendee flow.
       }
     }
 
@@ -1497,23 +1797,12 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
 
     return summary;
   } catch (error) {
-    if (createdProfileIds.length > 0) {
-      await supabase
-        .from("profiles")
-        .delete()
-        .in("id", createdProfileIds)
-        .eq("org_id", orgId);
-    }
-
-    for (const [profileId, snapshot] of updatedProfileSnapshots) {
-      await supabase
-        .from("profiles")
-        .update(snapshot)
-        .eq("id", profileId)
-        .eq("org_id", orgId);
-    }
-
-    await applyImportCommitRollbacks(supabase, orgId, graphRollbacks);
+    await rollbackImportCommitProgress(supabase, orgId, {
+      createdProfileIds,
+      updatedProfileSnapshots: Object.fromEntries(updatedProfileSnapshots),
+      deletedProfileSnapshots: Object.fromEntries(deletedProfileSnapshots),
+      graphRollbacks,
+    });
 
     await supabase
       .from("imports")
@@ -1531,6 +1820,40 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
       .eq("org_id", orgId);
 
     throw error;
+  }
+}
+
+export async function attachImportToEvent(
+  importId: string,
+  eventId: string,
+): Promise<void> {
+  await requireAdmin();
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", eventId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (eventError) {
+    throw new Error(`Failed to verify event: ${eventError.message}`);
+  }
+
+  if (!event) {
+    throw new Error("Event not found");
+  }
+
+  const { error } = await supabase
+    .from("imports")
+    .update({ event_id: eventId })
+    .eq("id", importId)
+    .eq("org_id", orgId);
+
+  if (error) {
+    throw new Error(`Failed to attach import to event: ${error.message}`);
   }
 }
 
@@ -1573,6 +1896,12 @@ export async function reopenImport(importId: string): Promise<void> {
   }
 }
 
+type ImportEventContext = {
+  id: string;
+  title: string;
+  event_date: string;
+} | null;
+
 type CommitContext = {
   orgId: string;
   importId: string;
@@ -1580,13 +1909,15 @@ type CommitContext = {
   normalized: NormalizedImportRow;
   sourceLabel: string;
   orgUsers: OrgUserRecord[];
+  event: ImportEventContext;
 };
 
 async function createProfileFromImportRow(
   context: CommitContext,
 ): Promise<{ profileId: string; ownerWarnings: number }> {
   const supabase = await createClient();
-  const { orgId, normalized, importId, userId, sourceLabel, orgUsers } = context;
+  const { orgId, normalized, importId, userId, sourceLabel, orgUsers, event } =
+    context;
 
   const organisationName = normalized.organisation_name?.trim() || null;
 
@@ -1621,6 +1952,7 @@ async function createProfileFromImportRow(
     normalized,
     sourceLabel,
     orgUsers,
+    event,
   });
 
   return { profileId: profile.id, ownerWarnings };
@@ -1741,6 +2073,7 @@ async function ensureRelationshipGraph(input: {
   normalized: NormalizedImportRow;
   sourceLabel: string;
   orgUsers: OrgUserRecord[];
+  event: ImportEventContext;
 }): Promise<{
   ownerWarnings: number;
   graphRollback?: RelationshipGraphRollback;
@@ -1754,6 +2087,7 @@ async function ensureRelationshipGraph(input: {
     normalized,
     sourceLabel,
     orgUsers,
+    event,
   } = input;
   let ownerWarnings = 0;
   const graphRollback: RelationshipGraphRollback = {
@@ -1762,6 +2096,7 @@ async function ensureRelationshipGraph(input: {
     relationshipOwnersBefore: [],
     linkedProfileTags: [],
     createdTagIds: [],
+    createdEventAttendeeKeys: [],
   };
   let trackedRollback = false;
 
@@ -1889,15 +2224,9 @@ async function ensureRelationshipGraph(input: {
     }
   }
 
-  const tagNames = parseTags(normalized.tags);
-  if (tagNames.length === 0) {
-    return {
-      ownerWarnings,
-      graphRollback: trackedRollback ? graphRollback : undefined,
-    };
-  }
+  type TagCategory = Database["public"]["Tables"]["tags"]["Row"]["category"];
 
-  for (const tagName of tagNames) {
+  async function findOrCreateTagAndLink(tagName: string, category: TagCategory) {
     const { data: tag, error: tagLookupError } = await supabase
       .from("tags")
       .select("id")
@@ -1918,7 +2247,7 @@ async function ensureRelationshipGraph(input: {
         .insert({
           org_id: orgId,
           name: tagName,
-          category: "other",
+          category,
         })
         .select("id")
         .single();
@@ -1963,6 +2292,47 @@ async function ensureRelationshipGraph(input: {
       graphRollback.linkedProfileTags.push({ profileId, tagId });
       trackedRollback = true;
     }
+  }
+
+  const tagNames = parseTags(normalized.tags);
+  for (const tagName of tagNames) {
+    await findOrCreateTagAndLink(tagName, "expertise");
+  }
+
+  if (event) {
+    const { data: existingAttendee, error: attendeeLookupError } = await supabase
+      .from("event_attendees")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("event_id", event.id)
+      .eq("profile_id", profileId)
+      .maybeSingle();
+
+    if (attendeeLookupError) {
+      throw new Error(`Failed to check event attendee: ${attendeeLookupError.message}`);
+    }
+
+    if (!existingAttendee) {
+      const { error: attendeeError } = await supabase.from("event_attendees").insert({
+        org_id: orgId,
+        event_id: event.id,
+        profile_id: profileId,
+        attended: true,
+      });
+
+      if (attendeeError) {
+        throw new Error(`Failed to add event attendee: ${attendeeError.message}`);
+      }
+
+      graphRollback.createdEventAttendeeKeys.push({
+        eventId: event.id,
+        profileId,
+      });
+      trackedRollback = true;
+    }
+
+    await ensureEventAttendanceEvidence(orgId, event, profileId, userId);
+    await findOrCreateTagAndLink(event.title, "events");
   }
 
   return {

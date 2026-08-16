@@ -19,13 +19,13 @@ import { formatEnumLabel } from "@/lib/format/enum";
 import { toastSuccess } from "@/lib/toast";
 import { useAsyncAction } from "@/lib/use-async-action";
 
-const TAG_CATEGORIES = ["sector", "role", "interest", "other"] as const;
+const TAG_CATEGORIES = ["expertise", "industry", "signal_influence", "events"] as const;
 
 export function CreateTagForm() {
   const router = useRouter();
   const { alert } = useAppDialog();
   const { isPending, run } = useAsyncAction();
-  const [category, setCategory] = useState<string>("other");
+  const [category, setCategory] = useState<string>("expertise");
 
   return (
     <form

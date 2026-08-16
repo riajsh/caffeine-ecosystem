@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
-  addEventAttendeeAction,
+  addEventAttendeesBulkAction,
   searchProfilesForPickerAction,
 } from "@/app/(app)/events/actions";
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,14 @@ export function AddEventAttendeeForm({
   const { isPending: isSearching, run: runSearch } = useAsyncAction();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProfilePickerOption[]>([]);
-  const [selectedProfile, setSelectedProfile] =
-    useState<ProfilePickerOption | null>(null);
+  const [selectedProfiles, setSelectedProfiles] = useState<ProfilePickerOption[]>(
+    [],
+  );
+  const [tagWithEvent, setTagWithEvent] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
   const listboxId = useId();
-  const showResults = results.length > 0 && !selectedProfile;
+  const selectedIds = selectedProfiles.map((profile) => profile.id);
+  const showResults = results.length > 0;
 
   useEffect(() => {
     return () => {
@@ -46,7 +49,6 @@ export function AddEventAttendeeForm({
 
   function handleQueryChange(value: string) {
     setQuery(value);
-    setSelectedProfile(null);
 
     if (searchTimeoutRef.current) {
       window.clearTimeout(searchTimeoutRef.current);
@@ -70,42 +72,71 @@ export function AddEventAttendeeForm({
 
         setResults(
           response.results.filter(
-            (profile) => !existingProfileIds.includes(profile.id),
+            (profile) =>
+              !existingProfileIds.includes(profile.id) &&
+              !selectedIds.includes(profile.id),
           ),
         );
       });
     }, 250);
   }
 
+  function addProfile(profile: ProfilePickerOption) {
+    setSelectedProfiles((current) => [...current, profile]);
+    setResults((current) => current.filter((item) => item.id !== profile.id));
+  }
+
+  function removeProfile(profileId: string) {
+    setSelectedProfiles((current) =>
+      current.filter((profile) => profile.id !== profileId),
+    );
+  }
+
   return (
     <form
       action={(formData) => {
         void runSubmit(async () => {
-          if (!selectedProfile) {
+          if (selectedProfiles.length === 0) {
             await alert({
-              title: "Select a profile",
-              description: "Choose someone from the search results before adding them as an attendee.",
+              title: "Select at least one profile",
+              description: "Search above and choose the people you want to add.",
             });
             return;
           }
 
-          const result = await addEventAttendeeAction(formData);
-          if (result.error) {
-            await alert({ title: "Could not add attendee", description: result.error });
+          const result = await addEventAttendeesBulkAction(formData);
+          if ("error" in result && result.error) {
+            await alert({ title: "Could not add attendees", description: result.error });
             return;
           }
-          toastSuccess("Attendee added");
+
+          if (!("success" in result)) {
+            return;
+          }
+
+          if (result.tagWarning) {
+            await alert({ title: "Attendees added", description: result.tagWarning });
+          } else {
+            toastSuccess(
+              tagWithEvent && result.tagged
+                ? `Added ${result.added} attendee${result.added === 1 ? "" : "s"} and tagged ${result.tagged}`
+                : `Added ${result.added} attendee${result.added === 1 ? "" : "s"}`,
+            );
+          }
+
           setQuery("");
           setResults([]);
-          setSelectedProfile(null);
+          setSelectedProfiles([]);
           router.refresh();
         });
       }}
       className="space-y-4 rounded-lg border border-border bg-card p-4"
     >
-      <p className="text-subheading font-medium text-foreground">Add attendee</p>
+      <p className="text-subheading font-medium text-foreground">Add attendees</p>
       <input type="hidden" name="eventId" value={eventId} />
-      <input type="hidden" name="profileId" value={selectedProfile?.id ?? ""} />
+      {selectedProfiles.map((profile) => (
+        <input key={profile.id} type="hidden" name="profileIds" value={profile.id} />
+      ))}
 
       <div className="space-y-2">
         <Label htmlFor="attendee-search">Search profiles</Label>
@@ -122,14 +153,25 @@ export function AddEventAttendeeForm({
         />
       </div>
 
-      {selectedProfile ? (
-        <p className="text-body text-foreground">
-          Selected:{" "}
-          <span className="font-medium">{selectedProfile.fullName}</span>
-          {selectedProfile.organisationName
-            ? ` · ${selectedProfile.organisationName}`
-            : ""}
-        </p>
+      {selectedProfiles.length > 0 ? (
+        <ul className="flex flex-wrap gap-2">
+          {selectedProfiles.map((profile) => (
+            <li
+              key={profile.id}
+              className="flex items-center gap-2 rounded-full border border-border bg-muted/40 py-1 pl-3 pr-1 text-body text-foreground"
+            >
+              <span>{profile.fullName}</span>
+              <button
+                type="button"
+                onClick={() => removeProfile(profile.id)}
+                className="rounded-full px-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label={`Remove ${profile.fullName}`}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       {showResults ? (
@@ -145,10 +187,7 @@ export function AddEventAttendeeForm({
                 role="option"
                 aria-selected={false}
                 className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-muted/50"
-                onClick={() => {
-                  setSelectedProfile(profile);
-                  setResults([]);
-                }}
+                onClick={() => addProfile(profile)}
               >
                 <span className="text-body font-medium text-foreground">
                   {profile.fullName}
@@ -164,12 +203,28 @@ export function AddEventAttendeeForm({
         </ul>
       ) : null}
 
+      <label className="flex items-center gap-2 text-body text-foreground">
+        <input
+          type="checkbox"
+          name="tagWithEvent"
+          value="true"
+          checked={tagWithEvent}
+          onChange={(event) => setTagWithEvent(event.target.checked)}
+          className="h-4 w-4 rounded border-border"
+        />
+        <span>Also tag them with this event&rsquo;s name</span>
+      </label>
+
       <Button
         type="submit"
-        disabled={isSubmitting || isSearching || !selectedProfile}
+        disabled={isSubmitting || isSearching || selectedProfiles.length === 0}
         className="w-fit"
       >
-        {isSubmitting ? "Adding…" : "Add attendee"}
+        {isSubmitting
+          ? "Adding…"
+          : selectedProfiles.length > 0
+            ? `Add ${selectedProfiles.length} attendee${selectedProfiles.length === 1 ? "" : "s"}`
+            : "Add attendees"}
       </Button>
     </form>
   );

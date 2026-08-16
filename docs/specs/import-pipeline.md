@@ -23,8 +23,10 @@ Load external people data (CSV from Clay, Airtable, Affinity, Attio, HubSpot, or
 ## 2. Pipeline overview
 
 ```
- Upload → Parse → Preview → Map → Dedup → Review Queue → Commit → Audit Log
+ Upload → Parse (mapping auto-guessed, dedup runs automatically) → Check & fix (review queue, optional mapping fix) → Complete → Audit Log
 ```
+
+As of 2026-08-17, column mapping is auto-guessed and dedup runs automatically right after upload — there's no separate manual "confirm mapping" or "run dedup" click in the UI. Admins can still open "Fix column mapping" on the Check & fix screen if the auto-guess is wrong, which re-saves the mapping and re-runs dedup in one action (`updateMappingAndRecheck`).
 
 Each stage persists state on the `imports` row. A failed import never partially commits without explicit recovery.
 
@@ -121,13 +123,13 @@ Unmapped columns: stored in `profiles.extended` under original header names.
 
 Mapping saved to `imports.metadata.column_mapping`. Applying mapping populates `import_rows.normalized`.
 
-Admin must confirm mapping before dedup runs.
+Mapping is auto-guessed and auto-confirmed at upload (`mapping_confirmed: true` is set immediately, since every row is already normalised with the guessed mapping). Manually fixing the mapping from the Check & fix screen resaves it, re-applies it to every row, and re-runs dedup in one action.
 
 ---
 
 ## 7. Stage 5: Dedup
 
-**Trigger:** Admin clicks "Run dedup" after mapping confirmed  
+**Trigger:** Runs automatically right after upload (and again after any manual mapping fix)  
 **Rules:** ADR 0004
 
 For each `import_rows` row with normalized data:
@@ -214,8 +216,12 @@ Import cannot commit while unresolved `soft_match` rows remain (unless admin exp
 
 ## 9. Stage 7: Commit
 
-**Trigger:** Admin clicks "Commit import"  
+**Trigger:** Admin clicks "Complete import"  
 **Status transition:** `processing` → `complete` (or `failed`)
+
+Soft matches can be resolved as: merge into the matched profile (`confirm`), create as a separate new profile (`create`), skip entirely (`skip`), or delete the matched profile and create a fresh one in its place (`replace`, added 2026-08-17). "Replace" deletes the existing profile at commit time and is tracked for rollback (the profile row is restored if the commit later fails) but does not restore its relationships/tags/event attendance, which are cascade-deleted with it.
+
+**Cancelling (`cancelImport`, added 2026-08-17):** An admin can cancel any import that hasn't reached `complete` with real writes. If a commit was never started, this just deletes the staged import. If a commit was started (mid-flight or interrupted), it first undoes everything that commit has written so far — reusing the same rollback path as a failed commit (`rollbackImportCommitProgress`) — then deletes the import. The commit loop also checks every ~150 rows whether its own import row still exists, so a cancel issued while a commit is actively running will stop it within one chunk rather than racing it.
 
 Atomic per org using a database transaction:
 

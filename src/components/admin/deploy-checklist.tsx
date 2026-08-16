@@ -30,27 +30,27 @@ export function DeployChecklist({ items }: DeployChecklistProps) {
     <section className="space-y-4 rounded-lg border border-border bg-card p-6">
       <div className="space-y-1">
         <h2 className="text-heading font-medium text-foreground">
-          Production checklist
+          Ready-to-launch checklist
         </h2>
         <p className="text-body text-muted-foreground">
-          Environment and platform checks before wider team rollout. Values are
-          never shown — only whether each item looks configured.
+          Behind-the-scenes setup checks before opening this up to more of the
+          team. Values are never shown — only whether each item looks set up.
         </p>
       </div>
 
       {blockers.length > 0 ? (
         <p className="text-body text-destructive">
           {blockers.length} required item{blockers.length === 1 ? "" : "s"}{" "}
-          missing — fix before production deploy.
+          missing — needs fixing before going live.
         </p>
       ) : warnings.length > 0 ? (
         <p className="text-body text-muted-foreground">
-          Core env vars look set. Review manual Supabase and migration items
-          below.
+          Core settings look set. Review the items below that need a manual
+          check in Supabase.
         </p>
       ) : (
         <p className="text-body text-muted-foreground">
-          All required environment variables are present.
+          Everything required is set up.
         </p>
       )}
 

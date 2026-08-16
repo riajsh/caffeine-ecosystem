@@ -2,11 +2,16 @@ import { z } from "zod";
 
 import { postgresUuidSchema } from "@/lib/validators/id";
 
-export const tagCategorySchema = z.enum(["sector", "role", "interest", "other"]);
+export const tagCategorySchema = z.enum([
+  "expertise",
+  "industry",
+  "signal_influence",
+  "events",
+]);
 
 export const createTagSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100),
-  category: tagCategorySchema.default("other"),
+  category: tagCategorySchema.default("expertise"),
 });
 
 export const profileTagSchema = z.object({

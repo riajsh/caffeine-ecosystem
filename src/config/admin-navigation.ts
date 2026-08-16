@@ -11,7 +11,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { label: "Team Members", href: "/admin/team-members" },
   { label: "Connect Settings", href: "/admin/connect-settings", phase: 2 },
   { label: "Tags", href: "/admin/tags" },
-  { label: "Datasets", href: "/admin/datasets" },
   { label: "Dedup", href: "/admin/dedup" },
   { label: "Archived", href: "/admin/archived" },
 ];

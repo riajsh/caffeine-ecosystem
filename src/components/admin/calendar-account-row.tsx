@@ -38,7 +38,7 @@ export function CalendarAccountRow({
         <p className="text-body font-medium text-foreground">{email}</p>
         <p className="text-caption text-muted-foreground">
           {userName ? `Connected by ${userName}` : "Unknown user"} · {syncStatus}
-          {backfillPending ? " · awaiting sync" : ""}
+          {backfillPending ? " · not loaded yet" : ""}
           {!syncEnabled ? " · disconnected" : ""}
         </p>
         {lastSyncError ? (

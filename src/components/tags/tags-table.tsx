@@ -79,7 +79,7 @@ export function TagsTable({ tags }: TagsTableProps) {
     return (
       <EmptyState
         title="No tags yet"
-        description="Create sector, role, and interest tags to classify profiles."
+        description="Create Expertise, Industry, and Signal/Influence tags to classify profiles."
       />
     );
   }

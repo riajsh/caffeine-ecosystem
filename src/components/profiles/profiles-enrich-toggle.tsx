@@ -23,7 +23,7 @@ export function ProfilesEnrichToggle({ isActive }: ProfilesEnrichToggleProps) {
 
   return (
     <FilterChipLink href={href} isActive={isActive}>
-      Enrich mode
+      Fill in gaps
     </FilterChipLink>
   );
 }
@@ -31,8 +31,8 @@ export function ProfilesEnrichToggle({ isActive }: ProfilesEnrichToggleProps) {
 export function ProfilesEnrichModeHint() {
   return (
     <p className="text-caption text-muted-foreground">
-      Enrich mode shows suggested company and owner on empty fields — click to
-      edit or confirm. Pair with{" "}
+      &ldquo;Fill in gaps&rdquo; shows a suggested company and owner on empty
+      fields — click to edit or confirm. Pair with{" "}
       <Link href="/profiles?complete=missing-company&enrich=1" className="text-interactive-primary hover:underline">
         Missing company
       </Link>{" "}

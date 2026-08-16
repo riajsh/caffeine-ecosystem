@@ -25,7 +25,7 @@ If a screen invents its own data instead of reading the spine, it is wrong.
 | Activity | Evidence of interaction | Profile timeline, Search |
 | Connection | A person-to-person edge | Profile, Orbit, Connect |
 | Event | A community event | Events, profile timeline |
-| Tag | Sector, role, interest | Profile, Search filters |
+| Tag | Expertise, Industry, Signal/Influence | Profile, Search filters |
 
 ## Navigation
 
@@ -55,6 +55,13 @@ Sidebar order, matching the validated prototype:
 - Columns: name, company, occupation, location, primary owner, status, strength, last interaction (date), last meeting, calendar source, tags.
 - Row click opens the profile drawer or page.
 - Bulk: merge, delete, tag, add to watch list, assign owner.
+
+### Profiles → Import (`/profiles/import`, `/profiles/import/[id]`)
+- Three steps: Upload → Check & fix → Complete. Column mapping is auto-guessed and dedup runs automatically right after upload — no separate manual clicks for either.
+- "Check & fix" surfaces everything that needs a human: possible duplicate profiles to resolve (merge, create separate, delete & replace, or skip) and a list of rows that will be skipped due to errors. A "Fix column mapping" option is tucked away and only opens automatically if the auto-guess clearly failed.
+- Optional "attach to event" step on Complete: pick an existing event or create one, and every attendee in the file is linked and tagged with the event name automatically.
+- Admin-only, same as before — enforced server-side regardless of route.
+- Spec: `docs/specs/import-pipeline.md`, `docs/specs/admin-review.md` §5.
 
 **Deferred — first / last name columns.** V1 stores a single `profiles.full_name` (no `first_name` / `last_name` in schema). A display-only split in the table (first word vs remainder) is straightforward; proper separate fields need a schema change, backfill, and updates to create/edit, import, merge, and search. Revisit once the core platform UX feels more settled — not worth the ambiguity cost until then.
 
@@ -86,9 +93,9 @@ Spec: `docs/specs/profile-detail.md`.
 - Event detail: attendee list, connections that originated here, who attends often, who stopped attending.
 
 ### Admin
-- Import: upload, column mapping, dedup review (`docs/specs/import-pipeline.md`, `docs/specs/admin-review.md` §5).
 - Review queues: calendar participants (shipped), unmatched email participants (planned), import soft-matches (`docs/specs/admin-review.md`).
-- Team members, tags, datasets, dedup, archived, connect settings.
+- Team members, tags, dedup, archived, connect settings.
+- CSV import lives under Profiles → Import, not here (see above).
 
 ## Cross-cutting UI rules
 

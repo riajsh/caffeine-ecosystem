@@ -17,7 +17,7 @@ export default async function ConnectPage() {
     <>
       <PageHeader
         title="Connect"
-        description="Computed suggestions from the relationship graph — reconnect, introduce, emerging."
+        description="Automatic suggestions based on your network — reconnect, introduce, emerging."
       >
         <BadgeGeneratedLabel />
       </PageHeader>
@@ -35,7 +35,7 @@ export default async function ConnectPage() {
 function BadgeGeneratedLabel() {
   return (
     <span className="rounded-md border border-border bg-muted/50 px-3 py-1.5 text-caption text-muted-foreground">
-      Generated from graph data
+      Automatic, based on your network
     </span>
   );
 }

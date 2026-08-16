@@ -11,11 +11,11 @@ This repository is the **Caffeine Daily** instance of Ecosystem — relationship
 
 These items are **outside the repo** but block Ria from going live:
 
-1. **Supabase org row** — Update or recreate so `name` / `slug` match `team-members.json` (`Caffeine Daily` / `caffeine-daily`). If the project still contains legacy seed data from another tenant, prefer a **fresh Supabase project** (see setup below).
-2. **Vercel project** — Link this repo to a Caffeine deployment (or rename/reconfigure). Update env vars; register Caffeine redirect URLs in Google OAuth.
-3. **Google Cloud OAuth** — Internal app for `@caffeinedaily.co`. Replace any legacy OAuth client IDs in `.env.local` / Vercel with Caffeine GCP credentials.
-4. **Run `npm run sync:team`** against the target Supabase project after Ria confirms team roster in `team-members.json`.
-5. **Secrets** — Do not commit `.env.local`. Ria copies `.env.example` → `.env.local` and fills in **new** Caffeine credentials (not Chris's PU Supabase/Google/Vercel tokens). Optional: `.cursor/mcp.json` for Supabase MCP — see `.cursor/mcp.json.example`.
+1. ~~**Supabase org row**~~ — **Resolved 2026-08-13.** No move needed: the Supabase project lives under Previously Unavailable's Pro account (the parent company that owns Caffeine Daily), and Ria already has access via `rs@previously.co`. Org row already matches `team-members.json` (`Caffeine Daily` / `caffeine-daily`).
+2. **Vercel project** — Still outstanding. Link this repo to a Caffeine deployment (or rename/reconfigure). Update env vars; register Caffeine redirect URLs in Google OAuth.
+3. **Google Cloud OAuth** — Still outstanding. Internal app for `@caffeinedaily.co`. Replace any legacy OAuth client IDs in `.env.local` / Vercel with Caffeine GCP credentials.
+4. **Run `npm run sync:team`** — Done 2026-08-13 for Georgia, Maggie, James, Courteney, and Ria.
+5. **Secrets** — Do not commit `.env.local`. Supabase credentials can stay as-is (see #1). Vercel/Google credentials, once set up, should be new Caffeine-specific ones, not Chris's personal tokens. Optional: `.cursor/mcp.json` for Supabase MCP — see `.cursor/mcp.json.example`.
 
 ---
 

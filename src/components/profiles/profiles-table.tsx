@@ -37,7 +37,7 @@ type ProfilesTableProps = {
   sort: ProfileSortKey;
   order: SortOrder;
   hasActiveFilters?: boolean;
-  canImportDatasets?: boolean;
+  canImportProfiles?: boolean;
   enrichMode?: boolean;
   enrichmentByProfileId?: Map<string, ProfileEnrichmentSuggestions>;
   teamUsers?: OrgUser[];
@@ -97,7 +97,7 @@ export function ProfilesTable({
   sort,
   order,
   hasActiveFilters = false,
-  canImportDatasets = false,
+  canImportProfiles = false,
   enrichMode = false,
   enrichmentByProfileId,
   teamUsers = [],
@@ -194,7 +194,7 @@ export function ProfilesTable({
         description={
           hasActiveFilters
             ? "Try clearing filters or broadening your search."
-            : "Import a CSV or add profiles manually to start building the graph."
+            : "Import a CSV or add profiles manually to start building your network."
         }
       >
         <div className="flex flex-wrap justify-center gap-3">
@@ -203,9 +203,9 @@ export function ProfilesTable({
               <Link href="/profiles">Clear filters</Link>
             </Button>
           ) : null}
-          {canImportDatasets ? (
+          {canImportProfiles ? (
             <Button asChild variant="outline">
-              <Link href="/admin/datasets">Import dataset</Link>
+              <Link href="/profiles/import">Import profiles</Link>
             </Button>
           ) : null}
           <Button asChild>

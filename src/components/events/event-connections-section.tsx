@@ -23,8 +23,9 @@ export function EventConnectionsSection({
           No connections from this event yet
         </p>
         <p className="mt-2 text-body text-muted-foreground">
-          Run co-attendance inference when you have two or more attendees — pairs
-          who shared the room will appear here as inferred edges.
+          Once there are two or more attendees, use &ldquo;Find people who
+          met here&rdquo; — pairs who shared the room will show up here
+          automatically.
         </p>
       </div>
     );
@@ -63,7 +64,7 @@ export function EventConnectionsSection({
                 {formatEnumLabel(connection.connectionType)}
               </Badge>
               {inferred ? (
-                <Badge variant="secondary">Inferred</Badge>
+                <Badge variant="secondary">Automatic</Badge>
               ) : (
                 <Badge variant="secondary">{formatEnumLabel(connection.source)}</Badge>
               )}

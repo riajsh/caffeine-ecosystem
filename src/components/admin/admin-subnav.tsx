@@ -10,9 +10,6 @@ function isAdminNavActive(pathname: string, href: string) {
   if (pathname === href) {
     return true;
   }
-  if (href === "/admin/datasets" && pathname.startsWith("/admin/import")) {
-    return true;
-  }
   if (
     href === "/admin/calendar-sync/review" &&
     pathname.startsWith("/admin/calendar-sync")

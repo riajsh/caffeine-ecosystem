@@ -23,11 +23,11 @@ export function InferAllCoAttendanceButton() {
         void run(async () => {
           const result = await inferAllCoAttendanceAction();
           if (result.error) {
-            await alert({ title: "Inference failed", description: result.error });
+            await alert({ title: "Could not finish", description: result.error });
             return;
           }
           toastSuccess(
-            "Co-attendance inference complete",
+            "Found shared-event connections",
             `${result.created} created, ${result.skipped} skipped.`,
           );
           router.refresh();
@@ -35,7 +35,7 @@ export function InferAllCoAttendanceButton() {
       }}
     >
       <Button type="submit" variant="outline" disabled={isPending}>
-        {isPending ? "Running…" : "Infer co-attendance"}
+        {isPending ? "Running…" : "Find shared-event connections"}
       </Button>
     </form>
   );
@@ -52,11 +52,11 @@ export function InferSameCompanyButton() {
         void run(async () => {
           const result = await inferSameCompanyAction();
           if (result.error) {
-            await alert({ title: "Inference failed", description: result.error });
+            await alert({ title: "Could not finish", description: result.error });
             return;
           }
           toastSuccess(
-            "Same-company inference complete",
+            "Found same-company connections",
             `${result.created} created, ${result.skipped} skipped.`,
           );
           router.refresh();
@@ -64,7 +64,7 @@ export function InferSameCompanyButton() {
       }}
     >
       <Button type="submit" variant="outline" disabled={isPending}>
-        {isPending ? "Running…" : "Infer same-company"}
+        {isPending ? "Running…" : "Find same-company connections"}
       </Button>
     </form>
   );
@@ -82,13 +82,13 @@ export function ApplyPeerCompanyEnrichmentButton() {
           const result = await applyPeerCompanyEnrichmentAction();
           if (result.error) {
             await alert({
-              title: "Company enrichment failed",
+              title: "Could not fill in companies",
               description: result.error,
             });
             return;
           }
           toastSuccess(
-            "Company enrichment complete",
+            "Filled in missing companies",
             `${result.updated} profiles updated.`,
           );
           router.refresh();

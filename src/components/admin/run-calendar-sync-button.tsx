@@ -23,7 +23,7 @@ export function RunCalendarSyncButton() {
           const result = await runCalendarSyncAction();
           if ("error" in result && result.error) {
             await alert({
-              title: "Calendar sync failed",
+              title: "Could not check for new meetings",
               description: result.error,
             });
             return;
@@ -33,18 +33,18 @@ export function RunCalendarSyncButton() {
           }
           if (result.stats.errors.length > 0) {
             await alert({
-              title: "Calendar sync finished with errors",
+              title: "Finished with some errors",
               description: result.stats.errors.join("\n"),
             });
             router.refresh();
             return;
           }
-          toastSuccess("Calendar sync finished");
+          toastSuccess("Done checking for new meetings");
           router.push("/admin/calendar-sync/review");
         });
       }}
     >
-      {isPending ? "Syncing…" : "Run incremental sync"}
+      {isPending ? "Checking…" : "Check for new meetings"}
     </Button>
   );
 }

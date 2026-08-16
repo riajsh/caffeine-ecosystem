@@ -6,7 +6,8 @@ Things we know about but aren't acting on yet. Nothing here needs action right n
 
 ## Before this goes live (not urgent — we're not live yet)
 
-- **Move hosting accounts from Chris to Ria.** Supabase, Vercel, and Google OAuth are still on Chris's accounts. Full checklist is in `docs/handover-caffeine.md`. Ria's call on timing — parked as of 2026-07-06 while we focus on features that don't need this move first. Revisited 2026-08-13: Chris is still an easily reachable colleague, so no urgency — either a quick "add Ria as Owner" on the existing Supabase project, or the full move to a fresh project, can happen whenever it's actually needed (before go-live, or sooner if Chris ever becomes unreachable).
+- **Move Vercel and Google OAuth from Chris to Ria.** Still outstanding. Full checklist is in `docs/handover-caffeine.md`. Ria's call on timing — not urgent while we focus on features that don't need this first.
+- ~~Move Supabase to Ria's own account~~ — **Resolved 2026-08-13, no action needed.** The Supabase project lives under Previously Unavailable's Pro account (the parent company that owns Caffeine Daily), not Chris's personal account. Ria already has access via `rs@previously.co`, so there's nothing to migrate.
 
 ## Worth a closer look together, when we're ready
 

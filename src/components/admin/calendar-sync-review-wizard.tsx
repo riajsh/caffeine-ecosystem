@@ -85,7 +85,7 @@ function InternalReviewRow({ group }: { group: CalendarUnmatchedGroup }) {
     const confirmed = await confirm({
       title: "Delete review records?",
       description:
-        "Permanently removes pending review rows for this email. Unlike Ignore, they are not remembered — the next calendar sync may queue this person again.",
+        "Permanently removes pending review rows for this email. Unlike Ignore, they are not remembered — the next calendar sync may add this person back for review again.",
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -255,7 +255,7 @@ function UnmatchedReviewRow({
     const confirmed = await confirm({
       title: "Delete review records?",
       description:
-        "Permanently removes pending review rows for this email. Unlike Ignore, they are not remembered — the next calendar sync may queue this person again.",
+        "Permanently removes pending review rows for this email. Unlike Ignore, they are not remembered — the next calendar sync may add this person back for review again.",
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -578,11 +578,11 @@ function PersonalEmailCleanupSection({
       </p>
       <p className="mt-1 text-body text-muted-foreground">
         Colleague calendars pull in gmail.com and similar addresses from other
-        people&apos;s meetings. Clear the review queue, remove auto-created
+        people&apos;s meetings. Clear the review list, remove auto-created
         personal-email profiles, and stop syncing colleague calendars.
         Profiles with a relationship owner are always kept.
         {pendingReviewCount > 0
-          ? ` ${pendingReviewCount} people still in the review queue.`
+          ? ` ${pendingReviewCount} people still waiting for review.`
           : ""}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -728,8 +728,8 @@ function TeamReviewSection({ groups }: { groups: CalendarUnmatchedGroup[] }) {
       </summary>
       <div className="mt-4 space-y-3">
         <p className="text-body text-muted-foreground">
-          Internal addresses from before the filter was applied. Ignore to clear
-          the queue — future syncs skip them automatically.
+          Internal addresses from before the filter was applied. Ignore to
+          clear this list — future syncs skip them automatically.
         </p>
         <Button
           type="button"
@@ -830,8 +830,8 @@ export function CalendarSyncReviewWizard({
       <TabsContent value="summary" className="space-y-4">
         {summary.syncing ? (
           <p className="rounded-lg border border-border bg-card p-4 text-body text-foreground">
-            Sync is still running in the background. Refresh this page in a
-            minute to see updated results.
+            Still running in the background. Refresh this page in a minute to
+            see updated results.
           </p>
         ) : null}
 
@@ -868,7 +868,7 @@ export function CalendarSyncReviewWizard({
         summary.internalMatchedMeetingCount > 0 ? (
           <p className="text-caption text-muted-foreground">
             {summary.internalPendingReviewCount > 0
-              ? `${summary.internalPendingReviewCount} team addresses are in the review queue (see collapsed section on Review people). `
+              ? `${summary.internalPendingReviewCount} team addresses are waiting for review (see collapsed section on Review people). `
               : ""}
             {summary.internalMatchedMeetingCount > 0
               ? `${summary.internalMatchedMeetingCount} matched meetings are on internal profiles (see Matched meetings tab).`
@@ -889,7 +889,7 @@ export function CalendarSyncReviewWizard({
         />
         {unmatchedGroups.external.length === 0 ? (
           <p className="text-body text-muted-foreground">
-            No external attendees left in the queue.
+            No external attendees left to review.
           </p>
         ) : (
           <>

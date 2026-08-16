@@ -2,13 +2,90 @@
 
 import { useState } from "react";
 
-import { commitImportAction, reopenImportAction } from "@/app/(app)/admin/import/actions";
+import { commitImportAction, reopenImportAction } from "@/app/(app)/profiles/import/actions";
 import type { CommitSummary, ImportDetail } from "@/lib/import/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type EventOption = {
+  id: string;
+  title: string;
+};
 
 type ImportCommitPanelProps = {
   detail: ImportDetail;
+  events: EventOption[];
 };
+
+function AttachToEventFields({
+  events,
+  initialEventId,
+  initialEventTitle,
+}: {
+  events: EventOption[];
+  initialEventId?: string | null;
+  initialEventTitle?: string | null;
+}) {
+  const [choice, setChoice] = useState(initialEventId ?? "none");
+
+  return (
+    <div className="space-y-3 rounded-lg border border-dashed border-border p-4">
+      {initialEventId && initialEventTitle ? (
+        <p className="text-body text-foreground">
+          Already connected to <strong>{initialEventTitle}</strong> from upload.
+          Change the selection below to switch it, or leave as is.
+        </p>
+      ) : null}
+      <div className="space-y-2">
+        <Label htmlFor="import-event-choice">Attach to an event (optional)</Label>
+        <Select value={choice} onValueChange={setChoice}>
+          <SelectTrigger id="import-event-choice" className="w-full sm:w-80">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No event</SelectItem>
+            {events.map((event) => (
+              <SelectItem key={event.id} value={event.id}>
+                {event.title}
+              </SelectItem>
+            ))}
+            <SelectItem value="new">+ Create new event</SelectItem>
+          </SelectContent>
+        </Select>
+        <input
+          type="hidden"
+          name="eventId"
+          value={choice === "none" || choice === "new" ? "" : choice}
+        />
+      </div>
+
+      {choice === "new" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="new-event-title">Event name</Label>
+            <Input id="new-event-title" name="newEventTitle" placeholder="e.g. Risk-Reward Equation breakfast" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-event-date">Event date</Label>
+            <Input id="new-event-date" name="newEventDate" type="date" />
+          </div>
+        </div>
+      ) : null}
+
+      <p className="text-caption text-muted-foreground">
+        Everyone in this file will be linked as an attendee of this event and tagged with its name.
+      </p>
+    </div>
+  );
+}
 
 function CommitSummaryView({ summary }: { summary: CommitSummary }) {
   return (
@@ -33,7 +110,7 @@ function CommitSummaryView({ summary }: { summary: CommitSummary }) {
   );
 }
 
-export function ImportCommitPanel({ detail }: ImportCommitPanelProps) {
+export function ImportCommitPanel({ detail, events }: ImportCommitPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -71,9 +148,14 @@ export function ImportCommitPanel({ detail }: ImportCommitPanelProps) {
           </h2>
           <p className="mt-1 text-body text-muted-foreground">
             {wroteNothing
-              ? "Every row was skipped. This usually means dedup was not run, or Full name was not mapped. Re-upload the file and run through mapping and dedup again."
-              : "Profiles and relationships were written to the graph."}
+              ? "Every row was skipped. This usually means the automatic duplicate check didn't finish, or no name column was mapped (map Full name, or map First name + Last name together). Re-upload the file and try again."
+              : "Profiles and relationships were saved."}
           </p>
+          {detail.eventTitle ? (
+            <p className="mt-1 text-body text-muted-foreground">
+              Attendees were linked to the event <strong>{detail.eventTitle}</strong>.
+            </p>
+          ) : null}
         </div>
         <CommitSummaryView summary={detail.commitSummary} />
         {wroteNothing ? (
@@ -91,16 +173,16 @@ export function ImportCommitPanel({ detail }: ImportCommitPanelProps) {
   if (detail.status === "processing") {
     return (
       <div className="space-y-2 rounded-lg border border-border bg-card p-6">
-        <h2 className="text-heading font-medium text-foreground">Commit in progress</h2>
+        <h2 className="text-heading font-medium text-foreground">Completing…</h2>
         <p className="text-body text-muted-foreground">
           {detail.metadata.commit_checkpoint
-            ? "A previous commit was interrupted. Click below to resume from the last checkpoint."
-            : "This import is being committed. If it stalled, refresh and try again."}
+            ? "This got interrupted partway through. Click below to resume from where it left off."
+            : "This import is being completed. If it stalled, refresh and try again."}
         </p>
         <form action={handleSubmit}>
           <input type="hidden" name="importId" value={detail.id} />
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Resuming…" : "Resume commit"}
+            {isSubmitting ? "Resuming…" : "Resume"}
           </Button>
         </form>
         {error ? (
@@ -128,38 +210,40 @@ export function ImportCommitPanel({ detail }: ImportCommitPanelProps) {
     Boolean(detail.metadata.dedup_summary) && detail.committableRowCount === 0;
   const hasPendingRows = detail.pendingRowCount > 0;
 
-  let helperText = "Confirm mapping and run dedup before committing.";
+  let helperText = "Checking for duplicates…";
 
   if (detail.unresolvedSoftMatches > 0) {
-    helperText = `Resolve ${detail.unresolvedSoftMatches} soft match${
-      detail.unresolvedSoftMatches === 1 ? "" : "es"
-    } before committing.`;
+    helperText = `Resolve ${detail.unresolvedSoftMatches} row${
+      detail.unresolvedSoftMatches === 1 ? "" : "s"
+    } above before completing.`;
   } else if (dedupNotRun) {
-    helperText = "Run dedup after confirming column mapping. Commit stays disabled until then.";
+    helperText = "Still checking for duplicates — this happens automatically, refresh in a moment.";
   } else if (hasPendingRows) {
     helperText = `${detail.pendingRowCount} row${
       detail.pendingRowCount === 1 ? "" : "s"
-    } still pending — re-run dedup after fixing mapping.`;
+    } still pending — try fixing the column mapping above.`;
   } else if (noCommittableRows) {
     helperText =
-      "Dedup found no rows ready to commit. Check that Full name is mapped, fix errors in the preview table, then re-run dedup.";
+      "No rows are ready. Check that Full name (or First name + Last name) is mapped, using the \"Fix column mapping\" section above.";
   } else if (detail.canCommit) {
-    helperText = `Ready to write ${detail.committableRowCount} row${
+    helperText = `Ready to create or update ${detail.committableRowCount} profile${
       detail.committableRowCount === 1 ? "" : "s"
-    } to the graph.`;
+    }.`;
   }
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-6">
-      <div>
-        <h2 className="text-heading font-medium text-foreground">Commit</h2>
-        <p className="mt-1 text-body text-muted-foreground">{helperText}</p>
-      </div>
+      <p className="text-body text-muted-foreground">{helperText}</p>
 
-      <form action={handleSubmit}>
+      <form action={handleSubmit} className="space-y-4">
         <input type="hidden" name="importId" value={detail.id} />
+        <AttachToEventFields
+          events={events}
+          initialEventId={detail.eventId}
+          initialEventTitle={detail.eventTitle}
+        />
         <Button type="submit" disabled={!detail.canCommit || isSubmitting}>
-          {isSubmitting ? "Committing…" : "Commit import"}
+          {isSubmitting ? "Completing…" : "Complete import"}
         </Button>
       </form>
 

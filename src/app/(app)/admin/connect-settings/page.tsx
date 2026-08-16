@@ -11,7 +11,7 @@ export default function ConnectSettingsPage() {
       <EmptyState
         variant="dashed"
         title="Connect settings — Phase 2"
-        description="Dismiss duration, team-wide dismissals, and resurfacing rules need schema work before they can ship. Connect suggestions themselves are live on the Connect page."
+        description="Dismiss duration, team-wide dismissals, and resurfacing rules aren't built yet. Connect suggestions themselves are live on the Connect page."
       >
         <Badge variant="outline">Phase 2</Badge>
       </EmptyState>

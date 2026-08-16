@@ -64,7 +64,7 @@ export function EditRelationshipForm({ profile }: EditRelationshipFormProps) {
   if (!relationship) {
     return (
       <p className="text-body text-muted-foreground">
-        Assign an owner to create the org relationship for this profile.
+        Assign an owner to create the relationship for this profile.
       </p>
     );
   }
@@ -181,7 +181,7 @@ export function EditRelationshipForm({ profile }: EditRelationshipFormProps) {
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               rows={3}
-              placeholder="Shared org-level notes about this relationship"
+              placeholder="Shared team notes about this relationship"
             />
           </div>
 

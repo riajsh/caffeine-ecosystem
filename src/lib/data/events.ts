@@ -8,6 +8,7 @@ import { formatInteractionDate } from "@/lib/format/date";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AddEventAttendeeInput,
+  AddEventAttendeesBulkInput,
   CreateEventInput,
 } from "@/lib/validators/events";
 import type { Database } from "@/types/database";
@@ -130,7 +131,7 @@ async function getOrCreateRelationship(
   return created.id;
 }
 
-async function ensureEventAttendanceEvidence(
+export async function ensureEventAttendanceEvidence(
   orgId: string,
   event: { id: string; title: string; event_date: string },
   profileId: string,
@@ -443,6 +444,112 @@ export async function addEventAttendee(
   } catch {
     // Co-attendance inference is best-effort when adding attendees.
   }
+}
+
+export type AddEventAttendeesBulkResult = {
+  added: number;
+  tagged: number;
+  tagWarning: string | null;
+};
+
+export async function addEventAttendeesBulk(
+  input: AddEventAttendeesBulkInput,
+): Promise<AddEventAttendeesBulkResult> {
+  const user = await requireUser();
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+
+  const event = await assertEventInOrg(input.eventId, orgId);
+  const uniqueProfileIds = [...new Set(input.profileIds)];
+
+  let tagId: string | null = null;
+  let tagWarning: string | null = null;
+
+  if (input.tagWithEvent) {
+    const { data: existingTag, error: tagLookupError } = await supabase
+      .from("tags")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("name", event.title)
+      .maybeSingle();
+
+    if (tagLookupError) {
+      tagWarning = "Attendees were added, but the event tag couldn't be checked.";
+    } else if (existingTag) {
+      tagId = existingTag.id;
+    } else {
+      const { data: createdTag, error: createTagError } = await supabase
+        .from("tags")
+        .insert({ org_id: orgId, name: event.title, category: "events" })
+        .select("id")
+        .single();
+
+      if (createTagError) {
+        tagWarning =
+          "Attendees were added, but tagging didn't work — the database may still need the \"Events\" tag category added.";
+      } else {
+        tagId = createdTag.id;
+      }
+    }
+  }
+
+  let added = 0;
+  let tagged = 0;
+
+  for (const profileId of uniqueProfileIds) {
+    await assertProfileInOrg(profileId, orgId);
+
+    const { error } = await supabase.from("event_attendees").upsert(
+      {
+        org_id: orgId,
+        event_id: input.eventId,
+        profile_id: profileId,
+        attended: true,
+      },
+      { onConflict: "event_id,profile_id" },
+    );
+
+    if (error) {
+      throw new Error(`Failed to add attendee: ${error.message}`);
+    }
+
+    added += 1;
+    await ensureEventAttendanceEvidence(orgId, event, profileId, user.id);
+
+    if (tagId) {
+      const { data: existingProfileTag } = await supabase
+        .from("profile_tags")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("profile_id", profileId)
+        .eq("tag_id", tagId)
+        .maybeSingle();
+
+      if (existingProfileTag) {
+        tagged += 1;
+      } else {
+        const { error: linkError } = await supabase.from("profile_tags").insert({
+          org_id: orgId,
+          profile_id: profileId,
+          tag_id: tagId,
+        });
+
+        if (!linkError) {
+          tagged += 1;
+        } else if (!tagWarning) {
+          tagWarning = "Attendees were added, but some tags couldn't be linked.";
+        }
+      }
+    }
+  }
+
+  try {
+    await inferCoAttendanceForEvent(input.eventId);
+  } catch {
+    // Co-attendance inference is best-effort when adding attendees.
+  }
+
+  return { added, tagged, tagWarning };
 }
 
 export async function removeEventAttendee(

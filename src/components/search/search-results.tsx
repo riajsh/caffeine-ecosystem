@@ -48,8 +48,8 @@ export function SearchResults({
     return (
       <EmptyState
         variant="dashed"
-        title="Search the graph"
-        description="Find people, activity, events, tags, and email subjects across the org."
+        title="Search everything"
+        description="Find people, activity, events, tags, and email subjects across your team."
       >
         <div className="flex flex-wrap justify-center gap-2">
           {EXAMPLE_SEARCHES.map((example) => (
@@ -72,7 +72,7 @@ export function SearchResults({
     return (
       <EmptyState
         title={`No results for "${query}"`}
-        description={`Try a name, company, tag, or email subject — or add them to the graph.${
+        description={`Try a name, company, tag, or email subject — or add them as a new profile.${
           hasProfileFilters ? " Profile filters may also be hiding matches." : ""
         }`}
       >

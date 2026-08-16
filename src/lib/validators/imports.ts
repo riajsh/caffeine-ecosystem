@@ -14,4 +14,9 @@ export const columnMappingSchema = z.record(
   z.string(),
 );
 
-export const softMatchActionSchema = z.enum(["confirm", "create", "skip"]);
+export const softMatchActionSchema = z.enum([
+  "confirm",
+  "create",
+  "skip",
+  "replace",
+]);

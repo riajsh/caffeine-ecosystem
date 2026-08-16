@@ -365,7 +365,7 @@ Unlocks: who attends often, who stopped attending, who attends together (a cheap
 | column | type | notes |
 |---|---|---|
 | name | text | unique per org |
-| category | text | `sector` / `role` / `interest` / `other` |
+| category | text | `expertise` / `industry` / `signal_influence` |
 
 **profile_tags**: join of `profile_id` and `tag_id`, `unique(profile_id, tag_id)`. Kept to profiles in V1 rather than a generic polymorphic taggable, to stay simple.
 

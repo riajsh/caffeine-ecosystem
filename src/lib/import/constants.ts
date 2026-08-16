@@ -19,7 +19,9 @@ export const IMPORT_SOURCES = [
 export type ImportSource = (typeof IMPORT_SOURCES)[number];
 
 export const ECOSYSTEM_FIELDS = [
-  { key: "full_name", label: "Full name", required: true },
+  { key: "full_name", label: "Full name (or map First + Last name below)", required: true },
+  { key: "first_name", label: "First name (combines with Last name)", required: false },
+  { key: "last_name", label: "Last name (combines with First name)", required: false },
   { key: "email", label: "Email", required: false },
   { key: "organisation_name", label: "Organisation", required: false },
   { key: "phone", label: "Phone", required: false },
@@ -80,6 +82,8 @@ const HEADER_ALIASES: Record<EcosystemFieldKey, string[]> = {
     "lead name",
     "contact",
   ],
+  first_name: ["first name", "firstname", "first_name", "given name", "forename"],
+  last_name: ["last name", "lastname", "last_name", "surname", "family name"],
   email: [
     "email",
     "e-mail",

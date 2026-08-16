@@ -34,7 +34,7 @@ Routes:
 | Queue | Path | Status |
 |---|---|---|
 | Calendar participants | `/admin/calendar-sync/review` | Shipped |
-| Import soft-matches | `/admin/import/[id]` (within import wizard) | Shipped |
+| Import soft-matches | `/profiles/import/[id]` (within import wizard) | Shipped |
 | Email participants | `/admin/email-sync/review` (or equivalent) | **Not yet built** — spec in gmail-sync.md §11; queue table exists |
 
 Admin hub: `/admin` links to each surface. Sub-nav via `src/config/admin-navigation.ts`.
@@ -163,7 +163,7 @@ Routes:
 | Queue | Path | Status |
 |---|---|---|
 | Calendar participants | `/admin/calendar-sync/review` | Shipped (list view — needs triage mode upgrade) |
-| Import soft-matches | `/admin/import/[id]` (within import wizard) | Shipped |
+| Import soft-matches | `/profiles/import/[id]` (within import wizard) | Shipped |
 | Email participants | `/admin/email-sync/review` | **Not yet built** — queue table exists |
 
 Admin hub: `/admin` links to each surface.
@@ -196,7 +196,7 @@ Email or Slack notification when pending review count exceeds 20 after a sync. T
 
 ## 10. Import soft-match review (shipped)
 
-**Path:** `/admin/import/[id]` during `processing` status
+**Path:** `/profiles/import/[id]` during `processing` status
 
 **Component:** `SoftMatchReview`
 
@@ -281,7 +281,7 @@ Auto-link at sync for exact email is the largest engineering win. Triage mode is
 
 ## 5. Import soft-match review (shipped)
 
-**Path:** `/admin/import/[id]` during `processing` status
+**Path:** `/profiles/import/[id]` during `processing` status
 
 **Component:** `SoftMatchReview`
 

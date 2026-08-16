@@ -176,6 +176,8 @@ export function applyColumnMapping(
 ): NormalizedImportRow {
   const normalized: NormalizedImportRow = { extended: {} };
   const mappedColumns = new Set<string>();
+  let mappedFirstName: string | undefined;
+  let mappedLastName: string | undefined;
 
   for (const [csvColumn, ecosystemField] of Object.entries(mapping)) {
     if (!ecosystemField || !isEcosystemField(ecosystemField)) {
@@ -191,6 +193,16 @@ export function applyColumnMapping(
 
     if (ecosystemField === "email") {
       normalized.email = value.toLowerCase();
+      continue;
+    }
+
+    if (ecosystemField === "first_name") {
+      mappedFirstName = value;
+      continue;
+    }
+
+    if (ecosystemField === "last_name") {
+      mappedLastName = value;
       continue;
     }
 
@@ -210,6 +222,12 @@ export function applyColumnMapping(
 
   if (Object.keys(normalized.extended ?? {}).length === 0) {
     delete normalized.extended;
+  }
+
+  // An explicit Full name mapping always wins; otherwise, First name +
+  // Last name mapped separately are combined into one.
+  if (!cleanValue(normalized.full_name) && (mappedFirstName || mappedLastName)) {
+    normalized.full_name = [mappedFirstName, mappedLastName].filter(Boolean).join(" ");
   }
 
   deriveFullName(raw, normalized);

@@ -793,6 +793,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          event_id: string | null
           filename: string
           id: string
           metadata: Json
@@ -805,6 +806,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by: string
+          event_id?: string | null
           filename: string
           id?: string
           metadata?: Json
@@ -817,6 +819,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string
+          event_id?: string | null
           filename?: string
           id?: string
           metadata?: Json
@@ -832,6 +835,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "imports_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
             referencedColumns: ["id"]
           },
           {

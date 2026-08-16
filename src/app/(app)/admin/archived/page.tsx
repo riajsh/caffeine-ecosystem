@@ -14,8 +14,9 @@ export default async function AdminArchivedPage() {
       description={`${profiles.length} archived contact${profiles.length === 1 ? "" : "s"}`}
     >
       <p className="text-body text-muted-foreground">
-        V1 uses relationship status Inactive as the archive equivalent. A
-        dedicated archive flag is a schema discussion for Phase 2.
+        Right now, &ldquo;archiving&rdquo; a profile just marks it Inactive —
+        there&rsquo;s no separate archive feature yet. That&rsquo;s a bigger
+        change we&rsquo;d build later.
       </p>
 
       {profiles.length === 0 ? (

@@ -24,6 +24,7 @@ export type RelationshipGraphRollback = {
   relationshipOwnersBefore: RelationshipOwnerSnapshot[];
   linkedProfileTags: Array<{ profileId: string; tagId: string }>;
   createdTagIds: string[];
+  createdEventAttendeeKeys: Array<{ eventId: string; profileId: string }>;
 };
 
 export async function applyRelationshipGraphRollback(
@@ -38,6 +39,15 @@ export async function applyRelationshipGraphRollback(
       .eq("org_id", orgId)
       .eq("profile_id", link.profileId)
       .eq("tag_id", link.tagId);
+  }
+
+  for (const attendee of rollback.createdEventAttendeeKeys ?? []) {
+    await supabase
+      .from("event_attendees")
+      .delete()
+      .eq("org_id", orgId)
+      .eq("event_id", attendee.eventId)
+      .eq("profile_id", attendee.profileId);
   }
 
   for (const tagId of rollback.createdTagIds) {

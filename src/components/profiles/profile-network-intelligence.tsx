@@ -40,7 +40,7 @@ export function ProfileNetworkIntelligence({
         <p className="text-subheading font-medium text-foreground">
           Network intelligence
         </p>
-        <Badge variant="secondary">Generated</Badge>
+        <Badge variant="secondary">Automatic</Badge>
       </div>
       <ul className="grid gap-3 sm:grid-cols-3">
         {items.map((item) => (

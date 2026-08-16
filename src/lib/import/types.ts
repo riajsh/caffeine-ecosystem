@@ -22,12 +22,16 @@ export type CommitSummary = {
   ownerWarnings: number;
 };
 
-export type SoftMatchAction = "confirm" | "create" | "skip";
+export type SoftMatchAction = "confirm" | "create" | "skip" | "replace";
 
 export type ImportCommitCheckpoint = {
   next_row_index: number;
   created_profile_ids: string[];
   updated_profile_snapshots: Record<string, Json>;
+  /** Full row of any profile deleted for a "replace" row, so it can be
+   * restored if the commit ultimately fails. Optional for backwards
+   * compatibility with checkpoints saved before this existed. */
+  deleted_profile_snapshots?: Record<string, Json>;
   graph_rollbacks: Json;
   partial_summary: CommitSummary;
   profile_id_by_row_number: Record<string, string>;
@@ -76,6 +80,7 @@ export type NormalizedImportRow = {
   _dedup_in_file_row_number?: number;
   _dedup_merge_in_file_row_number?: number;
   _dedup_candidate_profile_ids?: string[];
+  _dedup_replace_profile_id?: string;
 };
 
 export type ImportListItem = {
@@ -124,6 +129,8 @@ export type ImportDetail = {
   headers: string[];
   previewRows: ImportRowView[];
   softMatchRows: ImportRowView[];
+  errorRows: ImportRowView[];
+  mappingNeedsAttention: boolean;
   dedupSummary: DedupSummary | null;
   commitSummary: CommitSummary | null;
   unresolvedSoftMatches: number;
@@ -132,4 +139,9 @@ export type ImportDetail = {
   statusHint: string;
   canDelete: boolean;
   canCommit: boolean;
+  /** True once "Complete import" has been clicked at least once — cancelling
+   * from this point undoes whatever it already wrote before removing it. */
+  hasCommitProgress: boolean;
+  eventId: string | null;
+  eventTitle: string | null;
 };

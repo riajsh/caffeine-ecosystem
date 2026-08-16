@@ -60,3 +60,23 @@ export function withMergeInFileRowNumber(
     [DEDUP_MERGE_IN_FILE_ROW_NUMBER]: rowNumber,
   };
 }
+
+export const DEDUP_REPLACE_PROFILE_ID = "_dedup_replace_profile_id";
+
+/** Marks a row as "delete the matched profile, then create this row fresh." */
+export function getReplaceProfileId(
+  normalized: NormalizedImportRow,
+): string | null {
+  const value = normalized[DEDUP_REPLACE_PROFILE_ID];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+export function withReplaceProfileId(
+  normalized: NormalizedImportRow,
+  profileId: string,
+): NormalizedImportRow {
+  return {
+    ...normalized,
+    [DEDUP_REPLACE_PROFILE_ID]: profileId,
+  };
+}

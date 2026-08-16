@@ -31,11 +31,11 @@ export function InferCoAttendanceButton({
         void run(async () => {
           const result = await inferCoAttendanceAction(formData);
           if (result.error) {
-            await alert({ title: "Inference failed", description: result.error });
+            await alert({ title: "Could not finish", description: result.error });
             return;
           }
           toastSuccess(
-            "Co-attendance inference complete",
+            "Found shared connections",
             `Created ${result.created} connection${result.created === 1 ? "" : "s"} (${result.skipped} skipped).`,
           );
           router.refresh();
@@ -44,7 +44,7 @@ export function InferCoAttendanceButton({
     >
       <input type="hidden" name="eventId" value={eventId} />
       <Button type="submit" variant="outline" size="sm" disabled={isPending}>
-        {isPending ? "Inferring…" : "Infer co-attendance connections"}
+        {isPending ? "Finding…" : "Find people who met here"}
       </Button>
     </form>
   );

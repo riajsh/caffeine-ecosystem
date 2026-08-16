@@ -15,7 +15,7 @@ export function FrequentAttendeesCard({ attendees }: FrequentAttendeesCardProps)
           <h2 className="text-heading font-medium text-foreground">
             Regular attendees
           </h2>
-          <Badge variant="secondary">Generated</Badge>
+          <Badge variant="secondary">Automatic</Badge>
         </div>
         <p className="text-caption text-muted-foreground">
           Profiles who have attended two or more events — useful for room

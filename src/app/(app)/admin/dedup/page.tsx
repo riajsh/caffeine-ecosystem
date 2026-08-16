@@ -15,7 +15,7 @@ export default async function AdminDedupPage() {
   return (
     <AdminPage
       title="Duplicate Cleanup"
-      description="Detect duplicate profiles across the org and merge groups in place."
+      description="Find duplicate profiles across your team and merge groups in place."
     >
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-border bg-card p-4">
@@ -39,7 +39,7 @@ export default async function AdminDedupPage() {
       </dl>
 
       <p className="text-body text-muted-foreground">
-        Per-import dedup still runs during CSV upload. Use{" "}
+        Duplicate checking still runs automatically during CSV upload. Use{" "}
         <Link href="/profiles" className="text-interactive-primary hover:underline">
           Profiles
         </Link>{" "}

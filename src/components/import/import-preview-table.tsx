@@ -6,10 +6,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ImportRowView } from "@/lib/import/types";
+import type { DedupStatus, ImportRowView } from "@/lib/import/types";
 
 type ImportPreviewTableProps = {
   rows: ImportRowView[];
+};
+
+const MATCH_STATUS_LABELS: Record<DedupStatus, string> = {
+  pending: "Checking…",
+  matched_email: "Matches existing profile",
+  soft_match: "Possible match",
+  new: "New profile",
+  error: "Error — skipped",
 };
 
 export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
@@ -30,7 +38,7 @@ export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
             {columns.map((column) => (
               <TableHead key={column}>{column}</TableHead>
             ))}
-            <TableHead>Dedup</TableHead>
+            <TableHead>Match status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -42,8 +50,8 @@ export function ImportPreviewTable({ rows }: ImportPreviewTableProps) {
                   {row.raw[column] ?? "—"}
                 </TableCell>
               ))}
-              <TableCell className="capitalize text-muted-foreground">
-                {row.dedupStatus.replace("_", " ")}
+              <TableCell className="text-muted-foreground">
+                {MATCH_STATUS_LABELS[row.dedupStatus]}
                 {row.error ? ` (${row.error})` : ""}
               </TableCell>
             </TableRow>

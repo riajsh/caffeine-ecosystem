@@ -113,7 +113,7 @@ export function ProfileConnectionsSection({
         <EmptyState
           variant="dashed"
           title="No connections recorded"
-          description="Manual and inferred profile-to-person edges appear here."
+          description="Connections you've added and ones we've found automatically appear here."
         />
       ) : (
         <ul className="space-y-3">
@@ -146,7 +146,7 @@ export function ProfileConnectionsSection({
                       {formatEnumLabel(connection.strength)}
                     </Badge>
                     {inferred ? (
-                      <Badge variant="secondary">Inferred</Badge>
+                      <Badge variant="secondary">Automatic</Badge>
                     ) : null}
                   </div>
 

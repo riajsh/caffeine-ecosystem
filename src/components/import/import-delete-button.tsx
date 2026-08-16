@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { deleteImportAction } from "@/app/(app)/admin/import/actions";
+import { cancelImportAction } from "@/app/(app)/profiles/import/actions";
 import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { toastSuccess } from "@/lib/toast";
@@ -11,19 +11,26 @@ import { toastSuccess } from "@/lib/toast";
 type ImportDeleteButtonProps = {
   importId: string;
   filename: string;
+  hasCommitProgress?: boolean;
 };
 
-export function ImportDeleteButton({ importId, filename }: ImportDeleteButtonProps) {
+export function ImportDeleteButton({
+  importId,
+  filename,
+  hasCommitProgress = false,
+}: ImportDeleteButtonProps) {
   const router = useRouter();
   const { confirm, alert } = useAppDialog();
   const [error, setError] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
-  async function handleDelete() {
+  async function handleCancel() {
     const confirmed = await confirm({
-      title: "Delete import",
-      description: `Delete import "${filename}"? Staged rows will be removed. This cannot be undone.`,
-      confirmLabel: "Delete",
+      title: "Cancel this import?",
+      description: hasCommitProgress
+        ? `Cancel "${filename}"? Any profiles or updates it's already made will be undone, then it'll be removed. This can't be undone.`
+        : `Cancel "${filename}"? Nothing has been added to your profiles yet, so this just removes the upload. This can't be undone.`,
+      confirmLabel: "Cancel import",
       destructive: true,
     });
 
@@ -32,23 +39,24 @@ export function ImportDeleteButton({ importId, filename }: ImportDeleteButtonPro
     }
 
     setError(null);
-    setIsDeleting(true);
+    setIsCancelling(true);
 
     const formData = new FormData();
     formData.set("importId", importId);
 
     try {
-      const result = await deleteImportAction(formData);
+      const result = await cancelImportAction(formData);
       if (result?.error) {
         setError(result.error);
-        await alert({ title: "Could not delete import", description: result.error });
+        await alert({ title: "Could not cancel import", description: result.error });
         return;
       }
 
-      toastSuccess("Import deleted");
+      toastSuccess("Import cancelled");
+      router.push("/profiles/import");
       router.refresh();
     } finally {
-      setIsDeleting(false);
+      setIsCancelling(false);
     }
   }
 
@@ -58,10 +66,10 @@ export function ImportDeleteButton({ importId, filename }: ImportDeleteButtonPro
         type="button"
         variant="outline"
         size="sm"
-        disabled={isDeleting}
-        onClick={handleDelete}
+        disabled={isCancelling}
+        onClick={handleCancel}
       >
-        {isDeleting ? "Deleting…" : "Delete"}
+        {isCancelling ? "Cancelling…" : "Cancel import"}
       </Button>
       {error ? (
         <p className="text-caption text-destructive" role="alert">

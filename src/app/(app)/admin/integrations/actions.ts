@@ -203,7 +203,7 @@ export async function runCalendarBackfillAction(
   );
 
   if (uniqueCalendarIds.length === 0) {
-    return { error: "Select at least one calendar to backfill" };
+    return { error: "Select at least one calendar to load" };
   }
 
   try {

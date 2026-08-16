@@ -30,7 +30,7 @@ export function TeamMembersList({ users }: TeamMembersListProps) {
       <EmptyState
         variant="dashed"
         title="No team members yet"
-        description="V1 provisions sign-in via Supabase Auth and npm run sync:team. Run the sync script after adding someone in Supabase Auth."
+        description="Adding a teammate needs a quick setup step behind the scenes — just ask Claude to add them and it's done in a couple of minutes."
       >
         <Button
           type="button"
@@ -51,10 +51,10 @@ export function TeamMembersList({ users }: TeamMembersListProps) {
           Adding team members
         </h2>
         <p className="mt-2 text-body text-muted-foreground">
-          V1 provisions sign-in via Supabase Auth and{" "}
-          <code className="text-caption">npm run sync:team</code>. Edit{" "}
-          <code className="text-caption">src/config/team-members.json</code>{" "}
-          then sync. Inline add/edit ships in a later pass.
+          There&rsquo;s no add-teammate button yet — just ask Claude to add
+          someone and it&rsquo;ll be done behind the scenes in a couple of
+          minutes. A
+          proper in-app way to add and edit teammates is coming later.
         </p>
       </section>
 

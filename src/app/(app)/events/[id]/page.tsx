@@ -95,7 +95,7 @@ export default async function EventPage({ params }: EventPageProps) {
               Connections from this event
             </h2>
             <p className="text-caption text-muted-foreground">
-              Profile pairs linked via co-attendance inference for this event.
+              Profile pairs linked because they attended together.
             </p>
           </div>
           <EventConnectionsSection connections={connections} />

@@ -20,7 +20,7 @@ export function OwnershipDistributionCard({
           <h2 className="text-heading font-medium text-foreground">
             Ownership
           </h2>
-          <Badge variant="secondary">Generated</Badge>
+          <Badge variant="secondary">Automatic</Badge>
         </div>
         <p className="text-caption text-muted-foreground">
           Primary owner counts across the team — filter profiles by owner from

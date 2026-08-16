@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
 
-export default function ImportListRedirectPage() {
-  redirect("/admin/datasets");
+/**
+ * The import feature moved to /profiles/import. Kept only for old
+ * links/bookmarks.
+ */
+export default function LegacyImportListRedirectPage() {
+  redirect("/profiles/import");
 }

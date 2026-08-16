@@ -3,9 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { resolveSoftMatchAction } from "@/app/(app)/admin/import/actions";
-import type { ImportRowView } from "@/lib/import/types";
+import { resolveSoftMatchAction } from "@/app/(app)/profiles/import/actions";
+import type { ImportRowView, SoftMatchAction } from "@/lib/import/types";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-provider";
 import { cn } from "@/lib/utils";
 
 type SoftMatchReviewProps = {
@@ -13,8 +14,16 @@ type SoftMatchReviewProps = {
   rows: ImportRowView[];
 };
 
+const ACTION_LABELS: Record<SoftMatchAction, string> = {
+  confirm: "Merge into existing",
+  create: "Create as new",
+  replace: "Delete & replace",
+  skip: "Skip row",
+};
+
 export function SoftMatchReview({ importId, rows }: SoftMatchReviewProps) {
   const router = useRouter();
+  const { confirm } = useAppDialog();
   const [error, setError] = useState<string | null>(null);
   const [resolvingRowId, setResolvingRowId] = useState<string | null>(null);
   const [selectedCandidates, setSelectedCandidates] = useState<
@@ -28,14 +37,40 @@ export function SoftMatchReview({ importId, rows }: SoftMatchReviewProps) {
     ),
   );
 
-  async function handleResolve(formData: FormData) {
-    const rowId = String(formData.get("rowId") ?? "");
+  async function handleAction(row: ImportRowView, action: SoftMatchAction) {
     if (resolvingRowId) {
       return;
     }
 
-    setResolvingRowId(rowId);
+    const candidateId = selectedCandidates[row.id] ?? "";
+
+    if (action === "replace") {
+      const candidateName =
+        row.matchedProfileCandidates.find((candidate) => candidate.id === candidateId)
+          ?.fullName ?? row.matchedProfileName;
+
+      const confirmed = await confirm({
+        title: "Delete & replace this profile?",
+        description: `This permanently deletes ${candidateName ?? "the existing profile"} and creates a brand new profile from this row's data instead. This can't be undone.`,
+        confirmLabel: "Delete & replace",
+        destructive: true,
+      });
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setResolvingRowId(row.id);
     setError(null);
+
+    const formData = new FormData();
+    formData.set("importId", importId);
+    formData.set("rowId", row.id);
+    formData.set("action", action);
+    if ((action === "confirm" || action === "replace") && candidateId) {
+      formData.set("matchedProfileId", candidateId);
+    }
 
     try {
       const result = await resolveSoftMatchAction(formData);
@@ -58,12 +93,12 @@ export function SoftMatchReview({ importId, rows }: SoftMatchReviewProps) {
     <div className="space-y-4 rounded-lg border border-border bg-card p-6">
       <div>
         <h2 className="text-heading font-medium text-foreground">
-          Soft match review
+          Needs your review
         </h2>
         <p className="mt-1 text-body text-muted-foreground">
           These rows may match existing people by email, phone, LinkedIn, or
-          similar name and company. Confirm before merging — never auto-merge on
-          a guess.
+          similar name and company. Choose what to do with each — nothing here
+          is written until you complete the import.
         </p>
       </div>
 
@@ -71,6 +106,7 @@ export function SoftMatchReview({ importId, rows }: SoftMatchReviewProps) {
         {rows.map((row) => {
           const selectedCandidateId = selectedCandidates[row.id] ?? "";
           const hasMultipleCandidates = row.matchedProfileCandidates.length > 1;
+          const isResolving = resolvingRowId === row.id;
 
           return (
             <div
@@ -164,37 +200,31 @@ export function SoftMatchReview({ importId, rows }: SoftMatchReviewProps) {
               </div>
 
               <div className="flex flex-wrap gap-2 lg:flex-col lg:justify-center">
-                {(["confirm", "create", "skip"] as const).map((action) => (
-                  <form key={action} action={handleResolve}>
-                    <input type="hidden" name="importId" value={importId} />
-                    <input type="hidden" name="rowId" value={row.id} />
-                    <input type="hidden" name="action" value={action} />
-                    {action === "confirm" && selectedCandidateId ? (
-                      <input
-                        type="hidden"
-                        name="matchedProfileId"
-                        value={selectedCandidateId}
-                      />
-                    ) : null}
+                {(["confirm", "create", "replace", "skip"] as const).map(
+                  (action) => (
                     <Button
-                      type="submit"
+                      key={action}
+                      type="button"
                       size="sm"
                       disabled={
                         resolvingRowId !== null ||
-                        (action === "confirm" &&
+                        ((action === "confirm" || action === "replace") &&
                           row.matchedProfileCandidates.length > 0 &&
                           !selectedCandidateId)
                       }
-                      variant={action === "confirm" ? "default" : "outline"}
+                      variant={
+                        action === "confirm"
+                          ? "default"
+                          : action === "replace"
+                            ? "destructive"
+                            : "outline"
+                      }
+                      onClick={() => handleAction(row, action)}
                     >
-                      {action === "confirm"
-                        ? "Confirm merge"
-                        : action === "create"
-                          ? "Create new"
-                          : "Skip row"}
+                      {isResolving ? "Working…" : ACTION_LABELS[action]}
                     </Button>
-                  </form>
-                ))}
+                  ),
+                )}
               </div>
             </div>
           );

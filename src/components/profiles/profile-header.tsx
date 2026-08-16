@@ -107,7 +107,7 @@ export function ProfileHeader({ profile }: ProfileHeaderProps) {
 
           {profile.sources.length > 0 ? (
             <div className="space-y-1">
-              <p className="text-label text-muted-foreground">Provenance</p>
+              <p className="text-label text-muted-foreground">Where this came from</p>
               <p className="text-caption text-muted-foreground">
                 {formatProfileProvenance(profile.sources)}
               </p>

@@ -27,7 +27,7 @@ export default async function CalendarSyncReviewPage({
     autoResolveWarning =
       error instanceof Error
         ? error.message
-        : "Auto-resolve failed; review the queue manually.";
+        : "Couldn't finish automatically; review the list manually.";
     console.error("Calendar auto-resolve failed:", error);
   }
 
@@ -47,14 +47,13 @@ export default async function CalendarSyncReviewPage({
     >
       {params.connected ? (
         <p className="mb-4 rounded-md border border-border bg-muted/40 px-4 py-3 text-body text-foreground">
-          Connected {params.connected}. Initial sync runs on the next scheduled
-          sync (usually within a few minutes) — refresh this page to see
-          meetings and people to review.
+          Connected {params.connected}. This runs automatically within a few
+          minutes — refresh this page to see meetings and people to review.
         </p>
       ) : null}
       {autoResolveWarning ? (
         <p className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-body text-foreground">
-          Auto-resolve could not finish: {autoResolveWarning}
+          Some of this couldn&apos;t be handled automatically: {autoResolveWarning}
         </p>
       ) : null}
       <div className="mb-4">

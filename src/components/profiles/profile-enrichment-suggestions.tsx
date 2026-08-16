@@ -59,7 +59,7 @@ export function ProfileEnrichmentSuggestions({
         <p className="text-subheading font-medium text-foreground">
           Suggested from calendar data
         </p>
-        <Badge variant="secondary">Generated</Badge>
+        <Badge variant="secondary">Suggested</Badge>
       </div>
 
       <div className="space-y-3">

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { backfillImportProfilesAction } from "@/app/(app)/admin/import/actions";
+import { backfillImportProfilesAction } from "@/app/(app)/profiles/import/actions";
 import { Button } from "@/components/ui/button";
 
 type ImportProfileBackfillButtonProps = {
@@ -55,8 +55,8 @@ export function ImportProfileBackfillButton({
     <div className="space-y-2 rounded-lg border border-border bg-card p-4">
       <p className="text-body text-muted-foreground">
         Apply missing profile fields from the CSV — occupation, location, LinkedIn,
-        owners, strength, relationship type, industry tags, and extended metadata.
-        Only fills empty profile fields; does not overwrite curated data.
+        owners, strength, relationship type, industry tags, and any extra details.
+        Only fills empty profile fields; does not overwrite what&apos;s already there.
       </p>
 
       <Button

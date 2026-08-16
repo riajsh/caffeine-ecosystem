@@ -149,11 +149,11 @@ export function ProfileTagsSection({
             </form>
           ) : tags.length === orgTags.length && orgTags.length > 0 ? (
             <p className="text-caption text-muted-foreground">
-              All org tags are already assigned.
+              All of your team&apos;s tags are already assigned.
             </p>
           ) : orgTags.length === 0 ? (
             <p className="text-caption text-muted-foreground">
-              No tags in the org yet. Admins can create tags under Admin → Tags.
+              No tags yet. Admins can create tags under Admin → Tags.
             </p>
           ) : null}
 

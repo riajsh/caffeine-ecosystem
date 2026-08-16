@@ -47,7 +47,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   return (
     <AdminPage
       title="Admin"
-      description="Import data, manage review queues, and configure the workspace."
+      description="Manage your review lists and team settings. CSV imports now live under Profiles."
     >
       <DeployChecklist items={deployChecks} />
 
@@ -87,17 +87,6 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-heading font-medium text-foreground">Datasets</h2>
-        <p className="max-w-2xl text-body text-muted-foreground">
-          Upload CSV exports, map columns, review dedup matches, and commit
-          profiles into the graph.
-        </p>
-        <Button asChild>
-          <Link href="/admin/datasets">Open datasets</Link>
-        </Button>
-      </section>
-
-      <section className="space-y-3">
         <h2 className="text-heading font-medium text-foreground">Team</h2>
         <p className="max-w-2xl text-body text-muted-foreground">
           Relationship owners, tags, dedup, and archived contacts.
@@ -110,7 +99,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
             <Link href="/admin/tags">Tags</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/admin/dedup">Dedup</Link>
+            <Link href="/admin/dedup">Duplicates</Link>
           </Button>
           <Button asChild variant="outline">
             <Link href="/admin/archived">Archived</Link>
@@ -132,23 +121,24 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
         {(params.calendar_connected ?? params.connected) ? (
           <p className="text-body text-foreground">
             Connected {params.calendar_connected ?? params.connected}. Run
-            calendar sync below to start the backfill.
+            calendar sync below to start loading past meetings.
           </p>
         ) : null}
         {calendarAccounts.some((account) => account.backfillPending) ? (
           <p className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-body text-foreground">
-            Backfill is queued for{" "}
+            Past meetings are queued to load for{" "}
             {calendarAccounts
               .filter((account) => account.backfillPending)
               .map((account) => account.email)
               .join(", ")}
-            . Load subscribed calendars below, choose which to sync, then run
-            backfill.
+            . Load subscribed calendars below, choose which ones, then load
+            past meetings.
           </p>
         ) : null}
         {calendarAccounts.some((account) => account.lastSyncError) ? (
           <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-body text-destructive">
-            Last calendar sync failed. Fix the error below before backfilling.
+            Last calendar sync failed. Fix the error below before loading past
+            meetings.
           </p>
         ) : null}
         {params.calendar_error ? (
@@ -196,11 +186,14 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-heading font-medium text-foreground">Inference</h2>
+        <h2 className="text-heading font-medium text-foreground">
+          Automatic connections
+        </h2>
         <p className="max-w-2xl text-body text-muted-foreground">
-          Infer profile-to-profile connections from shared event attendance
-          and normalised company names. Fill missing companies when colleagues
-          on the same work email domain already have a company set.
+          Find profile-to-profile connections from shared event attendance
+          and matching company names. Fill in missing companies when
+          colleagues on the same work email domain already have a company
+          set.
         </p>
         <div className="flex flex-wrap gap-3">
           <InferAllCoAttendanceButton />
@@ -210,9 +203,9 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
       </section>
 
       <section className="space-y-2 rounded-lg border border-border bg-card p-6">
-        <h2 className="text-heading font-medium text-foreground">Deferred</h2>
+        <h2 className="text-heading font-medium text-foreground">Coming later</h2>
         <ul className="list-disc space-y-1 pl-5 text-body text-muted-foreground">
-          <li>Email participant review queue (requires Gmail sync)</li>
+          <li>A review list for unmatched emails (needs Gmail set up first)</li>
         </ul>
       </section>
     </AdminPage>

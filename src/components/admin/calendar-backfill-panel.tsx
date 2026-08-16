@@ -260,14 +260,14 @@ export function CalendarBackfillPanel({
 
       if (failed) {
         await alert({
-          title: "Backfill finished with errors",
+          title: "Finished with some errors",
           description: errors.join("\n") || "Unknown error",
         });
         return;
       }
 
       toastSuccess(
-        `Backfill finished — ${processed.toLocaleString()} events processed`,
+        `Done — ${processed.toLocaleString()} past meetings loaded`,
       );
       router.push("/admin/calendar-sync/review");
     },
@@ -378,14 +378,14 @@ export function CalendarBackfillPanel({
     <div className="space-y-3 rounded-lg border border-border bg-card p-4">
       <div>
         <h3 className="text-body font-medium text-foreground">
-          Backfill calendars for {accountEmail}
+          Load past meetings for {accountEmail}
         </h3>
         <p className="mt-1 text-caption text-muted-foreground">
-          Load your subscribed Google calendars, choose which to pull, then run
-          backfill from Jun 2025 through the next six weeks. Large backfills run
-          in chunks so they do not time out — progress updates below. While a
-          backfill is running, you can uncheck queued calendars and click Skip
-          to drop them from the run.
+          Load your subscribed Google calendars, choose which ones to pull
+          from, then load past meetings from Jun 2025 through the next six
+          weeks. This loads in stages so it doesn&apos;t time out — progress
+          updates below. While it&apos;s running, you can uncheck calendars
+          still waiting and click Skip to drop them.
         </p>
         {lastSyncError ? (
           <p className="mt-2 text-caption text-destructive" role="alert">
@@ -398,7 +398,7 @@ export function CalendarBackfillPanel({
         <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
           <div className="flex items-center justify-between gap-2 text-caption">
             <span className="font-medium text-foreground">
-              {syncing ? "Backfill in progress" : "Backfill paused"}
+              {syncing ? "Loading in progress" : "Paused"}
             </span>
             {progressSummary ? (
               <span className="text-muted-foreground">
@@ -420,7 +420,7 @@ export function CalendarBackfillPanel({
             </>
           ) : (
             <p className="text-caption text-muted-foreground">
-              Resuming backfill…
+              Resuming…
             </p>
           )}
           {progressError ? (
@@ -429,8 +429,8 @@ export function CalendarBackfillPanel({
             </p>
           ) : null}
           <p className="text-caption text-muted-foreground">
-            Keep this tab open while backfill runs. If you navigate away, it
-            resumes when you return or on the next hourly sync.
+            Keep this tab open while this loads. If you navigate away, it
+            picks back up when you return or on the next hourly sync.
           </p>
           {!isDraining ? (
             <Button
@@ -442,7 +442,7 @@ export function CalendarBackfillPanel({
                 void drainBackfill();
               }}
             >
-              {syncing ? "Resume chunks" : "Continue backfill"}
+              {syncing ? "Resume" : "Continue"}
             </Button>
           ) : null}
         </div>
@@ -562,7 +562,7 @@ export function CalendarBackfillPanel({
                   if ("error" in result && result.error) {
                     setSyncing(false);
                     await alert({
-                      title: "Backfill failed",
+                      title: "Could not load past meetings",
                       description: result.error,
                     });
                     return;
@@ -593,8 +593,8 @@ export function CalendarBackfillPanel({
               }}
             >
               {syncing
-                ? "Backfill running…"
-                : `Run backfill (${selectedIds.length} selected)`}
+                ? "Loading…"
+                : `Load past meetings (${selectedIds.length} selected)`}
             </Button>
           </>
         ) : null}

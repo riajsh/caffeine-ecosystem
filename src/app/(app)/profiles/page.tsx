@@ -254,13 +254,18 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
       <div className="sticky top-0 z-20 shrink-0 bg-background">
         <PageHeader
           title="Profiles"
-          description="Everyone the org knows — filterable table view of the relationship spine."
+          description="Everyone your team knows — a filterable table of every profile."
         >
           <div className="flex flex-wrap items-center gap-2">
             {isAdmin ? (
               <Suspense fallback={null}>
                 <ProfilesEnrichToggle isActive={enrichMode} />
               </Suspense>
+            ) : null}
+            {isAdmin ? (
+              <Button asChild variant="outline">
+                <Link href="/profiles/import">Import profiles</Link>
+              </Button>
             ) : null}
             <Button asChild>
               <Link href="/profiles/new">New profile</Link>
@@ -309,7 +314,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
             sort={sort}
             order={order}
             hasActiveFilters={hasActiveFilters}
-            canImportDatasets={isAdmin}
+            canImportProfiles={isAdmin}
             enrichMode={enrichMode}
             enrichmentByProfileId={enrichmentByProfileId ?? undefined}
             teamUsers={teamUsers}

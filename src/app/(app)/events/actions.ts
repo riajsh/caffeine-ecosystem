@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   addEventAttendee,
+  addEventAttendeesBulk,
   createEvent,
   deleteEvent,
   removeEventAttendee,
@@ -12,6 +13,7 @@ import { inferCoAttendanceForEvent } from "@/lib/computed/infer-connections";
 import { searchProfilesForPicker } from "@/lib/data/profiles";
 import {
   addEventAttendeeSchema,
+  addEventAttendeesBulkSchema,
   createEventSchema,
   deleteEventSchema,
   removeEventAttendeeSchema,
@@ -69,6 +71,28 @@ export async function addEventAttendeeAction(formData: FormData) {
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Failed to add attendee",
+    };
+  }
+}
+
+export async function addEventAttendeesBulkAction(formData: FormData) {
+  const parsed = addEventAttendeesBulkSchema.safeParse({
+    eventId: formData.get("eventId"),
+    profileIds: formData.getAll("profileIds"),
+    tagWithEvent: formData.get("tagWithEvent") ?? "false",
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    const result = await addEventAttendeesBulk(parsed.data);
+    revalidateEvents(parsed.data.eventId);
+    return { success: true as const, ...result };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to add attendees",
     };
   }
 }

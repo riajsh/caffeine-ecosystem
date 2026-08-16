@@ -28,7 +28,7 @@ export default async function MePage() {
     <>
       <PageHeader
         title="My account"
-        description="Your workspace identity on the team."
+        description="Your identity on the team."
       />
       <div className="space-y-6 px-8 py-6">
         <section className="flex flex-wrap items-start gap-4 rounded-lg border border-border bg-card p-6">
