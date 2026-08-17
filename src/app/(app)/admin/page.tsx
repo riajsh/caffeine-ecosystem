@@ -11,11 +11,14 @@ import { CalendarAccountRow } from "@/components/admin/calendar-account-row";
 import { CalendarBackfillPanel } from "@/components/admin/calendar-backfill-panel";
 import { CalendarConnectButton } from "@/components/admin/calendar-connect-button";
 import { DeployChecklist } from "@/components/admin/deploy-checklist";
+import { EventbriteAccountRow } from "@/components/admin/eventbrite-account-row";
+import { EventbriteConnectForm } from "@/components/admin/eventbrite-connect-form";
 import { RunCalendarSyncButton } from "@/components/admin/run-calendar-sync-button";
 import { Button } from "@/components/ui/button";
 import { getPrimaryLoginDomain } from "@/lib/auth/allowed-email";
 import { requireAdmin } from "@/lib/auth/session";
 import { listCalendarAccountsForOrg } from "@/lib/data/calendar-accounts";
+import { getEventbriteAccountForOrg } from "@/lib/data/eventbrite-accounts";
 import { countIncompleteProfiles } from "@/lib/data/profiles";
 import { getDeployChecklist } from "@/lib/deploy/checklist";
 
@@ -42,6 +45,15 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
     calendarAccounts = await listCalendarAccountsForOrg();
   } catch {
     calendarAccounts = [];
+  }
+
+  let eventbriteAccount: Awaited<ReturnType<typeof getEventbriteAccountForOrg>> =
+    null;
+
+  try {
+    eventbriteAccount = await getEventbriteAccountForOrg();
+  } catch {
+    eventbriteAccount = null;
   }
 
   return (
@@ -182,6 +194,27 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           <p className="text-caption text-muted-foreground">
             No calendar accounts connected yet.
           </p>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-heading font-medium text-foreground">
+          Eventbrite
+        </h2>
+        <p className="max-w-2xl text-body text-muted-foreground">
+          Connect your Eventbrite account with a private token. This is an
+          early first step (see the Eventbrite item on the someday list) —
+          right now it just connects the account; pulling attendee lists
+          automatically comes next.
+        </p>
+        {eventbriteAccount && eventbriteAccount.syncEnabled ? (
+          <EventbriteAccountRow
+            accountName={eventbriteAccount.accountName}
+            accountEmail={eventbriteAccount.accountEmail}
+            connectedByName={eventbriteAccount.connectedByName}
+          />
+        ) : (
+          <EventbriteConnectForm />
         )}
       </section>
 

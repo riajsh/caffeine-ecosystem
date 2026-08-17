@@ -4,6 +4,23 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-17 (18)
+
+**Built: Eventbrite connect screen (Phase 1 of the Eventbrite plan)**
+
+- **What we built:** A new "Eventbrite" section in Admin where you paste your private Eventbrite token once. We check it against Eventbrite immediately (so a typo or bad token is caught right away), then store it encrypted the same way your Google Calendar connection is stored. Once connected, it shows the account name/email and a Disconnect button.
+- **What this doesn't do yet:** This is just the connection — no attendee lists are pulled in yet. That's Phases 2 and 3 from `docs/specs/eventbrite-sync.md` (picking which Eventbrite event maps to which Caffeine event, then actually pulling attendees on a schedule). Recommended next step per that plan: confirm this connects cleanly and reliably before building further.
+- **What you need to do:** Run the migration below in Supabase SQL Editor, then paste your private token into the new Eventbrite section on the Admin page once the code is deployed.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings as before).
+
+## 2026-08-17 (17)
+
+**Scoped out (not built): an Eventbrite integration**
+
+- **What we did:** Ria asked whether Eventbrite could plug in directly instead of exporting attendee lists as a CSV. Researched Eventbrite's current API, wrote up a full plan mirroring the same pattern already proven for Google Calendar sync — `docs/decisions/0011-eventbrite-sync.md` (the design decision) and `docs/specs/eventbrite-sync.md` (the detailed spec).
+- **Important flag:** Eventbrite's developer platform looks genuinely unstable right now (acquired by Bending Spoons in March 2026, followed by major layoffs; API support is community-only, not a real support team). Before any building starts, there's a 5-minute check to do first: confirm a private API token can actually be generated in Ria's own Eventbrite account settings. If not, this isn't worth pursuing and the existing CSV-export-then-upload flow remains the answer.
+- **Nothing built yet** — this is planning only, logged on the Someday list until Ria decides to move forward.
+
 ## 2026-08-17 (16)
 
 **Fixed: renaming an event didn't update the event tag on already-tagged profiles**

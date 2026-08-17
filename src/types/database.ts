@@ -624,6 +624,63 @@ export type Database = {
           },
         ]
       }
+      eventbrite_accounts: {
+        Row: {
+          access_token: string
+          account_email: string | null
+          account_name: string | null
+          connected_by: string
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          metadata: Json
+          org_id: string
+          sync_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          account_email?: string | null
+          account_name?: string | null
+          connected_by: string
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          metadata?: Json
+          org_id: string
+          sync_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          account_email?: string | null
+          account_name?: string | null
+          connected_by?: string
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          metadata?: Json
+          org_id?: string
+          sync_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eventbrite_accounts_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventbrite_accounts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           created_at: string

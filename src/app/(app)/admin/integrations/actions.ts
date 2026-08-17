@@ -7,6 +7,10 @@ import {
   disconnectCalendarAccount,
   getCalendarAccountForSync,
 } from "@/lib/data/calendar-accounts";
+import {
+  connectEventbriteAccount,
+  disconnectEventbriteAccount,
+} from "@/lib/data/eventbrite-accounts";
 import { listSubscribedCalendarsForPicker } from "@/lib/integrations/calendar/calendar-list";
 import { getCalendarClient } from "@/lib/integrations/calendar/client";
 import { formatGoogleCalendarError } from "@/lib/integrations/calendar/google-errors";
@@ -42,6 +46,45 @@ export async function disconnectCalendarAccountAction(accountId: string) {
         error instanceof Error
           ? error.message
           : "Failed to disconnect calendar account",
+    };
+  }
+}
+
+export async function connectEventbriteAccountAction(formData: FormData) {
+  await requireAdmin();
+
+  const token = formData.get("token");
+  if (typeof token !== "string" || !token.trim()) {
+    return { error: "Paste your Eventbrite private token first." };
+  }
+
+  try {
+    const account = await connectEventbriteAccount(token);
+    revalidatePath("/admin");
+    return { success: true as const, account };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to connect Eventbrite",
+    };
+  }
+}
+
+export async function disconnectEventbriteAccountAction() {
+  await requireAdmin();
+
+  try {
+    await disconnectEventbriteAccount();
+    revalidatePath("/admin");
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to disconnect Eventbrite",
     };
   }
 }
