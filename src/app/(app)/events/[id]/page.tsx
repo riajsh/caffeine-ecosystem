@@ -5,11 +5,8 @@ import { PageHeader } from "@/components/app-shell/page-header";
 import { AddEventAttendeeForm } from "@/components/events/add-event-attendee-form";
 import { EventAttendeesTable } from "@/components/events/event-attendees-table";
 import { EventConnectionsSection } from "@/components/events/event-connections-section";
-import { Badge } from "@/components/ui/badge";
+import { EventSummarySection } from "@/components/events/event-summary-section";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
-import { InferCoAttendanceButton } from "@/components/events/infer-co-attendance-button";
-import { formatInteractionDate } from "@/lib/format/date";
-import { formatEnumLabel } from "@/lib/format/enum";
 import {
   getProfileEventAttendanceCounts,
 } from "@/lib/computed/event-attendance";
@@ -49,32 +46,15 @@ export default async function EventPage({ params }: EventPageProps) {
         <DeleteEventButton eventId={event.id} eventTitle={event.title} />
       </PageHeader>
       <div className="space-y-8 px-8 py-6">
-        <section className="space-y-3 rounded-lg border border-border bg-card p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{formatEnumLabel(event.eventType)}</Badge>
-            <span className="text-body text-muted-foreground">
-              {formatInteractionDate(event.eventDate)}
-            </span>
-            {event.location ? (
-              <span className="text-body text-muted-foreground">
-                · {event.location}
-              </span>
-            ) : null}
-            <span className="text-body text-muted-foreground">
-              · {event.attendeeCount} attendee
-              {event.attendeeCount === 1 ? "" : "s"}
-            </span>
-          </div>
-          {event.description ? (
-            <p className="max-w-3xl text-body text-foreground">{event.description}</p>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-3">
-            <InferCoAttendanceButton
-              eventId={event.id}
-              attendeeCount={event.attendeeCount}
-            />
-          </div>
-        </section>
+        <EventSummarySection
+          eventId={event.id}
+          title={event.title}
+          description={event.description}
+          eventType={event.eventType}
+          eventDate={event.eventDate}
+          location={event.location}
+          attendeeCount={event.attendeeCount}
+        />
 
         <section className="space-y-4">
           <h2 className="text-heading font-medium text-foreground">Attendees</h2>

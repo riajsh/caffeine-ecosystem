@@ -7,8 +7,8 @@ import {
   attachImportToEvent,
   backfillImportProfiles,
   cancelImport,
-  commitImport,
   deleteImport,
+  getImportProgress,
   reopenImport,
   resolveSoftMatch,
   runImportDedup,
@@ -239,7 +239,14 @@ export async function resolveSoftMatchAction(formData: FormData) {
   }
 }
 
-export async function commitImportAction(formData: FormData) {
+/**
+ * One-time prep before completing an import: attaches (or creates) the
+ * chosen event, if any. Does NOT run the commit itself — the actual work
+ * happens in small automatic bursts against /api/profiles/import/[id]/chunk,
+ * driven by the browser, so no single request runs long enough to risk a
+ * platform timeout or hold onto the database's connections for minutes.
+ */
+export async function prepareCommitAction(formData: FormData) {
   const parsedId = importIdSchema.safeParse(formData.get("importId"));
 
   if (!parsedId.success) {
@@ -273,14 +280,31 @@ export async function commitImportAction(formData: FormData) {
       await attachImportToEvent(parsedId.data, parsedEventId.data);
     }
 
-    await commitImport(parsedId.data);
     revalidateImport(parsedId.data);
     revalidatePath("/events");
     return { success: true as const };
   } catch (error) {
     return {
       error:
-        error instanceof Error ? error.message : "Failed to complete import",
+        error instanceof Error ? error.message : "Failed to prepare import",
+    };
+  }
+}
+
+export async function getImportProgressAction(importId: string) {
+  const parsedId = importIdSchema.safeParse(importId);
+
+  if (!parsedId.success) {
+    return { error: "Invalid import ID" };
+  }
+
+  try {
+    const progress = await getImportProgress(parsedId.data);
+    return { progress };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Failed to load progress",
     };
   }
 }

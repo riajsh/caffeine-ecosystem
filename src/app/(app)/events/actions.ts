@@ -8,6 +8,7 @@ import {
   createEvent,
   deleteEvent,
   removeEventAttendee,
+  updateEvent,
 } from "@/lib/data/events";
 import { inferCoAttendanceForEvent } from "@/lib/computed/infer-connections";
 import { searchProfilesForPicker } from "@/lib/data/profiles";
@@ -17,6 +18,7 @@ import {
   createEventSchema,
   deleteEventSchema,
   removeEventAttendeeSchema,
+  updateEventSchema,
 } from "@/lib/validators/events";
 
 function revalidateEvents(eventId?: string) {
@@ -49,6 +51,31 @@ export async function createEventAction(formData: FormData) {
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Failed to create event",
+    };
+  }
+}
+
+export async function updateEventAction(formData: FormData) {
+  const parsed = updateEventSchema.safeParse({
+    eventId: formData.get("eventId"),
+    title: formData.get("title"),
+    description: formData.get("description") ?? undefined,
+    eventType: formData.get("eventType"),
+    eventDate: formData.get("eventDate"),
+    location: formData.get("location") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await updateEvent(parsed.data);
+    revalidateEvents(parsed.data.eventId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to update event",
     };
   }
 }

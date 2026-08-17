@@ -96,19 +96,6 @@ export function isNonPersonParticipant(email: string): boolean {
   return NON_PERSON_EMAIL_PATTERNS.some((pattern) => pattern.test(normalised));
 }
 
-function collectDomains(emails: Iterable<string>): Set<string> {
-  const domains = new Set<string>();
-
-  for (const email of emails) {
-    const domain = extractEmailDomain(normaliseEmail(email));
-    if (domain) {
-      domains.add(domain);
-    }
-  }
-
-  return domains;
-}
-
 function loadConfiguredInternalDomains(): Set<string> {
   const raw = process.env.ORG_INTERNAL_EMAIL_DOMAINS ?? "";
   return new Set(
@@ -145,21 +132,27 @@ export async function loadOrgParticipantFilters(
     );
   }
 
+  // Exact-match only: these are the team's own accounts (logins, connected
+  // Gmail/Calendar accounts), so their specific addresses are always "us" —
+  // regardless of what email domain they happen to use.
   const teamEmails = new Set(
-    (usersResult.data ?? [])
-      .map((row) => row.email?.trim().toLowerCase())
+    [
+      ...(usersResult.data ?? []).map((row) => row.email),
+      ...(gmailResult.data ?? []).map((row) => row.email),
+      ...(calendarResult.data ?? []).map((row) => row.email),
+    ]
+      .map((email) => email?.trim().toLowerCase())
       .filter((email): email is string => Boolean(email)),
   );
 
-  const internalDomains = collectDomains([
-    ...teamEmails,
-    ...(gmailResult.data ?? []).map((row) => row.email),
-    ...(calendarResult.data ?? []).map((row) => row.email),
-  ]);
-
-  for (const domain of loadConfiguredInternalDomains()) {
-    internalDomains.add(domain);
-  }
+  // Domain-wide "everyone on this domain is internal" only applies to
+  // domains explicitly configured via ORG_INTERNAL_EMAIL_DOMAINS. We
+  // deliberately do NOT widen this to the domain of every team member's
+  // address — otherwise one teammate on a shared/company domain (e.g.
+  // James at previously.co) would cause every other contact on that same
+  // domain to be misclassified as internal and lose normal profile
+  // behaviour (deletable, mergeable, etc).
+  const internalDomains = loadConfiguredInternalDomains();
 
   return { teamEmails, internalDomains };
 }

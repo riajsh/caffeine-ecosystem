@@ -10,6 +10,7 @@ import type {
   AddEventAttendeeInput,
   AddEventAttendeesBulkInput,
   CreateEventInput,
+  UpdateEventInput,
 } from "@/lib/validators/events";
 import type { Database } from "@/types/database";
 
@@ -413,6 +414,114 @@ export async function createEvent(input: CreateEventInput): Promise<EventListIte
   };
 }
 
+export async function updateEvent(input: UpdateEventInput): Promise<void> {
+  await requireUser();
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+
+  const existingEvent = await assertEventInOrg(input.eventId, orgId);
+
+  const { error } = await supabase
+    .from("events")
+    .update({
+      title: input.title,
+      description: input.description ?? null,
+      event_type: input.eventType,
+      event_date: new Date(input.eventDate).toISOString(),
+      location: input.location ?? null,
+    })
+    .eq("id", input.eventId)
+    .eq("org_id", orgId);
+
+  if (error) {
+    throw new Error(`Failed to update event: ${error.message}`);
+  }
+
+  if (existingEvent.title !== input.title) {
+    await renameEventAttendeeTag(supabase, orgId, existingEvent.title, input.title);
+  }
+}
+
+/**
+ * Every attendee tagged via an event-attached upload (or the bulk "add to
+ * event" action) gets a tag literally named after the event's title at that
+ * moment — it's not a live reference back to the event. So renaming an
+ * event leaves everyone's tag showing the old name unless we also rename
+ * the tag here. If a tag with the new name already exists (e.g. it
+ * coincidentally matches another event), merge into it instead of failing.
+ */
+async function renameEventAttendeeTag(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  oldTitle: string,
+  newTitle: string,
+): Promise<void> {
+  const { data: oldTag } = await supabase
+    .from("tags")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("category", "events")
+    .eq("name", oldTitle)
+    .maybeSingle();
+
+  if (!oldTag) {
+    // No one was ever tagged under the old name — nothing to rename.
+    return;
+  }
+
+  const { error: renameError } = await supabase
+    .from("tags")
+    .update({ name: newTitle })
+    .eq("id", oldTag.id)
+    .eq("org_id", orgId);
+
+  if (!renameError) {
+    return;
+  }
+
+  const { data: existingNewTag } = await supabase
+    .from("tags")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("name", newTitle)
+    .maybeSingle();
+
+  if (!existingNewTag) {
+    throw new Error(`Failed to rename event tag: ${renameError.message}`);
+  }
+
+  const { data: linkedProfiles } = await supabase
+    .from("profile_tags")
+    .select("profile_id")
+    .eq("org_id", orgId)
+    .eq("tag_id", oldTag.id);
+
+  for (const { profile_id: profileId } of linkedProfiles ?? []) {
+    const { data: alreadyLinked } = await supabase
+      .from("profile_tags")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("profile_id", profileId)
+      .eq("tag_id", existingNewTag.id)
+      .maybeSingle();
+
+    if (!alreadyLinked) {
+      await supabase.from("profile_tags").insert({
+        org_id: orgId,
+        profile_id: profileId,
+        tag_id: existingNewTag.id,
+      });
+    }
+  }
+
+  await supabase
+    .from("profile_tags")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("tag_id", oldTag.id);
+  await supabase.from("tags").delete().eq("id", oldTag.id).eq("org_id", orgId);
+}
+
 export async function addEventAttendee(
   input: AddEventAttendeeInput,
 ): Promise<void> {
@@ -485,8 +594,23 @@ export async function addEventAttendeesBulk(
         .single();
 
       if (createTagError) {
-        tagWarning =
-          "Attendees were added, but tagging didn't work — the database may still need the \"Events\" tag category added.";
+        if (createTagError.code === "23505") {
+          // Someone else (e.g. an import committing at the same time)
+          // created this tag a moment earlier — just reuse it.
+          const { data: raceTag } = await supabase
+            .from("tags")
+            .select("id")
+            .eq("org_id", orgId)
+            .eq("name", event.title)
+            .maybeSingle();
+          tagId = raceTag?.id ?? null;
+          if (!tagId) {
+            tagWarning = "Attendees were added, but the event tag couldn't be created.";
+          }
+        } else {
+          tagWarning =
+            "Attendees were added, but tagging didn't work — the database may still need the \"Events\" tag category added.";
+        }
       } else {
         tagId = createdTag.id;
       }

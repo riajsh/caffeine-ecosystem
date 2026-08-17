@@ -1050,10 +1050,15 @@ async function rollbackImportCommitProgress(
   for (const snapshot of Object.values(progress.deletedProfileSnapshots)) {
     // Best-effort: restores the deleted profile row itself. Relationships,
     // tags, and event attendance that were cascade-deleted with it are not
-    // recreated.
+    // recreated. Upsert (rather than insert) so this stays safe to run
+    // twice — e.g. if a Cancel click and this same commit's own failure
+    // handling both race to roll back the same "replace" row.
     await supabase
       .from("profiles")
-      .insert(snapshot as Database["public"]["Tables"]["profiles"]["Insert"]);
+      .upsert(snapshot as Database["public"]["Tables"]["profiles"]["Insert"], {
+        onConflict: "id",
+        ignoreDuplicates: true,
+      });
   }
 
   await applyImportCommitRollbacks(supabase, orgId, progress.graphRollbacks);
@@ -1399,7 +1404,22 @@ export async function resolveSoftMatch(
     .eq("org_id", orgId);
 }
 
-export async function commitImport(importId: string): Promise<CommitSummary> {
+export type CommitBurstResult = {
+  hasMore: boolean;
+  summary: CommitSummary;
+};
+
+/**
+ * Processes one bounded "burst" of rows (a handful of small batches) and
+ * returns. It does NOT loop until the whole file is done — that would mean
+ * one huge request running for minutes, which risks a platform timeout and
+ * ties up a chunk of the database's connection pool the entire time (this
+ * was the actual cause of the platform-wide slowdown during big uploads).
+ * The caller (the chunk API route) is expected to call this repeatedly,
+ * driven by the browser, until `hasMore` is false — the exact same pattern
+ * already used for calendar sync bursts.
+ */
+export async function commitImport(importId: string): Promise<CommitBurstResult> {
   const user = await requireAdmin();
   const orgId = await getOrgId();
   const supabase = await createClient();
@@ -1461,6 +1481,11 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
   }));
 
   const COMMIT_ROWS_PER_CHUNK = 150;
+  // How many small (6-row) batches to process before returning control to
+  // the caller for this burst — roughly 48 rows per server round-trip, kept
+  // deliberately small so a single call always finishes in a few seconds
+  // regardless of how large the whole file is.
+  const COMMIT_BURST_BATCHES = 8;
   const isResume =
     importRecord.status === "processing" && Boolean(metadata.commit_checkpoint);
 
@@ -1556,7 +1581,10 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
       return;
     }
 
-    const matchedResults = await runConcurrentMap(batch, 6, async (row) => {
+    // Same reasoning as flushNewBatch: record each row's outcome the
+    // instant it succeeds, so a sibling row failing later in this batch
+    // can't leave an earlier row's changes untracked for rollback.
+    await runConcurrentMap(batch, 6, async (row) => {
       const normalized = normalizeRowFromImport(
         row.raw,
         headers,
@@ -1590,19 +1618,15 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           event,
         });
 
-      return { ownerWarnings, profileSnapshot, graphRollback, profileId };
-    });
-
-    for (const result of matchedResults) {
-      if (result.profileSnapshot) {
-        updatedProfileSnapshots.set(result.profileId, result.profileSnapshot);
+      if (profileSnapshot) {
+        updatedProfileSnapshots.set(profileId, profileSnapshot);
       }
-      if (result.graphRollback) {
-        graphRollbacks.push(result.graphRollback);
+      if (graphRollback) {
+        graphRollbacks.push(graphRollback);
       }
       summary.updated += 1;
-      summary.ownerWarnings += result.ownerWarnings;
-    }
+      summary.ownerWarnings += ownerWarnings;
+    });
   }
 
   async function flushNewBatch(batch: ImportCommitRow[]) {
@@ -1610,7 +1634,12 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
       return;
     }
 
-    const newResults = await runConcurrentMap(batch, 6, async (row) => {
+    // Every side effect below is recorded the instant it succeeds, rather
+    // than being collected and applied after the whole batch resolves. If a
+    // sibling row in this same batch fails partway through, the profiles
+    // this batch already created are still tracked and can still be rolled
+    // back — none of them are left orphaned.
+    await runConcurrentMap(batch, 6, async (row) => {
       const normalized = normalizeRowFromImport(
         row.raw,
         headers,
@@ -1642,7 +1671,7 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
         }
       }
 
-      const { profileId, ownerWarnings } = await createProfileFromImportRow({
+      const result = await createProfileFromImportRow({
         orgId,
         importId,
         userId: user.id,
@@ -1652,15 +1681,17 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
         event,
       });
 
-      return { rowNumber: row.row_number, profileId, ownerWarnings };
-    });
+      if (result.outcome === "skipped_race") {
+        profileIdByRowNumber.set(row.row_number, result.existingProfileId);
+        summary.skipped += 1;
+        return;
+      }
 
-    for (const result of newResults) {
-      profileIdByRowNumber.set(result.rowNumber, result.profileId);
+      profileIdByRowNumber.set(row.row_number, result.profileId);
       createdProfileIds.push(result.profileId);
       summary.created += 1;
       summary.ownerWarnings += result.ownerWarnings;
-    }
+    });
   }
 
   async function persistCheckpoint(nextRowIndex: number) {
@@ -1705,12 +1736,40 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
     }
   }
 
+  async function checkpointAndCheckCancelled(nextRowIndex: number) {
+    await persistCheckpoint(nextRowIndex);
+
+    if (nextRowIndex >= sortedCommitRows.length) {
+      return;
+    }
+
+    // Cooperative cancellation: if an admin cancelled this import while we
+    // were mid-flight, the row is now gone — stop here rather than keep
+    // writing. The catch block below undoes everything committed so far.
+    // Checked after every small batch (not just every 150 rows) so a
+    // cancel takes effect quickly even on imports far smaller than one
+    // full chunk.
+    const { data: stillExists } = await supabase
+      .from("imports")
+      .select("id")
+      .eq("id", importId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+
+    if (!stillExists) {
+      throw new Error("Import was cancelled");
+    }
+  }
+
   try {
     if (!isResume) {
       await persistCheckpoint(0);
     }
 
-    while (startIndex < sortedCommitRows.length) {
+    let batchesThisBurst = 0;
+    let burstLimitReached = false;
+
+    outer: while (startIndex < sortedCommitRows.length) {
       const endIndex = Math.min(
         startIndex + COMMIT_ROWS_PER_CHUNK,
         sortedCommitRows.length,
@@ -1719,7 +1778,9 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
       let matchedBatch: ImportCommitRow[] = [];
       let newBatch: ImportCommitRow[] = [];
 
-      for (const row of chunk) {
+      for (let chunkOffset = 0; chunkOffset < chunk.length; chunkOffset += 1) {
+        const row = chunk[chunkOffset];
+
         if (row.dedup_status === "new") {
           // A row can only merge into an earlier in-file row (never a later
           // one), so any "new" rows queued up here are safe to create
@@ -1733,6 +1794,12 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           if (newBatch.length >= 6) {
             await flushNewBatch(newBatch);
             newBatch = [];
+            await checkpointAndCheckCancelled(startIndex + chunkOffset + 1);
+            batchesThisBurst += 1;
+            if (batchesThisBurst >= COMMIT_BURST_BATCHES) {
+              burstLimitReached = true;
+              break outer;
+            }
           }
         } else {
           await flushNewBatch(newBatch);
@@ -1742,6 +1809,12 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
           if (matchedBatch.length >= 6) {
             await flushMatchedBatch(matchedBatch);
             matchedBatch = [];
+            await checkpointAndCheckCancelled(startIndex + chunkOffset + 1);
+            batchesThisBurst += 1;
+            if (batchesThisBurst >= COMMIT_BURST_BATCHES) {
+              burstLimitReached = true;
+              break outer;
+            }
           }
         }
       }
@@ -1751,22 +1824,17 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
       startIndex = endIndex;
 
       if (startIndex < sortedCommitRows.length) {
-        await persistCheckpoint(startIndex);
-
-        // Cooperative cancellation: if an admin cancelled this import while
-        // this chunk was running, the row is now gone — stop here rather
-        // than keep writing. The catch block below undoes this chunk too.
-        const { data: stillExists } = await supabase
-          .from("imports")
-          .select("id")
-          .eq("id", importId)
-          .eq("org_id", orgId)
-          .maybeSingle();
-
-        if (!stillExists) {
-          throw new Error("Import was cancelled");
-        }
+        await checkpointAndCheckCancelled(startIndex);
       }
+    }
+
+    if (burstLimitReached) {
+      // Stop here and hand control back to the caller — the trailing rows
+      // of whatever batch we stopped mid-chunk on haven't been flushed, but
+      // that's fine: the checkpoint's next_row_index already points right
+      // after the last batch we did flush, so the next burst picks up
+      // exactly there.
+      return { hasMore: true, summary: { ...summary } };
     }
 
     if (event) {
@@ -1795,7 +1863,7 @@ export async function commitImport(importId: string): Promise<CommitSummary> {
       throw new Error(completeError.message);
     }
 
-    return summary;
+    return { hasMore: false, summary };
   } catch (error) {
     await rollbackImportCommitProgress(supabase, orgId, {
       createdProfileIds,
@@ -1857,6 +1925,46 @@ export async function attachImportToEvent(
   }
 }
 
+export type ImportProgress = {
+  status: ImportStatus;
+  processedRows: number;
+  totalRows: number;
+  summary: CommitSummary | null;
+};
+
+export async function getImportProgress(importId: string): Promise<ImportProgress> {
+  await requireAdmin();
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+  const importRecord = await getImportRecord(importId, orgId);
+  const metadata = parseMetadata(importRecord.metadata);
+  const checkpoint = metadata.commit_checkpoint;
+
+  const { count, error } = await supabase
+    .from("import_rows")
+    .select("id", { count: "exact", head: true })
+    .eq("import_id", importId)
+    .in("dedup_status", ["new", "matched_email"]);
+
+  if (error) {
+    throw new Error(`Failed to load import progress: ${error.message}`);
+  }
+
+  const totalRows = count ?? 0;
+  const processedRows = checkpoint
+    ? checkpoint.next_row_index
+    : importRecord.status === "complete"
+      ? totalRows
+      : 0;
+
+  return {
+    status: importRecord.status,
+    processedRows,
+    totalRows,
+    summary: checkpoint?.partial_summary ?? metadata.commit_summary ?? null,
+  };
+}
+
 export async function reopenImport(importId: string): Promise<void> {
   await requireAdmin();
   const orgId = await getOrgId();
@@ -1914,7 +2022,10 @@ type CommitContext = {
 
 async function createProfileFromImportRow(
   context: CommitContext,
-): Promise<{ profileId: string; ownerWarnings: number }> {
+): Promise<
+  | { outcome: "created"; profileId: string; ownerWarnings: number }
+  | { outcome: "skipped_race"; existingProfileId: string }
+> {
   const supabase = await createClient();
   const { orgId, normalized, importId, userId, sourceLabel, orgUsers, event } =
     context;
@@ -1941,6 +2052,24 @@ async function createProfileFromImportRow(
     .single();
 
   if (profileError) {
+    // Rows are committed in concurrent batches, so another row (or another
+    // import committing at the same time) can create a profile with this
+    // exact email a moment earlier. Treat that the same way we already
+    // treat a duplicate email within one file: skip this row rather than
+    // failing the whole commit.
+    if (profileError.code === "23505" && normalized.email) {
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("org_id", orgId)
+        .ilike("email", normalized.email)
+        .maybeSingle();
+
+      if (existing) {
+        return { outcome: "skipped_race", existingProfileId: existing.id };
+      }
+    }
+
     throw new Error(`Failed to create profile: ${profileError.message}`);
   }
 
@@ -1955,7 +2084,7 @@ async function createProfileFromImportRow(
     event,
   });
 
-  return { profileId: profile.id, ownerWarnings };
+  return { outcome: "created", profileId: profile.id, ownerWarnings };
 }
 
 async function updateProfileFromImportRow(
@@ -2253,13 +2382,31 @@ async function ensureRelationshipGraph(input: {
         .single();
 
       if (createTagError) {
-        throw new Error(`Failed to create tag: ${createTagError.message}`);
-      }
+        // Rows are committed in concurrent batches, so another row can
+        // create the same-named tag a moment earlier — that's not a real
+        // failure, just re-use the tag it created instead of throwing.
+        if (createTagError.code === "23505") {
+          const { data: raceTag, error: raceTagError } = await supabase
+            .from("tags")
+            .select("id")
+            .eq("org_id", orgId)
+            .eq("name", tagName)
+            .maybeSingle();
 
-      tagId = createdTagRow.id;
-      createdTag = true;
-      graphRollback.createdTagIds.push(tagId);
-      trackedRollback = true;
+          if (raceTagError || !raceTag) {
+            throw new Error(`Failed to create tag: ${createTagError.message}`);
+          }
+
+          tagId = raceTag.id;
+        } else {
+          throw new Error(`Failed to create tag: ${createTagError.message}`);
+        }
+      } else {
+        tagId = createdTagRow.id;
+        createdTag = true;
+        graphRollback.createdTagIds.push(tagId);
+        trackedRollback = true;
+      }
     }
 
     const { data: existingProfileTag, error: existingProfileTagError } =

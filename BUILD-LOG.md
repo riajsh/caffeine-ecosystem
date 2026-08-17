@@ -4,6 +4,69 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-17 (16)
+
+**Fixed: renaming an event didn't update the event tag on already-tagged profiles**
+
+- **What was wrong:** Attendees get tagged with the event's name at the moment they're tagged (during an event-attached upload, or the bulk "add to event" action) — but that tag is just a plain label with that name, not a live link back to the event. So when the event was later renamed, everyone already tagged still showed the old name.
+- **What we changed:** Renaming an event now also renames its attendees' tag to match, so everyone stays showing the current name. If the new name happens to collide with an existing tag (rare), we merge into it rather than erroring.
+- **For the event you already renamed:** this fix only applies going forward — the tag from before the fix won't retroactively update itself. To fix that one: edit the event, save it as something slightly different, then edit it again back to the correct name. Each save now correctly renames the tag, so two saves gets it to the right place.
+
+## 2026-08-17 (15)
+
+**Added: you can now edit an event after it's created**
+
+- **What we built:** An "Edit event" button on the event's page lets you change the title, type, date, location, and description at any time — not just when first creating it. Same fields as the "New event" form, just pre-filled with what's already there.
+- **Why it matters:** Event details aren't always right the first time (wrong date, typo in the name, added a location later) — now that's a quick fix instead of deleting and recreating the whole event (which would have lost all its attendees).
+
+## 2026-08-17 (14)
+
+**Reworked: "Complete" no longer runs as one giant request**
+
+- **What was wrong:** Completing an import ran as a single, continuous request from start to finish. For a bigger file, that one request could run for minutes — which risked the hosting platform cutting it off outright, and tied up a chunk of the database's limited connections for the whole time, which is very likely why the rest of the app went sluggish at the same moment. At 2,000 profiles, this would have very likely failed outright rather than just being slow.
+- **What we changed:** "Complete" now runs the same way "Load past meetings" already does — in small, quick bursts (about 48 people each) that the browser automatically re-requests one after another until the whole file is done, instead of one long call. Each burst finishes in a few seconds, so there's no single request long enough to time out or hog the database. If you close the tab or it gets interrupted partway, reopening the import picks it back up automatically — no manual "Resume" click needed (though the button's still there as a backup).
+- **Checked this works:** ran the exact logic through test files of 40, 150, 400, and 2,000 rows — every case broke into a clean series of short bursts (2,000 rows = 42 quick bursts, none processing more than 48 rows at a time).
+- **Why it matters:** this should fix the freezing you saw, and makes a 2,000-row upload something the platform can actually handle reliably, not just "hopefully fast enough."
+
+## 2026-08-17 (13)
+
+**Fixed: "Complete" looked frozen, and Cancel didn't actually stop it**
+
+- **What was wrong:** The system only checked in on a running "Complete" every 150 people — useful for genuinely huge files, but most of your uploads are well under 150 people, so that check-in never happened at all. In practice this meant: the new progress bar stayed at 0% the entire time (looking exactly like a freeze), and clicking Cancel had no effect until the very end, because the running import never paused to notice it had been cancelled — it just kept going and finished anyway.
+- **What we changed:** That check-in (saving progress, and noticing if you've hit Cancel) now happens every 6 people instead of every 150. For a typical list, you'll now see the progress bar move in real time, and Cancel will actually take effect within a few seconds instead of being ignored.
+- **Why it matters:** This was the real cause behind both "it looks frozen" and "cancel didn't work, it uploaded anyway."
+
+## 2026-08-17 (12)
+
+**Fixed: a failed "Complete" could leave behind profiles that cancel/rollback couldn't find**
+
+- **What was wrong:** Last week's speed-up (creating profiles 6 at a time) had a gap — if one of those 6 failed partway through, the system's "list of things to undo" never got told about the other 5 that had already succeeded. So when the automatic rollback ran (or you clicked Cancel afterward), it correctly undid what it knew about, but silently missed anyone created in the same group of 6 as the one that failed.
+- **What we changed:** Every profile created is now logged the instant it happens, not after its whole group of 6 finishes — so nothing in a partially-failed group can go untracked anymore. We also made the specific error you hit (two people racing to use the same email) non-fatal: the second one is now just skipped, like any other duplicate, instead of failing the whole import.
+- **Still worth checking:** any profiles left behind by the failed run you had *before* this fix won't be automatically cleaned up — worth a quick look at Profiles for that upload's people and removing obvious duplicates if you spot any (deleting should work normally now).
+
+## 2026-08-17 (11)
+
+**Added: a real progress bar on the "Complete" step**
+
+- **What we built:** While an import is completing (or resuming after being interrupted), you'll now see an actual progress bar with "X of Y profiles processed" underneath, updating every couple of seconds — not just a spinner and a "this might take a minute" note.
+- **Note:** the very first "Uploading & checking…" step (right after choosing your file) doesn't have this yet — it happens in one go rather than in trackable steps, so there's no real percentage to show for that part yet. That part is normally quick.
+
+## 2026-08-17 (10)
+
+**Fixed: "Complete" could fail with "duplicate key value violates unique constraint" on tags**
+
+- **What was wrong:** A side effect of last week's speed-up (creating profiles 6 at a time instead of one at a time) — if several of those 6 people needed the *same* tag at the same moment (most commonly: everyone in an event-attached upload getting tagged with that event's name), two of them could both try to create that tag at the exact same instant. The database only allows one, so the second one failed and took the whole "Complete" step down with it.
+- **What we changed:** If that happens now, the row that lost the race just reuses the tag the other one created, instead of throwing an error. Same fix applied to the new "add to event + tag" action on the event page, in case two people try to tag the same event at once.
+- **Why it matters:** Attaching an upload to an event (which tags every single attendee with the same event name) is exactly the situation most likely to trigger this, so it should have been showing up often. Completing an import should no longer fail here.
+
+## 2026-08-17 (9)
+
+**Fixed: @previously.co people were still being treated as team members, again**
+
+- **What was wrong:** We'd already narrowed the "internal team" domain to `caffeinedaily.co` so Previously Unavailable contacts wouldn't be mistaken for teammates. But the system was quietly re-widening it anyway: because James (a real team member) logs in with a `@previously.co` address, the code was pulling `previously.co` back out as an "internal domain" from his exact address — which meant every other contact at that company (Phoebe, Susie, etc.) got swept up as "internal" again, blocking deleting or merging them.
+- **What we changed:** James (and any teammate's connected Gmail/Calendar account) is now recognised only by their exact address, never by treating their whole email domain as internal. Only the domain explicitly set as the team's own (`caffeinedaily.co`) grants that broader treatment.
+- **Why it matters:** Anyone at Previously Unavailable is now a normal, fully-editable profile — deletable, mergeable, no special rules — while James still logs in and is still recognised as team, exactly as before. Nothing to run in Supabase for this one; it takes effect immediately since this is calculated fresh each time, not stored.
+
 ## 2026-08-17 (8)
 
 **Moved: "connect to an event" now shows up at upload time, not just at the end**

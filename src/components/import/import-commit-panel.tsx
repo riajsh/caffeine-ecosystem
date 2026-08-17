@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
-import { commitImportAction, reopenImportAction } from "@/app/(app)/profiles/import/actions";
+import {
+  getImportProgressAction,
+  prepareCommitAction,
+  reopenImportAction,
+} from "@/app/(app)/profiles/import/actions";
 import type { CommitSummary, ImportDetail } from "@/lib/import/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +29,38 @@ type ImportCommitPanelProps = {
   detail: ImportDetail;
   events: EventOption[];
 };
+
+type ChunkResponse = {
+  ok?: boolean;
+  error?: string;
+  hasMore?: boolean;
+  cancelled?: boolean;
+  summary?: CommitSummary;
+};
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchImportChunk(importId: string): Promise<ChunkResponse> {
+  try {
+    const response = await fetch(`/api/profiles/import/${importId}/chunk`, {
+      method: "POST",
+    });
+    const payload = (await response.json()) as ChunkResponse;
+    if (!response.ok) {
+      return { error: payload.error ?? `Chunk failed (${response.status})` };
+    }
+    return payload;
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? `Network error — ${error.message}`
+          : "Network error while completing this import",
+    };
+  }
+}
 
 function AttachToEventFields({
   events,
@@ -87,6 +124,69 @@ function AttachToEventFields({
   );
 }
 
+function ImportProgressBar({
+  importId,
+  active,
+}: {
+  importId: string;
+  active: boolean;
+}) {
+  const [progress, setProgress] = useState<{
+    processed: number;
+    total: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function poll() {
+      const result = await getImportProgressAction(importId);
+      if (cancelled || !("progress" in result) || !result.progress) {
+        return;
+      }
+      setProgress({
+        processed: result.progress.processedRows,
+        total: result.progress.totalRows,
+      });
+    }
+
+    void poll();
+    const interval = window.setInterval(() => void poll(), 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [active, importId]);
+
+  if (!active || !progress || progress.total === 0) {
+    return null;
+  }
+
+  const percent = Math.min(
+    100,
+    Math.round((progress.processed / progress.total) * 100),
+  );
+
+  return (
+    <div className="space-y-1">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary transition-all duration-500"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="text-caption text-muted-foreground">
+        {progress.processed} of {progress.total} profiles processed ({percent}%)
+      </p>
+    </div>
+  );
+}
+
 function CommitSummaryView({ summary }: { summary: CommitSummary }) {
   return (
     <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -111,21 +211,84 @@ function CommitSummaryView({ summary }: { summary: CommitSummary }) {
 }
 
 export function ImportCommitPanel({ detail, events }: ImportCommitPanelProps) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isDraining, setIsDraining] = useState(false);
+  const drainingRef = useRef(false);
+
+  const runNextChunk = useCallback(async (): Promise<boolean> => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const result = await fetchImportChunk(detail.id);
+
+      if (!result.error) {
+        if (result.cancelled) {
+          return false;
+        }
+        return result.hasMore === true;
+      }
+
+      if (attempt < 3) {
+        await sleep(1000 * (attempt + 1));
+        continue;
+      }
+
+      setError(result.error);
+      return false;
+    }
+
+    return false;
+  }, [detail.id]);
+
+  const drainCommit = useCallback(async () => {
+    if (drainingRef.current) {
+      return;
+    }
+    drainingRef.current = true;
+    setIsDraining(true);
+    setError(null);
+
+    try {
+      let hasMore = true;
+      while (hasMore) {
+        hasMore = await runNextChunk();
+        if (hasMore) {
+          await sleep(150);
+        }
+      }
+    } finally {
+      drainingRef.current = false;
+      setIsDraining(false);
+      router.refresh();
+    }
+  }, [router, runNextChunk]);
+
+  // If this import is sitting mid-completion (e.g. the page was reopened
+  // after a tab close or a stall), pick it back up automatically instead
+  // of waiting for a manual click.
+  useEffect(() => {
+    if (detail.status === "processing" && !drainingRef.current) {
+      void drainCommit();
+    }
+    // Only re-check when the import identity or its status changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail.id, detail.status]);
 
   async function handleSubmit(formData: FormData) {
     setError(null);
-    setIsSubmitting(true);
+    setIsPreparing(true);
 
     try {
-      const result = await commitImportAction(formData);
+      const result = await prepareCommitAction(formData);
       if (result?.error) {
         setError(result.error);
+        return;
       }
     } finally {
-      setIsSubmitting(false);
+      setIsPreparing(false);
     }
+
+    await drainCommit();
   }
 
   async function handleReopen(formData: FormData) {
@@ -173,18 +336,25 @@ export function ImportCommitPanel({ detail, events }: ImportCommitPanelProps) {
   if (detail.status === "processing") {
     return (
       <div className="space-y-2 rounded-lg border border-border bg-card p-6">
-        <h2 className="text-heading font-medium text-foreground">Completing…</h2>
+        <h2 className="text-heading font-medium text-foreground">
+          {isDraining ? "Completing…" : "Paused"}
+        </h2>
         <p className="text-body text-muted-foreground">
-          {detail.metadata.commit_checkpoint
-            ? "This got interrupted partway through. Click below to resume from where it left off."
-            : "This import is being completed. If it stalled, refresh and try again."}
+          {isDraining
+            ? "This runs in small automatic steps, so it's safe to leave this tab open — it'll keep going on its own."
+            : "This got interrupted partway through. Click below to pick back up from where it left off."}
         </p>
-        <form action={handleSubmit}>
-          <input type="hidden" name="importId" value={detail.id} />
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Resuming…" : "Resume"}
+        <ImportProgressBar importId={detail.id} active />
+        {!isDraining ? (
+          <Button
+            type="button"
+            onClick={() => {
+              void drainCommit();
+            }}
+          >
+            Resume
           </Button>
-        </form>
+        ) : null}
         {error ? (
           <p className="text-body text-destructive" role="alert">
             {error}
@@ -231,6 +401,8 @@ export function ImportCommitPanel({ detail, events }: ImportCommitPanelProps) {
     }.`;
   }
 
+  const isBusy = isPreparing || isDraining;
+
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-6">
       <p className="text-body text-muted-foreground">{helperText}</p>
@@ -242,15 +414,19 @@ export function ImportCommitPanel({ detail, events }: ImportCommitPanelProps) {
           initialEventId={detail.eventId}
           initialEventTitle={detail.eventTitle}
         />
-        <Button type="submit" disabled={!detail.canCommit || isSubmitting}>
-          {isSubmitting ? "Completing…" : "Complete import"}
+        <Button type="submit" disabled={!detail.canCommit || isBusy}>
+          {isBusy ? "Completing…" : "Complete import"}
         </Button>
       </form>
 
-      {isSubmitting ? (
-        <p className="text-caption text-muted-foreground">
-          Large imports can take up to a minute. Do not close this tab.
-        </p>
+      {isBusy ? (
+        <>
+          <ImportProgressBar importId={detail.id} active={isBusy} />
+          <p className="text-caption text-muted-foreground">
+            This runs in small automatic steps — safe to leave this tab open,
+            even for a large file. It&apos;ll keep going on its own.
+          </p>
+        </>
       ) : null}
 
       {error ? (
