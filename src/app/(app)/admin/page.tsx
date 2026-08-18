@@ -13,12 +13,14 @@ import { CalendarConnectButton } from "@/components/admin/calendar-connect-butto
 import { DeployChecklist } from "@/components/admin/deploy-checklist";
 import { EventbriteAccountRow } from "@/components/admin/eventbrite-account-row";
 import { EventbriteConnectForm } from "@/components/admin/eventbrite-connect-form";
+import { EventbriteSyncNowButton } from "@/components/admin/eventbrite-sync-now-button";
 import { RunCalendarSyncButton } from "@/components/admin/run-calendar-sync-button";
 import { Button } from "@/components/ui/button";
 import { getPrimaryLoginDomain } from "@/lib/auth/allowed-email";
 import { requireAdmin } from "@/lib/auth/session";
 import { listCalendarAccountsForOrg } from "@/lib/data/calendar-accounts";
 import { getEventbriteAccountForOrg } from "@/lib/data/eventbrite-accounts";
+import { listPendingEventbriteReviews } from "@/lib/data/eventbrite-reviews";
 import { countIncompleteProfiles } from "@/lib/data/profiles";
 import { getDeployChecklist } from "@/lib/deploy/checklist";
 
@@ -54,6 +56,13 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
     eventbriteAccount = await getEventbriteAccountForOrg();
   } catch {
     eventbriteAccount = null;
+  }
+
+  let pendingEventbriteReviewCount = 0;
+  try {
+    pendingEventbriteReviewCount = (await listPendingEventbriteReviews()).length;
+  } catch {
+    pendingEventbriteReviewCount = 0;
   }
 
   return (
@@ -202,17 +211,33 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           Eventbrite
         </h2>
         <p className="max-w-2xl text-body text-muted-foreground">
-          Connect your Eventbrite account with a private token. This is an
-          early first step (see the Eventbrite item on the someday list) —
-          right now it just connects the account; pulling attendee lists
-          automatically comes next.
+          Pulls attendee lists from your organiser account automatically —
+          matched attendees are added and tagged with the event&apos;s name;
+          unmatched ones go to review. Runs every 30 minutes for events
+          happening soon, once a day for everything else.
         </p>
         {eventbriteAccount && eventbriteAccount.syncEnabled ? (
-          <EventbriteAccountRow
-            accountName={eventbriteAccount.accountName}
-            accountEmail={eventbriteAccount.accountEmail}
-            connectedByName={eventbriteAccount.connectedByName}
-          />
+          <>
+            <EventbriteAccountRow
+              accountName={eventbriteAccount.accountName}
+              accountEmail={eventbriteAccount.accountEmail}
+              connectedByName={eventbriteAccount.connectedByName}
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <EventbriteSyncNowButton />
+              <Button asChild variant="outline">
+                <Link href="/admin/eventbrite/events">Link events</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/admin/eventbrite/review">
+                  Review attendees
+                  {pendingEventbriteReviewCount > 0
+                    ? ` (${pendingEventbriteReviewCount})`
+                    : ""}
+                </Link>
+              </Button>
+            </div>
+          </>
         ) : (
           <EventbriteConnectForm />
         )}

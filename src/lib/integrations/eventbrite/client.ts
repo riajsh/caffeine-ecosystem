@@ -82,3 +82,169 @@ export async function validateEventbriteToken(
     email: primaryEmail,
   };
 }
+
+type EventbritePagination = {
+  continuation?: string;
+  has_more_items?: boolean;
+};
+
+async function eventbriteGet<T>(
+  token: string,
+  path: string,
+  params: Record<string, string> = {},
+): Promise<T> {
+  const url = new URL(`${EVENTBRITE_API_BASE}${path}`);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token.trim()}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("Couldn't reach Eventbrite. Check your connection and try again.");
+  }
+
+  if (!response.ok) {
+    throw new Error(friendlyErrorForStatus(response.status));
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Error("Eventbrite returned an unexpected response. Try again.");
+  }
+}
+
+export type EventbriteEventSummary = {
+  id: string;
+  name: string;
+  startIso: string | null;
+  status: string;
+};
+
+type EventbriteEventsResponse = {
+  events?: Array<{
+    id: string;
+    name?: { text?: string | null };
+    start?: { utc?: string | null };
+    status?: string;
+  }>;
+  pagination?: EventbritePagination;
+};
+
+/**
+ * Lists every event the connected account organises (any status — draft,
+ * live, ended, or canceled), most recent first, across all pages. Used by
+ * the event-mapping screen so an admin can link each one to a Caffeine
+ * event.
+ */
+export async function listOrganizerEvents(
+  token: string,
+): Promise<EventbriteEventSummary[]> {
+  const events: EventbriteEventSummary[] = [];
+  let continuation: string | undefined;
+
+  do {
+    const params: Record<string, string> = {
+      order_by: "start_desc",
+      status: "all",
+    };
+    if (continuation) {
+      params.continuation = continuation;
+    }
+
+    const page = await eventbriteGet<EventbriteEventsResponse>(
+      token,
+      "/users/me/events/",
+      params,
+    );
+
+    for (const event of page.events ?? []) {
+      events.push({
+        id: event.id,
+        name: event.name?.text?.trim() || "Untitled Eventbrite event",
+        startIso: event.start?.utc ?? null,
+        status: event.status ?? "unknown",
+      });
+    }
+
+    continuation = page.pagination?.has_more_items
+      ? page.pagination.continuation
+      : undefined;
+  } while (continuation);
+
+  return events;
+}
+
+export type EventbriteAttendee = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  ticketType: string | null;
+  checkedIn: boolean;
+};
+
+type EventbriteAttendeesResponse = {
+  attendees?: Array<{
+    id: string;
+    profile?: { email?: string | null; name?: string | null };
+    ticket_class_name?: string | null;
+    checked_in?: boolean;
+    status?: string;
+  }>;
+  pagination?: EventbritePagination;
+};
+
+/**
+ * Lists every attendee for one Eventbrite event, across all pages.
+ * Cancelled/refunded tickets are skipped — only active attendees count.
+ */
+export async function listEventAttendees(
+  token: string,
+  eventbriteEventId: string,
+): Promise<EventbriteAttendee[]> {
+  const attendees: EventbriteAttendee[] = [];
+  let continuation: string | undefined;
+
+  do {
+    const params: Record<string, string> = {};
+    if (continuation) {
+      params.continuation = continuation;
+    }
+
+    const page = await eventbriteGet<EventbriteAttendeesResponse>(
+      token,
+      `/events/${encodeURIComponent(eventbriteEventId)}/attendees/`,
+      params,
+    );
+
+    for (const attendee of page.attendees ?? []) {
+      if (attendee.status && attendee.status !== "Attending") {
+        // Cancelled, refunded, or not-attending tickets — skip.
+        continue;
+      }
+
+      attendees.push({
+        id: attendee.id,
+        email: attendee.profile?.email?.trim().toLowerCase() || null,
+        name: attendee.profile?.name?.trim() || null,
+        ticketType: attendee.ticket_class_name?.trim() || null,
+        checkedIn: attendee.checked_in === true,
+      });
+    }
+
+    continuation = page.pagination?.has_more_items
+      ? page.pagination.continuation
+      : undefined;
+  } while (continuation);
+
+  return attendees;
+}

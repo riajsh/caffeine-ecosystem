@@ -1,0 +1,45 @@
+import { z } from "zod";
+
+import { postgresUuidSchema } from "@/lib/validators/id";
+
+export const linkEventbriteEventSchema = z
+  .object({
+    eventbriteEventId: z.string().trim().min(1),
+    eventbriteTitle: z.string().trim().min(1),
+    eventbriteStartIso: z
+      .string()
+      .optional()
+      .transform((value) => value || null),
+    mode: z.enum(["existing", "new"]),
+    caffeineEventId: postgresUuidSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.mode === "existing" && !data.caffeineEventId) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Choose an event to link to",
+        path: ["caffeineEventId"],
+      });
+    }
+  });
+
+export const resolveEventbriteReviewSchema = z
+  .object({
+    reviewId: postgresUuidSchema,
+    action: z.enum(["link", "create", "ignore"]),
+    profileId: postgresUuidSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.action === "link" && !data.profileId) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Choose a profile to link",
+        path: ["profileId"],
+      });
+    }
+  });
+
+export type LinkEventbriteEventInput = z.infer<typeof linkEventbriteEventSchema>;
+export type ResolveEventbriteReviewInput = z.infer<
+  typeof resolveEventbriteReviewSchema
+>;

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { notFound } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getOrgId, requireUser } from "@/lib/auth/session";
 import { inferCoAttendanceForEvent } from "@/lib/computed/infer-connections";
@@ -80,8 +81,9 @@ async function getOrCreateRelationship(
   profileId: string,
   orgId: string,
   createdBy: string,
+  supabaseOverride?: SupabaseClient<Database>,
 ): Promise<string> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
 
   const { data: existing, error: existingError } = await supabase
     .from("relationships")
@@ -137,8 +139,9 @@ export async function ensureEventAttendanceEvidence(
   event: { id: string; title: string; event_date: string },
   profileId: string,
   userId: string,
+  supabaseOverride?: SupabaseClient<Database>,
 ) {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
 
   const { data: existingActivity, error: activityLookupError } = await supabase
     .from("activities")
@@ -177,6 +180,7 @@ export async function ensureEventAttendanceEvidence(
     profileId,
     orgId,
     userId,
+    supabase,
   );
 
   const { data: existingSource, error: sourceLookupError } = await supabase
@@ -561,6 +565,99 @@ export type AddEventAttendeesBulkResult = {
   tagWarning: string | null;
 };
 
+export type FindOrCreateEventTagResult = {
+  tagId: string | null;
+  warning: string | null;
+};
+
+/**
+ * Finds (or creates) the "events"-category tag named after an event's
+ * title. Shared by the bulk "add to event" action, CSV import commit, and
+ * Eventbrite attendee sync — all three tag attendees with the event name
+ * the same way.
+ */
+export async function findOrCreateEventTag(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  eventTitle: string,
+): Promise<FindOrCreateEventTagResult> {
+  const { data: existingTag, error: tagLookupError } = await supabase
+    .from("tags")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("name", eventTitle)
+    .maybeSingle();
+
+  if (tagLookupError) {
+    return { tagId: null, warning: "The event tag couldn't be checked." };
+  }
+
+  if (existingTag) {
+    return { tagId: existingTag.id, warning: null };
+  }
+
+  const { data: createdTag, error: createTagError } = await supabase
+    .from("tags")
+    .insert({ org_id: orgId, name: eventTitle, category: "events" })
+    .select("id")
+    .single();
+
+  if (!createTagError) {
+    return { tagId: createdTag.id, warning: null };
+  }
+
+  if (createTagError.code === "23505") {
+    // Someone else (e.g. an import committing at the same time) created
+    // this tag a moment earlier — just reuse it.
+    const { data: raceTag } = await supabase
+      .from("tags")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("name", eventTitle)
+      .maybeSingle();
+
+    if (raceTag) {
+      return { tagId: raceTag.id, warning: null };
+    }
+
+    return { tagId: null, warning: "The event tag couldn't be created." };
+  }
+
+  return {
+    tagId: null,
+    warning:
+      "Tagging didn't work — the database may still need the \"Events\" tag category added.",
+  };
+}
+
+/** Links a profile to a tag if not already linked. Returns true on success. */
+export async function linkProfileToTag(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  profileId: string,
+  tagId: string,
+): Promise<boolean> {
+  const { data: existingProfileTag } = await supabase
+    .from("profile_tags")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("profile_id", profileId)
+    .eq("tag_id", tagId)
+    .maybeSingle();
+
+  if (existingProfileTag) {
+    return true;
+  }
+
+  const { error: linkError } = await supabase.from("profile_tags").insert({
+    org_id: orgId,
+    profile_id: profileId,
+    tag_id: tagId,
+  });
+
+  return !linkError;
+}
+
 export async function addEventAttendeesBulk(
   input: AddEventAttendeesBulkInput,
 ): Promise<AddEventAttendeesBulkResult> {
@@ -575,45 +672,10 @@ export async function addEventAttendeesBulk(
   let tagWarning: string | null = null;
 
   if (input.tagWithEvent) {
-    const { data: existingTag, error: tagLookupError } = await supabase
-      .from("tags")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("name", event.title)
-      .maybeSingle();
-
-    if (tagLookupError) {
-      tagWarning = "Attendees were added, but the event tag couldn't be checked.";
-    } else if (existingTag) {
-      tagId = existingTag.id;
-    } else {
-      const { data: createdTag, error: createTagError } = await supabase
-        .from("tags")
-        .insert({ org_id: orgId, name: event.title, category: "events" })
-        .select("id")
-        .single();
-
-      if (createTagError) {
-        if (createTagError.code === "23505") {
-          // Someone else (e.g. an import committing at the same time)
-          // created this tag a moment earlier — just reuse it.
-          const { data: raceTag } = await supabase
-            .from("tags")
-            .select("id")
-            .eq("org_id", orgId)
-            .eq("name", event.title)
-            .maybeSingle();
-          tagId = raceTag?.id ?? null;
-          if (!tagId) {
-            tagWarning = "Attendees were added, but the event tag couldn't be created.";
-          }
-        } else {
-          tagWarning =
-            "Attendees were added, but tagging didn't work — the database may still need the \"Events\" tag category added.";
-        }
-      } else {
-        tagId = createdTag.id;
-      }
+    const tagResult = await findOrCreateEventTag(supabase, orgId, event.title);
+    tagId = tagResult.tagId;
+    if (tagResult.warning) {
+      tagWarning = `Attendees were added, but ${tagResult.warning.charAt(0).toLowerCase()}${tagResult.warning.slice(1)}`;
     }
   }
 
@@ -641,28 +703,11 @@ export async function addEventAttendeesBulk(
     await ensureEventAttendanceEvidence(orgId, event, profileId, user.id);
 
     if (tagId) {
-      const { data: existingProfileTag } = await supabase
-        .from("profile_tags")
-        .select("id")
-        .eq("org_id", orgId)
-        .eq("profile_id", profileId)
-        .eq("tag_id", tagId)
-        .maybeSingle();
-
-      if (existingProfileTag) {
+      const linked = await linkProfileToTag(supabase, orgId, profileId, tagId);
+      if (linked) {
         tagged += 1;
-      } else {
-        const { error: linkError } = await supabase.from("profile_tags").insert({
-          org_id: orgId,
-          profile_id: profileId,
-          tag_id: tagId,
-        });
-
-        if (!linkError) {
-          tagged += 1;
-        } else if (!tagWarning) {
-          tagWarning = "Attendees were added, but some tags couldn't be linked.";
-        }
+      } else if (!tagWarning) {
+        tagWarning = "Attendees were added, but some tags couldn't be linked.";
       }
     }
   }
@@ -674,6 +719,30 @@ export async function addEventAttendeesBulk(
   }
 
   return { added, tagged, tagWarning };
+}
+
+export async function markEventAttendeeAttended(
+  eventId: string,
+  profileId: string,
+  attended: boolean,
+): Promise<void> {
+  await requireUser();
+  const orgId = await getOrgId();
+  const supabase = await createClient();
+
+  await assertEventInOrg(eventId, orgId);
+  await assertProfileInOrg(profileId, orgId);
+
+  const { error } = await supabase
+    .from("event_attendees")
+    .update({ attended })
+    .eq("org_id", orgId)
+    .eq("event_id", eventId)
+    .eq("profile_id", profileId);
+
+  if (error) {
+    throw new Error(`Failed to update attendance: ${error.message}`);
+  }
 }
 
 export async function removeEventAttendee(

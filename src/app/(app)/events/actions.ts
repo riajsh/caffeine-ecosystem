@@ -7,6 +7,7 @@ import {
   addEventAttendeesBulk,
   createEvent,
   deleteEvent,
+  markEventAttendeeAttended,
   removeEventAttendee,
   updateEvent,
 } from "@/lib/data/events";
@@ -17,6 +18,7 @@ import {
   addEventAttendeesBulkSchema,
   createEventSchema,
   deleteEventSchema,
+  markEventAttendeeAttendedSchema,
   removeEventAttendeeSchema,
   updateEventSchema,
 } from "@/lib/validators/events";
@@ -142,6 +144,33 @@ export async function removeEventAttendeeAction(formData: FormData) {
     return {
       error:
         error instanceof Error ? error.message : "Failed to remove attendee",
+    };
+  }
+}
+
+export async function markEventAttendeeAttendedAction(formData: FormData) {
+  const parsed = markEventAttendeeAttendedSchema.safeParse({
+    eventId: formData.get("eventId"),
+    profileId: formData.get("profileId"),
+    attended: formData.get("attended"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  try {
+    await markEventAttendeeAttended(
+      parsed.data.eventId,
+      parsed.data.profileId,
+      parsed.data.attended,
+    );
+    revalidateEvents(parsed.data.eventId);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Failed to update attendance",
     };
   }
 }

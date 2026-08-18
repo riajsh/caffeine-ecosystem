@@ -3,6 +3,7 @@ import "server-only";
 import { requireAdmin } from "@/lib/auth/session";
 import { validateEventbriteToken } from "@/lib/integrations/eventbrite/client";
 import { decryptToken, encryptToken } from "@/lib/integrations/google/crypto";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type EventbriteAccountSummary = {
@@ -110,14 +111,40 @@ export async function disconnectEventbriteAccount(): Promise<void> {
 }
 
 /**
- * Reads and decrypts the stored token for use by the (future) sync job.
- * Not called anywhere yet — Phase 1 only connects the account; Phase 3
- * will use this to call the Attendees API.
+ * Reads and decrypts the stored token, scoped by the caller's own RLS
+ * session (admin only, per eventbrite_accounts' policies).
  */
 export async function getDecryptedEventbriteToken(
   orgId: string,
 ): Promise<string | null> {
   const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("eventbrite_accounts")
+    .select("access_token")
+    .eq("org_id", orgId)
+    .eq("sync_enabled", true)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load Eventbrite token: ${error.message}`);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return decryptToken(data.access_token);
+}
+
+/**
+ * Same as above, but via the admin (service-role) client — for the cron
+ * sync job, which has no logged-in user session to rely on RLS with.
+ */
+export async function getDecryptedEventbriteTokenForSync(
+  orgId: string,
+): Promise<string | null> {
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("eventbrite_accounts")

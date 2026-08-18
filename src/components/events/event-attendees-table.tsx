@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { removeEventAttendeeAction } from "@/app/(app)/events/actions";
+import {
+  markEventAttendeeAttendedAction,
+  removeEventAttendeeAction,
+} from "@/app/(app)/events/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -85,6 +88,53 @@ function RemoveAttendeeButton({
   );
 }
 
+function MarkAttendedButton({
+  eventId,
+  attendee,
+}: {
+  eventId: string;
+  attendee: EventAttendee;
+}) {
+  const router = useRouter();
+  const { alert } = useAppDialog();
+  const { isPending, run } = useAsyncAction();
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={isPending}
+      onClick={() => {
+        void run(async () => {
+          const formData = new FormData();
+          formData.set("eventId", eventId);
+          formData.set("profileId", attendee.profileId);
+          formData.set("attended", attendee.attended ? "false" : "true");
+          const result = await markEventAttendeeAttendedAction(formData);
+          if (result.error) {
+            await alert({
+              title: "Could not update attendance",
+              description: result.error,
+            });
+            return;
+          }
+          toastSuccess(
+            attendee.attended ? "Marked as registered" : "Marked as attended",
+          );
+          router.refresh();
+        });
+      }}
+    >
+      {isPending
+        ? "Updating…"
+        : attendee.attended
+          ? "Mark registered"
+          : "Mark attended"}
+    </Button>
+  );
+}
+
 export function EventAttendeesTable({
   eventId,
   attendees,
@@ -145,7 +195,10 @@ export function EventAttendeesTable({
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <RemoveAttendeeButton eventId={eventId} attendee={attendee} />
+                  <div className="flex items-center justify-end gap-1">
+                    <MarkAttendedButton eventId={eventId} attendee={attendee} />
+                    <RemoveAttendeeButton eventId={eventId} attendee={attendee} />
+                  </div>
                 </TableCell>
               </TableRow>
             );

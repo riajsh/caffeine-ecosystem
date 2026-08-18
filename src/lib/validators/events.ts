@@ -71,6 +71,12 @@ export const removeEventAttendeeSchema = z.object({
   profileId: postgresUuidSchema,
 });
 
+export const markEventAttendeeAttendedSchema = z.object({
+  eventId: postgresUuidSchema,
+  profileId: postgresUuidSchema,
+  attended: z.enum(["true", "false"]).transform((value) => value === "true"),
+});
+
 export const deleteEventSchema = z.object({
   eventId: postgresUuidSchema,
 });
@@ -80,4 +86,7 @@ export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type AddEventAttendeeInput = z.infer<typeof addEventAttendeeSchema>;
 export type AddEventAttendeesBulkInput = z.infer<
   typeof addEventAttendeesBulkSchema
+>;
+export type MarkEventAttendeeAttendedInput = z.infer<
+  typeof markEventAttendeeAttendedSchema
 >;

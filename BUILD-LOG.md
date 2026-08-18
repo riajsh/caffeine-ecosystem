@@ -4,6 +4,18 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-19 (20)
+
+**Built: Eventbrite auto-pulls attendees, matches them, tags them, and keeps them updated (Phases 2-3 of the Eventbrite plan)**
+
+- **Event mapping (Admin → Eventbrite events):** lists every event in your connected Eventbrite account. For each one, link it to an existing Caffeine event or create a new one — a one-time click per event, remembered from then on.
+- **Automatic attendee sync:** once an event is linked, attendees get pulled in automatically — every 30 minutes for events happening soon or that just finished, once a day for everything else. There's also a "Sync now" button on the Admin page for an on-demand pull.
+- **Matching and tagging:** an attendee whose email matches an existing profile gets added to the event as "Registered" and tagged with the event's name — reusing the exact same tagging logic as CSV import and the bulk "add to event" action.
+- **Review queue (Admin → Eventbrite review):** an attendee whose email doesn't match anyone gets queued for a human to look at, instead of a profile being silently auto-created. From there: search and link to an existing profile, create a new one, or ignore.
+- **Mark attended:** added a small "Mark attended" / "Mark registered" button to the attendees list on an event's page — since Eventbrite attendee data only tells us who registered, not who actually showed up, this lets you flip that by hand once you know (e.g. from Eventbrite's own check-in list after the event).
+- **What you need to do:** run the migration below in Supabase SQL Editor before this goes live — it adds the link from Caffeine events to Eventbrite events, plus the new review-queue table.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings as before).
+
 ## 2026-08-19 (19)
 
 **Milestone: the app is live on the real internet for the first time**
