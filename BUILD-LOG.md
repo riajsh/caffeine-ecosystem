@@ -4,6 +4,16 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-19 (19)
+
+**Milestone: the app is live on the real internet for the first time**
+
+- **What we did:** Set up a brand new, Caffeine-only Vercel project (Pro plan) under `hello@caffeinedaily.co` — separate from the parent company's shared Vercel/GitHub team, so this doesn't get tangled up with other projects. Connected it to the `riajsh/caffeine-ecosystem` GitHub repo, added all the environment variables, and deployed. The site is now live at `https://caffeine-ecosystem-two.vercel.app`.
+- **Also set up: Google sign-in.** Created a brand new Google Cloud project ("Caffeine Daily," under `hello@caffeinedaily.co`) and an OAuth client so people can actually sign in with their `@caffeinedaily.co` Google account on the live site — this had never been configured before, only the local dev password shortcut had been tested. Connected it to Supabase's sign-in settings.
+- **Note:** this new Google Cloud project only covers sign-in for now. It does **not** yet include Calendar API access — `GOOGLE_CALENDAR_CLIENT_ID`/`SECRET` are still blank, so Calendar connect/sync won't work on the live site until that's set up separately (same project can likely be reused for that later).
+- **Cron schedule:** calendar sync's scheduled job is back to running hourly (it was temporarily set to once-daily to fit the free Hobby plan's limits, but Pro removes that restriction).
+- **This closes out two long-standing items from the handover checklist:** "Vercel project" and (partially) "Google Cloud OAuth" — both had been sitting as outstanding since the handover from Chris.
+
 ## 2026-08-17 (18)
 
 **Built: Eventbrite connect screen (Phase 1 of the Eventbrite plan)**

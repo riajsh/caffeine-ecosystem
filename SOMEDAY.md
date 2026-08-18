@@ -6,7 +6,8 @@ Things we know about but aren't acting on yet. Nothing here needs action right n
 
 ## Before this goes live (not urgent — we're not live yet)
 
-- **Move Vercel and Google OAuth from Chris to Ria.** Still outstanding. Full checklist is in `docs/handover-caffeine.md`. Ria's call on timing — not urgent while we focus on features that don't need this first.
+- ~~Move Vercel from Chris to Ria~~ — **Resolved 2026-08-19.** Live on a brand new, Caffeine-only Vercel Pro project under `hello@caffeinedaily.co`, at `https://caffeine-ecosystem-two.vercel.app`.
+- ~~Set up Google OAuth for sign-in~~ — **Resolved 2026-08-19.** New Google Cloud project ("Caffeine Daily," under `hello@caffeinedaily.co`) with a working sign-in client, connected to Supabase. **Still outstanding:** Calendar API access (a separate OAuth client/scope) hasn't been set up yet — Calendar connect/sync won't work live until that's done, likely reusing this same Google Cloud project.
 - ~~Move Supabase to Ria's own account~~ — **Resolved 2026-08-13, no action needed.** The Supabase project lives under Previously Unavailable's Pro account (the parent company that owns Caffeine Daily), not Chris's personal account. Ria already has access via `rs@previously.co`, so there's nothing to migrate.
 
 ## Worth a closer look together, when we're ready
