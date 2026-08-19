@@ -4,6 +4,16 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (25)
+
+**Fixed: bulk "create profiles" got stuck on 79 attendees and only made it through 69**
+
+- **What was wrong:** The bulk create button did all selected attendees in one single request. With a large batch (79 in this case), that request ran long enough to hit the website hosting's own time limit for a single request and got killed silently partway through — it had already created most of the profiles by then, but the button never got a response back, so it stayed stuck on "Creating…" forever with no way to tell what had or hadn't gone through.
+- **What we changed:** It now works through selected attendees in small batches (10 at a time) instead of all at once, with a live progress bar showing "Creating X of Y…" and a percentage. Each batch is small enough to comfortably finish well within any time limit, so it can't silently die partway through again. If a batch does hit a hiccup, it retries once before giving up on just that batch (everything else keeps going).
+- **On repeating the upload:** this wasn't actually re-uploading — each attendee's record already remembers whether it's been resolved, so anyone already turned into a profile just disappears from the list. Selecting "all" again only affects whoever's still pending; nothing gets duplicated. The confusing part was just the lack of visible progress, which the fix above addresses directly.
+- **Nothing to run in Supabase for this one** — purely a UI/logic fix.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings).
+
 ## 2026-08-20 (24)
 
 **Added: select-all + bulk "create profiles" on Eventbrite review, and merged the review + updates screens into one**
