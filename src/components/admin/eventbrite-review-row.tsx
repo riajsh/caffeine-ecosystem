@@ -8,6 +8,7 @@ import {
   searchProfilesForEventbriteLinkAction,
 } from "@/app/(app)/admin/eventbrite/actions";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import type { EventbriteReviewRow as EventbriteReviewRowData } from "@/lib/data/eventbrite-reviews";
 import { toastSuccess } from "@/lib/toast";
@@ -17,13 +18,23 @@ type ProfileMatch = { id: string; fullName: string; email: string | null };
 
 export function EventbriteReviewRow({
   review,
+  fullName,
+  email,
+  onFullNameChange,
+  onEmailChange,
+  selected,
+  onToggleSelected,
 }: {
   review: EventbriteReviewRowData;
+  fullName: string;
+  email: string;
+  onFullNameChange: (value: string) => void;
+  onEmailChange: (value: string) => void;
+  selected: boolean;
+  onToggleSelected: (value: boolean) => void;
 }) {
   const router = useRouter();
   const { isPending, run } = useAsyncAction();
-  const [fullName, setFullName] = useState(review.displayName ?? "");
-  const [email, setEmail] = useState(review.email);
   const [query, setQuery] = useState(review.email);
   const [results, setResults] = useState<ProfileMatch[]>([]);
   const [searching, setSearching] = useState(false);
@@ -76,7 +87,13 @@ export function EventbriteReviewRow({
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-      <div>
+      <div className="flex items-start gap-3">
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(value) => onToggleSelected(value === true)}
+          aria-label={`Select ${fullName || review.email}`}
+          className="mt-0.5"
+        />
         <p className="text-caption text-muted-foreground">
           {review.ticketType ? `${review.ticketType} · ` : ""}
           {review.eventTitle} · {eventDate}
@@ -91,7 +108,7 @@ export function EventbriteReviewRow({
           <Input
             id={`name-${review.id}`}
             value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
+            onChange={(event) => onFullNameChange(event.target.value)}
             placeholder="Full name"
             className="w-full sm:w-56"
           />
@@ -103,7 +120,7 @@ export function EventbriteReviewRow({
           <Input
             id={`email-${review.id}`}
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => onEmailChange(event.target.value)}
             placeholder="Email"
             className="w-full sm:w-64"
           />

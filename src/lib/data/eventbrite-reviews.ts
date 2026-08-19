@@ -340,3 +340,41 @@ export async function resolveEventbriteReview(
     throw new Error(`Failed to update review: ${updateError.message}`);
   }
 }
+
+export type BulkCreateProfilesResult = {
+  createdCount: number;
+  errors: Array<{ reviewId: string; message: string }>;
+};
+
+/**
+ * Resolves several pending reviews as "create new profile" in one go, using
+ * each one's current (possibly hand-edited) name/email — the "select all" +
+ * "create all" bulk action. Runs one at a time rather than in parallel: if
+ * two selected reviews share an email (e.g. someone registered for the same
+ * event twice), the second one will find the profile the first one just
+ * created and reuse it instead of making a duplicate.
+ */
+export async function bulkCreateProfilesFromReviews(
+  items: Array<{ reviewId: string; fullName: string; email: string }>,
+): Promise<BulkCreateProfilesResult> {
+  const result: BulkCreateProfilesResult = { createdCount: 0, errors: [] };
+
+  for (const item of items) {
+    try {
+      await resolveEventbriteReview({
+        reviewId: item.reviewId,
+        action: "create",
+        fullName: item.fullName,
+        email: item.email,
+      });
+      result.createdCount += 1;
+    } catch (error) {
+      result.errors.push({
+        reviewId: item.reviewId,
+        message: error instanceof Error ? error.message : "Failed to create profile",
+      });
+    }
+  }
+
+  return result;
+}

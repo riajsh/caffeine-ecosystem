@@ -4,6 +4,16 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (24)
+
+**Added: select-all + bulk "create profiles" on Eventbrite review, and merged the review + updates screens into one**
+
+- **Bulk create:** the Eventbrite review screen (unmatched attendees) now has a "Select all" checkbox and a checkbox on each row. Fix up any names/emails you need to individually first, tick the ones that are ready, then one "Create N new profiles" button creates them all at once instead of one at a time.
+- **Duplicate-safe:** if two selected rows turn out to share the same email (e.g. someone registered twice for the same event), the second one automatically finds the profile the first one just created and reuses it — you won't end up with two profiles for the same person either way.
+- **Merged screens:** "Eventbrite review" and "Eventbrite updates" are now one screen — unmatched attendees on top, possible profile updates at the bottom — instead of two separate tabs. The Admin overview now has a single "Review" button with a combined count. The old "Eventbrite updates" link still works, it just forwards here now.
+- **Nothing to run in Supabase for this one** — purely a UI change, no database update needed.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings).
+
 ## 2026-08-20 (23)
 
 **Built: Eventbrite registration answers now fill in role, phone, and company size on profiles**

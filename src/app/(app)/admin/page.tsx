@@ -238,17 +238,9 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
               </Button>
               <Button asChild variant="outline">
                 <Link href="/admin/eventbrite/review">
-                  Review attendees
-                  {pendingEventbriteReviewCount > 0
-                    ? ` (${pendingEventbriteReviewCount})`
-                    : ""}
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/admin/eventbrite/updates">
-                  Possible updates
-                  {pendingProfileUpdateCount > 0
-                    ? ` (${pendingProfileUpdateCount})`
+                  Review
+                  {pendingEventbriteReviewCount + pendingProfileUpdateCount > 0
+                    ? ` (${pendingEventbriteReviewCount + pendingProfileUpdateCount})`
                     : ""}
                 </Link>
               </Button>

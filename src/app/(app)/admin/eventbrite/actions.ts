@@ -16,6 +16,7 @@ import {
   saveQuestionMappings,
 } from "@/lib/data/eventbrite-question-mappings";
 import {
+  bulkCreateProfilesFromReviews,
   resolveEventbriteReview,
   searchProfilesForEventbriteLink,
 } from "@/lib/data/eventbrite-reviews";
@@ -30,7 +31,6 @@ function revalidateEventbrite() {
   revalidatePath("/admin");
   revalidatePath("/admin/eventbrite/events");
   revalidatePath("/admin/eventbrite/review");
-  revalidatePath("/admin/eventbrite/updates");
   revalidatePath("/events");
   revalidatePath("/profiles");
 }
@@ -110,6 +110,30 @@ export async function resolveEventbriteReviewAction(formData: FormData) {
   }
 }
 
+export async function bulkCreateProfilesFromReviewsAction(
+  items: Array<{ reviewId: string; fullName: string; email: string }>,
+) {
+  if (items.length === 0) {
+    return { createdCount: 0, errors: [] };
+  }
+
+  try {
+    const result = await bulkCreateProfilesFromReviews(items);
+    revalidateEventbrite();
+    return result;
+  } catch (error) {
+    return {
+      createdCount: 0,
+      errors: [
+        {
+          reviewId: "",
+          message: error instanceof Error ? error.message : "Bulk create failed",
+        },
+      ],
+    };
+  }
+}
+
 export async function loadQuestionMappingsAction(
   caffeineEventId: string,
 ): Promise<{ result?: QuestionMappingList; error?: string }> {
@@ -153,7 +177,6 @@ export async function resolveProfileUpdateReviewAction(formData: FormData) {
   try {
     await resolveProfileUpdateReview(reviewId, action);
     revalidateEventbrite();
-    revalidatePath("/admin/eventbrite/updates");
     return { success: true as const };
   } catch (error) {
     return {
