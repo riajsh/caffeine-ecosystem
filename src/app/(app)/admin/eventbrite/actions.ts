@@ -17,6 +17,7 @@ import {
 } from "@/lib/data/eventbrite-question-mappings";
 import {
   bulkCreateProfilesFromReviews,
+  bulkIgnoreReviews,
   resolveEventbriteReview,
   searchProfilesForEventbriteLink,
 } from "@/lib/data/eventbrite-reviews";
@@ -137,6 +138,33 @@ export async function bulkCreateProfilesFromReviewsAction(
         {
           reviewId: "",
           message: error instanceof Error ? error.message : "Bulk create failed",
+        },
+      ],
+    };
+  }
+}
+
+export async function bulkIgnoreReviewsAction(
+  reviewIds: string[],
+  isFinalBatch = true,
+) {
+  if (reviewIds.length === 0) {
+    return { ignoredCount: 0, errors: [] };
+  }
+
+  try {
+    const result = await bulkIgnoreReviews(reviewIds);
+    if (isFinalBatch) {
+      revalidateEventbrite();
+    }
+    return result;
+  } catch (error) {
+    return {
+      ignoredCount: 0,
+      errors: [
+        {
+          reviewId: "",
+          message: error instanceof Error ? error.message : "Bulk ignore failed",
         },
       ],
     };

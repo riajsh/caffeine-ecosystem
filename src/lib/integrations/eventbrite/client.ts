@@ -323,6 +323,24 @@ function cleanEventbriteText(value: string | null | undefined): string | null {
   return cleaned || null;
 }
 
+/**
+ * On a group/multi-ticket order, Eventbrite shows the literal placeholder
+ * "Info Requested" for each additional attendee who hasn't filled in their
+ * own details yet — it's not a real email, and treating it like one floods
+ * the review queue with dozens of identical, meaningless entries per event.
+ * Normalising it (and anything else that isn't a real email) to null makes
+ * these attendees skip the review queue entirely, the same as if Eventbrite
+ * hadn't given us an email at all — once the real person actually fills in
+ * their details, a later sync will pick up their real email normally.
+ */
+function normaliseAttendeeEmail(value: string | null | undefined): string | null {
+  const trimmed = value?.trim().toLowerCase() || "";
+  if (!trimmed || trimmed === "info requested" || !trimmed.includes("@")) {
+    return null;
+  }
+  return trimmed;
+}
+
 type EventbriteAttendeesResponse = {
   attendees?: Array<{
     id: string;
@@ -372,7 +390,7 @@ export async function listEventAttendees(
 
       attendees.push({
         id: attendee.id,
-        email: attendee.profile?.email?.trim().toLowerCase() || null,
+        email: normaliseAttendeeEmail(attendee.profile?.email),
         name: cleanEventbriteText(attendee.profile?.name),
         ticketType: cleanEventbriteText(attendee.ticket_class_name),
         checkedIn: attendee.checked_in === true,

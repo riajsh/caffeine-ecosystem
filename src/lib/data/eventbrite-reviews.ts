@@ -378,3 +378,37 @@ export async function bulkCreateProfilesFromReviews(
 
   return result;
 }
+
+export type BulkIgnoreReviewsResult = {
+  ignoredCount: number;
+  errors: Array<{ reviewId: string; message: string }>;
+};
+
+/** Bulk "ignore" companion to bulkCreateProfilesFromReviews — same one-at-a-
+ * time approach, used for e.g. clearing out a wave of Eventbrite's "Info
+ * Requested" placeholder attendees that got queued before we started
+ * filtering them out at sync time. */
+export async function bulkIgnoreReviews(
+  reviewIds: string[],
+): Promise<BulkIgnoreReviewsResult> {
+  const result: BulkIgnoreReviewsResult = { ignoredCount: 0, errors: [] };
+
+  for (const reviewId of reviewIds) {
+    try {
+      await resolveEventbriteReview({
+        reviewId,
+        action: "ignore",
+        fullName: undefined,
+        email: undefined,
+      });
+      result.ignoredCount += 1;
+    } catch (error) {
+      result.errors.push({
+        reviewId,
+        message: error instanceof Error ? error.message : "Failed to ignore",
+      });
+    }
+  }
+
+  return result;
+}

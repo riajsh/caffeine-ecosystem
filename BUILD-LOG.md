@@ -4,6 +4,16 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (26)
+
+**Fixed: Eventbrite's "Info Requested" placeholder attendees were flooding the review queue**
+
+- **What was wrong:** On a group ticket (one person buying several tickets at once), Eventbrite doesn't have real details for the other attendees until they each fill in their own registration — until then it shows a literal placeholder name/email of "Info Requested" / "info requested". The sync was treating that placeholder like a real (if oddly-named) attendee and queuing it for review, so a single group booking could flood the queue with dozens of identical, meaningless "Info Requested Info Requested" rows. These are not duplicate tickets for one real person — each row is a distinct ticket/attendee slot on the order, they've just genuinely got no info attached yet.
+- **What we changed:** The sync now recognises this placeholder (and anything else that isn't a real email) and skips those attendees entirely — same as if Eventbrite hadn't given us an email at all. If the real person later fills in their details, a normal sync will pick them up properly at that point.
+- **Also added:** an "Ignore N selected" button next to "Create N new profiles" on the review screen, for exactly this kind of cleanup — tick a batch, ignore them all at once, same progress bar as bulk-create.
+- **What you need to do:** run the migration below in Supabase SQL Editor to clear out the "Info Requested" rows already sitting in your queue from before this fix (nothing else is touched).
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings).
+
 ## 2026-08-20 (25)
 
 **Fixed: bulk "create profiles" got stuck on 79 attendees and only made it through 69**
