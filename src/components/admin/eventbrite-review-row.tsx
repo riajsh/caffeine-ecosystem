@@ -22,6 +22,8 @@ export function EventbriteReviewRow({
 }) {
   const router = useRouter();
   const { isPending, run } = useAsyncAction();
+  const [fullName, setFullName] = useState(review.displayName ?? "");
+  const [email, setEmail] = useState(review.email);
   const [query, setQuery] = useState(review.email);
   const [results, setResults] = useState<ProfileMatch[]>([]);
   const [searching, setSearching] = useState(false);
@@ -45,6 +47,10 @@ export function EventbriteReviewRow({
       formData.set("action", action);
       if (profileId) {
         formData.set("profileId", profileId);
+      }
+      if (action === "create") {
+        formData.set("fullName", fullName);
+        formData.set("email", email);
       }
       const result = await resolveEventbriteReviewAction(formData);
       if (result.error) {
@@ -71,14 +77,37 @@ export function EventbriteReviewRow({
   return (
     <div className="space-y-3 rounded-lg border border-border bg-card p-4">
       <div>
-        <p className="font-medium text-foreground">
-          {review.displayName ?? review.email}
-        </p>
         <p className="text-caption text-muted-foreground">
-          {review.email}
-          {review.ticketType ? ` · ${review.ticketType}` : ""} · {review.eventTitle} ·{" "}
-          {eventDate}
+          {review.ticketType ? `${review.ticketType} · ` : ""}
+          {review.eventTitle} · {eventDate}
         </p>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <label className="text-caption text-muted-foreground" htmlFor={`name-${review.id}`}>
+            Name
+          </label>
+          <Input
+            id={`name-${review.id}`}
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            placeholder="Full name"
+            className="w-full sm:w-56"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-caption text-muted-foreground" htmlFor={`email-${review.id}`}>
+            Email
+          </label>
+          <Input
+            id={`email-${review.id}`}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="Email"
+            className="w-full sm:w-64"
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

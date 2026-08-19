@@ -4,6 +4,16 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (22)
+
+**Fixed: garbled "b'Name'" attendee names from Eventbrite + can now edit names/emails in review**
+
+- **What was wrong:** Some Eventbrite attendee names in the review queue showed up like `b'Eva' b'Kulkarni'` instead of `Eva Kulkarni`. This is a genuine data bug on Eventbrite's side — likely fallout from their rocky 2026 ownership change — where raw computer data ("bytes") got printed as text instead of being converted properly, and it's baked into what their API sends us.
+- **What we changed:** The app now automatically strips that `b'...'` wrapper from names and ticket types every time it syncs, so this won't happen again going forward. Also ran a one-time cleanup (migration below) to fix the names already sitting in the review queue from before this fix.
+- **Also added:** you can now edit the name and email before creating a new profile from a review — handy for fixing anything Eventbrite gets wrong, or just correcting a typo, without needing to fix it later on the profile itself.
+- **What you need to do:** run the migration below in Supabase SQL Editor to clean up the already-affected review rows.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings).
+
 ## 2026-08-20 (21)
 
 **Fixed: "Eventbrite events" page crashed with a server error**

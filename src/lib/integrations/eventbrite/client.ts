@@ -179,7 +179,7 @@ async function listEventsFromPath(
     for (const event of page.events ?? []) {
       events.push({
         id: event.id,
-        name: event.name?.text?.trim() || "Untitled Eventbrite event",
+        name: cleanEventbriteText(event.name?.text) || "Untitled Eventbrite event",
         startIso: event.start?.utc ?? null,
         status: event.status ?? "unknown",
       });
@@ -236,6 +236,21 @@ export type EventbriteAttendee = {
   checkedIn: boolean;
 };
 
+/**
+ * Eventbrite's data has had a bug since its 2026 ownership change where
+ * some attendee names come through as Python "bytes" reprs instead of
+ * plain text — e.g. "b'Eva' b'Kulkarni'" instead of "Eva Kulkarni". Strips
+ * that wrapper if present; harmless no-op on normal names.
+ */
+function cleanEventbriteText(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const cleaned = value.replace(/b(['"])(.*?)\1/g, "$2").trim();
+  return cleaned || null;
+}
+
 type EventbriteAttendeesResponse = {
   attendees?: Array<{
     id: string;
@@ -279,8 +294,8 @@ export async function listEventAttendees(
       attendees.push({
         id: attendee.id,
         email: attendee.profile?.email?.trim().toLowerCase() || null,
-        name: attendee.profile?.name?.trim() || null,
-        ticketType: attendee.ticket_class_name?.trim() || null,
+        name: cleanEventbriteText(attendee.profile?.name),
+        ticketType: cleanEventbriteText(attendee.ticket_class_name),
         checkedIn: attendee.checked_in === true,
       });
     }

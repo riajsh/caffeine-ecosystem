@@ -81,6 +81,8 @@ export async function resolveEventbriteReviewAction(formData: FormData) {
     reviewId: formData.get("reviewId"),
     action: formData.get("action"),
     profileId: formData.get("profileId") || undefined,
+    fullName: formData.get("fullName") || undefined,
+    email: formData.get("email") || undefined,
   });
 
   if (!parsed.success) {

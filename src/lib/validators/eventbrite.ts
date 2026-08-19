@@ -28,6 +28,19 @@ export const resolveEventbriteReviewSchema = z
     reviewId: postgresUuidSchema,
     action: z.enum(["link", "create", "ignore"]),
     profileId: postgresUuidSchema.optional(),
+    fullName: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .transform((value) => value || undefined),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(320)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .superRefine((data, ctx) => {
     if (data.action === "link" && !data.profileId) {
@@ -35,6 +48,13 @@ export const resolveEventbriteReviewSchema = z
         code: "custom",
         message: "Choose a profile to link",
         path: ["profileId"],
+      });
+    }
+    if (data.action === "create" && data.email && !data.email.includes("@")) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter a valid email",
+        path: ["email"],
       });
     }
   });

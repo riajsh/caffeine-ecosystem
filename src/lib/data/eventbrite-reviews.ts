@@ -223,8 +223,8 @@ export async function resolveEventbriteReview(
     input.action === "link" && input.profileId
       ? input.profileId
       : await createProfileFromReview(supabase, orgId, {
-          email: review.email,
-          displayName: review.display_name,
+          email: input.email ?? review.email,
+          displayName: input.fullName ?? review.display_name,
         });
 
   const { error: attendeeError } = await supabase.from("event_attendees").upsert(
