@@ -7,10 +7,19 @@ import {
   createEventFromEventbrite,
   linkEventbriteEventToExisting,
 } from "@/lib/data/eventbrite-events";
+import type {
+  MappableField,
+  QuestionMappingList,
+} from "@/lib/data/eventbrite-question-mappings";
+import {
+  listQuestionMappingsForEvent,
+  saveQuestionMappings,
+} from "@/lib/data/eventbrite-question-mappings";
 import {
   resolveEventbriteReview,
   searchProfilesForEventbriteLink,
 } from "@/lib/data/eventbrite-reviews";
+import { resolveProfileUpdateReview } from "@/lib/data/eventbrite-profile-updates";
 import { syncEventbriteAttendeesForOrg } from "@/lib/integrations/eventbrite/sync";
 import {
   linkEventbriteEventSchema,
@@ -21,6 +30,7 @@ function revalidateEventbrite() {
   revalidatePath("/admin");
   revalidatePath("/admin/eventbrite/events");
   revalidatePath("/admin/eventbrite/review");
+  revalidatePath("/admin/eventbrite/updates");
   revalidatePath("/events");
   revalidatePath("/profiles");
 }
@@ -96,6 +106,58 @@ export async function resolveEventbriteReviewAction(formData: FormData) {
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Failed to update review",
+    };
+  }
+}
+
+export async function loadQuestionMappingsAction(
+  caffeineEventId: string,
+): Promise<{ result?: QuestionMappingList; error?: string }> {
+  try {
+    const result = await listQuestionMappingsForEvent(caffeineEventId);
+    return { result };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to load questions",
+    };
+  }
+}
+
+export async function saveQuestionMappingsAction(
+  caffeineEventId: string,
+  mappings: Array<{
+    eventbriteQuestionId: string;
+    questionText: string;
+    targetField: MappableField;
+  }>,
+) {
+  try {
+    await saveQuestionMappings(caffeineEventId, mappings);
+    revalidateEventbrite();
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to save mappings",
+    };
+  }
+}
+
+export async function resolveProfileUpdateReviewAction(formData: FormData) {
+  const reviewId = formData.get("reviewId");
+  const action = formData.get("action");
+
+  if (typeof reviewId !== "string" || (action !== "apply" && action !== "ignore")) {
+    return { error: "Invalid input" };
+  }
+
+  try {
+    await resolveProfileUpdateReview(reviewId, action);
+    revalidateEventbrite();
+    revalidatePath("/admin/eventbrite/updates");
+    return { success: true as const };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to update",
     };
   }
 }

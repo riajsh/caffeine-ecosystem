@@ -2,17 +2,179 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { cleanupTextBatch } from "@/lib/ai/text-cleanup";
 import {
   ensureEventAttendanceEvidence,
   findOrCreateEventTag,
   linkProfileToTag,
 } from "@/lib/data/events";
 import { getDecryptedEventbriteTokenForSync } from "@/lib/data/eventbrite-accounts";
+import {
+  loadQuestionFieldMapForSync,
+  type MappableField,
+} from "@/lib/data/eventbrite-question-mappings";
+import type {
+  EventbriteAttendee,
+  EventbriteAttendeeAnswer,
+} from "@/lib/integrations/eventbrite/client";
 import { listEventAttendees } from "@/lib/integrations/eventbrite/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
+
+type MappedField = "role" | "company_size" | "phone";
+type MappedProfileFields = Partial<Record<MappedField, string>>;
+
+const FIELD_TO_COLUMN: Record<MappedField, "occupation" | "company_size" | "phone"> = {
+  role: "occupation",
+  company_size: "company_size",
+  phone: "phone",
+};
+
+/**
+ * Pulls out each attendee's answers to questions mapped to a profile field
+ * (role/company size/phone), then batch-cleans the free-text ones (role,
+ * company size) through cleanupTextBatch in one shot rather than one API
+ * call per attendee. Phone is left as typed.
+ */
+async function buildMappedFieldsByAttendee(
+  attendees: EventbriteAttendee[],
+  fieldMap: Map<string, MappableField>,
+): Promise<Map<string, MappedProfileFields>> {
+  const byAttendee = new Map<string, MappedProfileFields>();
+
+  if (fieldMap.size === 0) {
+    return byAttendee;
+  }
+
+  for (const attendee of attendees) {
+    const fields: MappedProfileFields = {};
+
+    for (const answer of attendee.answers as EventbriteAttendeeAnswer[]) {
+      if (!answer.questionId || !answer.answer) {
+        continue;
+      }
+      const target = fieldMap.get(answer.questionId);
+      if (!target || target === "ignore") {
+        continue;
+      }
+      fields[target] = answer.answer;
+    }
+
+    if (Object.keys(fields).length > 0) {
+      byAttendee.set(attendee.id, fields);
+    }
+  }
+
+  if (byAttendee.size === 0) {
+    return byAttendee;
+  }
+
+  const textEntries: Array<{ attendeeId: string; field: "role" | "company_size" }> = [];
+  const textValues: string[] = [];
+
+  for (const [attendeeId, fields] of byAttendee) {
+    for (const field of ["role", "company_size"] as const) {
+      const value = fields[field];
+      if (value) {
+        textEntries.push({ attendeeId, field });
+        textValues.push(value);
+      }
+    }
+  }
+
+  if (textValues.length > 0) {
+    const cleaned = await cleanupTextBatch(textValues);
+    textEntries.forEach((entry, index) => {
+      const fields = byAttendee.get(entry.attendeeId);
+      if (fields) {
+        fields[entry.field] = cleaned[index];
+      }
+    });
+  }
+
+  return byAttendee;
+}
+
+/**
+ * For an attendee who matched an existing profile: fills any of the
+ * mapped fields that are currently blank on the profile directly, and
+ * queues a human review (rather than overwriting) for any field that's
+ * already set to something different — Ria wants to be the pulse on
+ * changed roles/companies, not silently lose the old value.
+ */
+async function applyMappedFieldsToMatchedProfile(
+  supabase: AdminClient,
+  orgId: string,
+  event: MappedEvent,
+  eventbriteAttendeeId: string,
+  profileId: string,
+  mapped: MappedProfileFields,
+): Promise<void> {
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("occupation, company_size, phone")
+    .eq("id", profileId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error || !profile) {
+    return;
+  }
+
+  const fill: { occupation?: string; company_size?: string; phone?: string } = {};
+  const changes: Record<string, { old: string; new: string }> = {};
+  const profileValues: Record<string, string | null> = {
+    occupation: profile.occupation,
+    company_size: profile.company_size,
+    phone: profile.phone,
+  };
+
+  for (const [field, newValue] of Object.entries(mapped) as Array<
+    [MappedField, string]
+  >) {
+    const column = FIELD_TO_COLUMN[field];
+    const current = profileValues[column];
+
+    if (!current || !current.trim()) {
+      fill[column] = newValue;
+    } else if (current.trim() !== newValue.trim()) {
+      changes[field] = { old: current, new: newValue };
+    }
+  }
+
+  if (Object.keys(fill).length > 0) {
+    const { error: fillError } = await supabase
+      .from("profiles")
+      .update(fill)
+      .eq("id", profileId)
+      .eq("org_id", orgId);
+    if (fillError) {
+      throw new Error(`Failed to fill profile fields: ${fillError.message}`);
+    }
+  }
+
+  if (Object.keys(changes).length > 0) {
+    const { error: reviewInsertError } = await supabase
+      .from("eventbrite_profile_update_reviews")
+      .insert({
+        org_id: orgId,
+        profile_id: profileId,
+        event_id: event.id,
+        eventbrite_attendee_id: eventbriteAttendeeId,
+        proposed_changes: changes,
+      });
+
+    // 23505 = we've already queued (or resolved) this exact attendee's
+    // update before — nothing new to do on a re-sync.
+    if (reviewInsertError && reviewInsertError.code !== "23505") {
+      throw new Error(
+        `Failed to queue profile update review: ${reviewInsertError.message}`,
+      );
+    }
+  }
+}
 
 export type EventbriteSyncStats = {
   eventsProcessed: number;
@@ -87,6 +249,8 @@ async function syncAttendeesForEvent(
   systemUserId: string,
 ): Promise<{ matched: number; queued: number }> {
   const attendees = await listEventAttendees(token, event.eventbrite_event_id);
+  const fieldMap = await loadQuestionFieldMapForSync(supabase, orgId, event.id);
+  const mappedFieldsByAttendee = await buildMappedFieldsByAttendee(attendees, fieldMap);
 
   let tagId: string | null = null;
   let tagFetched = false;
@@ -100,6 +264,7 @@ async function syncAttendeesForEvent(
     }
 
     const profileId = await findProfileIdByEmail(supabase, orgId, attendee.email);
+    const mappedFields = mappedFieldsByAttendee.get(attendee.id);
 
     if (profileId) {
       await ensureAttendeeRow(supabase, orgId, event.id, profileId);
@@ -110,6 +275,17 @@ async function syncAttendeesForEvent(
         systemUserId,
         supabase,
       );
+
+      if (mappedFields) {
+        await applyMappedFieldsToMatchedProfile(
+          supabase,
+          orgId,
+          event,
+          attendee.id,
+          profileId,
+          mappedFields,
+        );
+      }
 
       if (!tagFetched) {
         const tagResult = await findOrCreateEventTag(supabase, orgId, event.title);
@@ -131,6 +307,7 @@ async function syncAttendeesForEvent(
       email: attendee.email,
       display_name: attendee.name,
       ticket_type: attendee.ticketType,
+      mapped_fields: mappedFields ?? {},
     });
 
     // 23505 = we've already recorded this exact attendee before (whether

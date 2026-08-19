@@ -4,6 +4,20 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (23)
+
+**Built: Eventbrite registration answers now fill in role, phone, and company size on profiles**
+
+- **What we built:** On the "Eventbrite events" screen, each linked event now has a "Map registration questions" option — a one-time, per-event choice of which of the event's sign-up questions correspond to Role, Company size, or Phone (or "Don't use"). Once mapped, every attendee's answers to those questions flow into their profile automatically on sync.
+- **Formatting fixes:** Free-text answers (mainly job titles) are automatically cleaned up — proper capitalisation, genuine spelling mistakes fixed, real acronyms like CEO/VP/HR kept as-is — instead of coming through as all-lowercase, ALL CAPS, or jumbled. This uses an AI model when available (needs an `ANTHROPIC_API_KEY` — see below), and falls back to a simpler capitalisation-only fix if that's not configured, so it never blocks a sync either way.
+- **Filling in existing profiles safely:** if someone's profile already has a blank role/phone/company size, the new answer fills it in automatically. If the profile already has something different there (a role or company change, say), it does **not** get overwritten — instead it's queued on a new "Possible updates" screen (Admin → Eventbrite updates) for a human to look at and approve or dismiss. This also happens for anyone still sitting in the regular attendee review queue — once you link or create their profile, their answers get applied then.
+- **Why it matters:** this is what makes the searchable database actually useful — role, company size, and location now get populated consistently from event sign-ups, so a search like "Senior marketing executives in early-stage start-ups" has real data behind it. And since Caffeine Daily is the pulse on the community, a "possible update" flag means a promotion or company change doesn't slip through unnoticed.
+- **What you need to do:**
+  1. Run the migration below in Supabase SQL Editor (adds `company_size` to profiles, widens search to include it, and adds the two new tables behind this).
+  2. Push the code (commands below).
+  3. If you want the smart spelling/formatting cleanup to actually use AI (rather than just the basic capitalisation fallback), you'll need an Anthropic API key added as `ANTHROPIC_API_KEY` — happy to walk you through getting one whenever you're ready; everything works fine without it in the meantime.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings).
+
 ## 2026-08-20 (22)
 
 **Fixed: garbled "b'Name'" attendee names from Eventbrite + can now edit names/emails in review**

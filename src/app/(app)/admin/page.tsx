@@ -21,6 +21,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { listCalendarAccountsForOrg } from "@/lib/data/calendar-accounts";
 import { getEventbriteAccountForOrg } from "@/lib/data/eventbrite-accounts";
 import { listPendingEventbriteReviews } from "@/lib/data/eventbrite-reviews";
+import { listPendingProfileUpdateReviews } from "@/lib/data/eventbrite-profile-updates";
 import { countIncompleteProfiles } from "@/lib/data/profiles";
 import { getDeployChecklist } from "@/lib/deploy/checklist";
 
@@ -63,6 +64,13 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
     pendingEventbriteReviewCount = (await listPendingEventbriteReviews()).length;
   } catch {
     pendingEventbriteReviewCount = 0;
+  }
+
+  let pendingProfileUpdateCount = 0;
+  try {
+    pendingProfileUpdateCount = (await listPendingProfileUpdateReviews()).length;
+  } catch {
+    pendingProfileUpdateCount = 0;
   }
 
   return (
@@ -233,6 +241,14 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                   Review attendees
                   {pendingEventbriteReviewCount > 0
                     ? ` (${pendingEventbriteReviewCount})`
+                    : ""}
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/admin/eventbrite/updates">
+                  Possible updates
+                  {pendingProfileUpdateCount > 0
+                    ? ` (${pendingProfileUpdateCount})`
                     : ""}
                 </Link>
               </Button>

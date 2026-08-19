@@ -6,6 +6,7 @@ import { useState } from "react";
 import { linkEventbriteEventAction } from "@/app/(app)/admin/eventbrite/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EventbriteQuestionMappingPanel } from "@/components/admin/eventbrite-question-mapping-panel";
 import {
   Select,
   SelectContent,
@@ -63,6 +64,10 @@ export function EventbriteEventMappingRow({
           <Badge variant="secondary">Not linked</Badge>
         )}
       </div>
+
+      {linkedEvent ? (
+        <EventbriteQuestionMappingPanel caffeineEventId={linkedEvent.id} />
+      ) : null}
 
       {!linkedEvent ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">

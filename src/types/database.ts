@@ -689,6 +689,7 @@ export type Database = {
           event_id: string
           eventbrite_attendee_id: string
           id: string
+          mapped_fields: Json
           org_id: string
           profile_id: string | null
           reviewed_at: string | null
@@ -704,6 +705,7 @@ export type Database = {
           event_id: string
           eventbrite_attendee_id: string
           id?: string
+          mapped_fields?: Json
           org_id: string
           profile_id?: string | null
           reviewed_at?: string | null
@@ -719,6 +721,7 @@ export type Database = {
           event_id?: string
           eventbrite_attendee_id?: string
           id?: string
+          mapped_fields?: Json
           org_id?: string
           profile_id?: string | null
           reviewed_at?: string | null
@@ -754,6 +757,125 @@ export type Database = {
             columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      eventbrite_profile_update_reviews: {
+        Row: {
+          created_at: string
+          event_id: string
+          eventbrite_attendee_id: string
+          id: string
+          org_id: string
+          profile_id: string
+          proposed_changes: Json
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["profile_update_review_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          eventbrite_attendee_id: string
+          id?: string
+          org_id: string
+          profile_id: string
+          proposed_changes?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["profile_update_review_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          eventbrite_attendee_id?: string
+          id?: string
+          org_id?: string
+          profile_id?: string
+          proposed_changes?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["profile_update_review_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eventbrite_profile_update_reviews_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventbrite_profile_update_reviews_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventbrite_profile_update_reviews_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventbrite_profile_update_reviews_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      eventbrite_question_mappings: {
+        Row: {
+          created_at: string
+          event_id: string
+          eventbrite_question_id: string
+          id: string
+          org_id: string
+          question_text: string
+          target_field: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          eventbrite_question_id: string
+          id?: string
+          org_id: string
+          question_text: string
+          target_field?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          eventbrite_question_id?: string
+          id?: string
+          org_id?: string
+          question_text?: string
+          target_field?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eventbrite_question_mappings_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventbrite_question_mappings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
             referencedColumns: ["id"]
           },
         ]
@@ -1090,6 +1212,7 @@ export type Database = {
       profiles: {
         Row: {
           bio: string | null
+          company_size: string | null
           created_at: string
           email: string | null
           extended: Json
@@ -1110,6 +1233,7 @@ export type Database = {
         }
         Insert: {
           bio?: string | null
+          company_size?: string | null
           created_at?: string
           email?: string | null
           extended?: Json
@@ -1130,6 +1254,7 @@ export type Database = {
         }
         Update: {
           bio?: string | null
+          company_size?: string | null
           created_at?: string
           email?: string | null
           extended?: Json
@@ -1600,6 +1725,7 @@ export type Database = {
         | "no_response"
       owner_strength: "inner_circle" | "strong" | "warm" | "weak" | "unknown"
       participant_review_status: "pending" | "linked" | "created" | "ignored"
+      profile_update_review_status: "pending" | "applied" | "ignored"
       relationship_source_type:
         | "csv_import"
         | "email"
@@ -1807,6 +1933,7 @@ export const Constants = {
       ],
       owner_strength: ["inner_circle", "strong", "warm", "weak", "unknown"],
       participant_review_status: ["pending", "linked", "created", "ignored"],
+      profile_update_review_status: ["pending", "applied", "ignored"],
       relationship_source_type: [
         "csv_import",
         "email",

@@ -228,13 +228,85 @@ export async function listOrganizerEvents(
   return eventsByOrg.flat();
 }
 
+export type EventbriteAttendeeAnswer = {
+  questionId: string | null;
+  questionText: string | null;
+  answer: string | null;
+};
+
 export type EventbriteAttendee = {
   id: string;
   email: string | null;
   name: string | null;
   ticketType: string | null;
   checkedIn: boolean;
+  answers: EventbriteAttendeeAnswer[];
 };
+
+export type EventbriteQuestion = {
+  id: string;
+  text: string;
+};
+
+type EventbriteQuestionText = string | { text?: string | null } | null | undefined;
+
+function extractQuestionText(value: EventbriteQuestionText): string | null {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === "string") {
+    return cleanEventbriteText(value);
+  }
+  return cleanEventbriteText(value.text);
+}
+
+type EventbriteQuestionsResponse = {
+  questions?: Array<{
+    id: string;
+    question?: EventbriteQuestionText;
+    name?: EventbriteQuestionText;
+  }>;
+  pagination?: EventbritePagination;
+};
+
+/**
+ * Lists an event's custom registration questions, so an admin can map each
+ * one to a Caffeine profile field (role, company size, phone) once per
+ * event.
+ */
+export async function listEventQuestions(
+  token: string,
+  eventbriteEventId: string,
+): Promise<EventbriteQuestion[]> {
+  const questions: EventbriteQuestion[] = [];
+  let continuation: string | undefined;
+
+  do {
+    const params: Record<string, string> = {};
+    if (continuation) {
+      params.continuation = continuation;
+    }
+
+    const page = await eventbriteGet<EventbriteQuestionsResponse>(
+      token,
+      `/events/${encodeURIComponent(eventbriteEventId)}/questions/`,
+      params,
+    );
+
+    for (const question of page.questions ?? []) {
+      const text = extractQuestionText(question.question ?? question.name);
+      if (text) {
+        questions.push({ id: question.id, text });
+      }
+    }
+
+    continuation = page.pagination?.has_more_items
+      ? page.pagination.continuation
+      : undefined;
+  } while (continuation);
+
+  return questions;
+}
 
 /**
  * Eventbrite's data has had a bug since its 2026 ownership change where
@@ -258,13 +330,20 @@ type EventbriteAttendeesResponse = {
     ticket_class_name?: string | null;
     checked_in?: boolean;
     status?: string;
+    answers?: Array<{
+      question_id?: string | null;
+      question?: string | null;
+      answer?: string | null;
+    }>;
   }>;
   pagination?: EventbritePagination;
 };
 
 /**
- * Lists every attendee for one Eventbrite event, across all pages.
- * Cancelled/refunded tickets are skipped — only active attendees count.
+ * Lists every attendee for one Eventbrite event, across all pages,
+ * including their answers to the event's custom registration questions
+ * (used to fill in role, phone, company size once mapped). Cancelled/
+ * refunded tickets are skipped — only active attendees count.
  */
 export async function listEventAttendees(
   token: string,
@@ -274,7 +353,7 @@ export async function listEventAttendees(
   let continuation: string | undefined;
 
   do {
-    const params: Record<string, string> = {};
+    const params: Record<string, string> = { expand: "answers" };
     if (continuation) {
       params.continuation = continuation;
     }
@@ -297,6 +376,13 @@ export async function listEventAttendees(
         name: cleanEventbriteText(attendee.profile?.name),
         ticketType: cleanEventbriteText(attendee.ticket_class_name),
         checkedIn: attendee.checked_in === true,
+        answers: (attendee.answers ?? [])
+          .map((entry) => ({
+            questionId: entry.question_id?.trim() || null,
+            questionText: cleanEventbriteText(entry.question),
+            answer: cleanEventbriteText(entry.answer),
+          }))
+          .filter((entry) => entry.answer),
       });
     }
 

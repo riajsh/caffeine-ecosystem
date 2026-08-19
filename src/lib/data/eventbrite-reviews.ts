@@ -110,10 +110,68 @@ export async function searchProfilesForEventbriteLink(
   }));
 }
 
+type MappedProfileFields = Partial<
+  Record<"role" | "company_size" | "phone", string>
+>;
+
+const FIELD_TO_COLUMN: Record<
+  keyof MappedProfileFields,
+  "occupation" | "company_size" | "phone"
+> = {
+  role: "occupation",
+  company_size: "company_size",
+  phone: "phone",
+};
+
+/** Fills in any blank profile fields from the review's mapped Eventbrite
+ * answers (role/company size/phone) — never overwrites something already
+ * set, since that's what the profile-update review queue is for. */
+async function fillBlankFieldsFromMappedAnswers(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  profileId: string,
+  mappedFields: MappedProfileFields | null | undefined,
+): Promise<void> {
+  if (!mappedFields || Object.keys(mappedFields).length === 0) {
+    return;
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("occupation, company_size, phone")
+    .eq("id", profileId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (!profile) {
+    return;
+  }
+
+  const profileValues: Record<string, string | null> = {
+    occupation: profile.occupation,
+    company_size: profile.company_size,
+    phone: profile.phone,
+  };
+
+  const fill: { occupation?: string; company_size?: string; phone?: string } = {};
+  for (const [field, value] of Object.entries(mappedFields) as Array<
+    [keyof MappedProfileFields, string]
+  >) {
+    const column = FIELD_TO_COLUMN[field];
+    if (!profileValues[column]?.trim() && value) {
+      fill[column] = value;
+    }
+  }
+
+  if (Object.keys(fill).length > 0) {
+    await supabase.from("profiles").update(fill).eq("id", profileId).eq("org_id", orgId);
+  }
+}
+
 async function createProfileFromReview(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
-  review: { email: string; displayName: string | null },
+  review: { email: string; displayName: string | null; mappedFields?: MappedProfileFields },
 ): Promise<string> {
   const email = review.email.trim().toLowerCase();
 
@@ -125,10 +183,21 @@ async function createProfileFromReview(
     .maybeSingle();
 
   if (existing) {
+    await fillBlankFieldsFromMappedAnswers(supabase, orgId, existing.id, review.mappedFields);
     return existing.id;
   }
 
   const fullName = review.displayName?.trim() || email;
+
+  const mapped = review.mappedFields ?? {};
+  const extraFields: { occupation?: string; company_size?: string; phone?: string } = {};
+  for (const [field, value] of Object.entries(mapped) as Array<
+    [keyof MappedProfileFields, string]
+  >) {
+    if (value) {
+      extraFields[FIELD_TO_COLUMN[field]] = value;
+    }
+  }
 
   const { data, error } = await supabase
     .from("profiles")
@@ -139,6 +208,7 @@ async function createProfileFromReview(
       organisation_name: null,
       organisation_name_normalised: normaliseOrganisationName(null),
       source: "manual",
+      ...extraFields,
     })
     .select("id")
     .single();
@@ -176,6 +246,7 @@ export async function resolveEventbriteReview(
       email,
       display_name,
       status,
+      mapped_fields,
       events (
         id,
         title,
@@ -219,13 +290,19 @@ export async function resolveEventbriteReview(
     return;
   }
 
-  const profileId =
-    input.action === "link" && input.profileId
-      ? input.profileId
-      : await createProfileFromReview(supabase, orgId, {
-          email: input.email ?? review.email,
-          displayName: input.fullName ?? review.display_name,
-        });
+  const mappedFields = (review.mapped_fields ?? {}) as MappedProfileFields;
+
+  let profileId: string;
+  if (input.action === "link" && input.profileId) {
+    profileId = input.profileId;
+    await fillBlankFieldsFromMappedAnswers(supabase, orgId, profileId, mappedFields);
+  } else {
+    profileId = await createProfileFromReview(supabase, orgId, {
+      email: input.email ?? review.email,
+      displayName: input.fullName ?? review.display_name,
+      mappedFields,
+    });
+  }
 
   const { error: attendeeError } = await supabase.from("event_attendees").upsert(
     {
