@@ -9,17 +9,33 @@ import {
 export default async function EventbriteEventsPage() {
   await requireAdmin();
 
-  const [mapping, caffeineEvents] = await Promise.all([
-    listEventbriteEventsForMapping(),
-    listCaffeineEventsForLinking(),
-  ]);
+  let mapping: Awaited<ReturnType<typeof listEventbriteEventsForMapping>> = {
+    connected: false,
+    events: [],
+  };
+  let caffeineEvents: Awaited<ReturnType<typeof listCaffeineEventsForLinking>> = [];
+  let loadError: string | null = null;
+
+  try {
+    [mapping, caffeineEvents] = await Promise.all([
+      listEventbriteEventsForMapping(),
+      listCaffeineEventsForLinking(),
+    ]);
+  } catch (error) {
+    loadError =
+      error instanceof Error ? error.message : "Failed to load Eventbrite events";
+  }
 
   return (
     <AdminPage
       title="Eventbrite events"
       description="Link each Eventbrite event to a Caffeine event so attendee syncing knows where to add people. Do this once per event — it's remembered from then on."
     >
-      {!mapping.connected ? (
+      {loadError ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-body text-destructive">
+          Couldn&apos;t load your Eventbrite events: {loadError}
+        </p>
+      ) : !mapping.connected ? (
         <p className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-body text-foreground">
           Connect Eventbrite from the Admin overview page first.
         </p>

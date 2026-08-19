@@ -140,14 +140,27 @@ type EventbriteEventsResponse = {
   pagination?: EventbritePagination;
 };
 
+type EventbriteOrganizationsResponse = {
+  organizations?: Array<{ id: string }>;
+};
+
 /**
- * Lists every event the connected account organises (any status — draft,
- * live, ended, or canceled), most recent first, across all pages. Used by
- * the event-mapping screen so an admin can link each one to a Caffeine
- * event.
+ * Eventbrite accounts that belong to a team "Organization" often don't
+ * expose their events via /users/me/events/ (that only lists events tied
+ * directly to the personal user) — the events actually live under
+ * /organizations/{id}/events/. This finds those organisation IDs, if any.
  */
-export async function listOrganizerEvents(
+async function listOrganizationIds(token: string): Promise<string[]> {
+  const page = await eventbriteGet<EventbriteOrganizationsResponse>(
+    token,
+    "/users/me/organizations/",
+  );
+  return (page.organizations ?? []).map((org) => org.id);
+}
+
+async function listEventsFromPath(
   token: string,
+  path: string,
 ): Promise<EventbriteEventSummary[]> {
   const events: EventbriteEventSummary[] = [];
   let continuation: string | undefined;
@@ -161,11 +174,7 @@ export async function listOrganizerEvents(
       params.continuation = continuation;
     }
 
-    const page = await eventbriteGet<EventbriteEventsResponse>(
-      token,
-      "/users/me/events/",
-      params,
-    );
+    const page = await eventbriteGet<EventbriteEventsResponse>(token, path, params);
 
     for (const event of page.events ?? []) {
       events.push({
@@ -182,6 +191,41 @@ export async function listOrganizerEvents(
   } while (continuation);
 
   return events;
+}
+
+/**
+ * Lists every event the connected account organises (any status — draft,
+ * live, ended, or canceled), most recent first, across all pages. Used by
+ * the event-mapping screen so an admin can link each one to a Caffeine
+ * event.
+ *
+ * Tries the account's Organization(s) first — that's where events live for
+ * team/shared Eventbrite accounts — and falls back to the personal user's
+ * own events if the account has no organizations.
+ */
+export async function listOrganizerEvents(
+  token: string,
+): Promise<EventbriteEventSummary[]> {
+  let organizationIds: string[] = [];
+
+  try {
+    organizationIds = await listOrganizationIds(token);
+  } catch {
+    // If this lookup fails for any reason, fall back to the personal path below.
+    organizationIds = [];
+  }
+
+  if (organizationIds.length === 0) {
+    return listEventsFromPath(token, "/users/me/events/");
+  }
+
+  const eventsByOrg = await Promise.all(
+    organizationIds.map((orgId) =>
+      listEventsFromPath(token, `/organizations/${encodeURIComponent(orgId)}/events/`),
+    ),
+  );
+
+  return eventsByOrg.flat();
 }
 
 export type EventbriteAttendee = {

@@ -4,6 +4,14 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (21)
+
+**Fixed: "Eventbrite events" page crashed with a server error**
+
+- **What was wrong:** Eventbrite accounts that belong to a shared team "Organization" (like Caffeine Daily's) don't list their events the same way a personal account does — the events live under the Organization, not the personal user. We were only ever checking the personal-user path, so the page had nothing to show and crashed instead of handling it gracefully.
+- **What we changed:** Now checks for a connected Organization first and lists its events from there, falling back to the personal path only if there isn't one. Also made the page fail gracefully with a clear on-screen message instead of a blank server error, so if something like this happens again it's easy to see why.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings).
+
 ## 2026-08-19 (20)
 
 **Built: Eventbrite auto-pulls attendees, matches them, tags them, and keeps them updated (Phases 2-3 of the Eventbrite plan)**
