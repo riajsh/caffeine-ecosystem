@@ -112,6 +112,13 @@ export async function resolveEventbriteReviewAction(formData: FormData) {
 
 export async function bulkCreateProfilesFromReviewsAction(
   items: Array<{ reviewId: string; fullName: string; email: string }>,
+  // We're on the /admin/eventbrite/review page while this runs, so each
+  // revalidatePath() call forces Next to re-render that page's data and
+  // stream it back as part of THIS action's response — worth doing once
+  // the whole run finishes, but doing it on every small batch was adding
+  // real, avoidable latency to each round trip. The client only passes
+  // `true` for the very last batch.
+  isFinalBatch = true,
 ) {
   if (items.length === 0) {
     return { createdCount: 0, errors: [] };
@@ -119,7 +126,9 @@ export async function bulkCreateProfilesFromReviewsAction(
 
   try {
     const result = await bulkCreateProfilesFromReviews(items);
-    revalidateEventbrite();
+    if (isFinalBatch) {
+      revalidateEventbrite();
+    }
     return result;
   } catch (error) {
     return {

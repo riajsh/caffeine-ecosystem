@@ -108,7 +108,8 @@ export function EventbriteReviewList({
 
       setProgress({ done: 0, total: items.length });
 
-      for (const batch of batches) {
+      for (const [batchIndex, batch] of batches.entries()) {
+        const isFinalBatch = batchIndex === batches.length - 1;
         let succeeded = false;
         let lastError: unknown = null;
 
@@ -116,7 +117,7 @@ export function EventbriteReviewList({
         // holding up everything else if a batch is genuinely broken.
         for (let attempt = 0; attempt < 2 && !succeeded; attempt += 1) {
           try {
-            const result = await bulkCreateProfilesFromReviewsAction(batch);
+            const result = await bulkCreateProfilesFromReviewsAction(batch, isFinalBatch);
             createdTotal += result.createdCount;
             allErrors.push(...result.errors);
             succeeded = true;
