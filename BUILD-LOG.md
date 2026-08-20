@@ -4,6 +4,18 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (29)
+
+**Built: split a combined "company & role" registration question into two profile fields**
+
+- **What was wrong:** Some events (confirmed from a real Eventbrite export you shared — "Caffeine x Airwallex Friend") ask one question like "What's your company & role?" instead of two separate ones. Answers came through in every format imaginable — "Lumin, VP of Growth", "CSO - Pyper Vision", "Chief Marketing Officer at LawVu" — with no consistent order or separator, so there was no way to map it to just one field without losing the other half.
+- **What we built:** A new mapping option, "Company & role (combined)", on the question-mapping screen. Pick it for a question like this and each attendee's answer gets automatically split into Role and Company — reads the actual sentence rather than just splitting on a comma, since the format varies too much for a fixed rule (a small number of genuinely ambiguous ones, like someone listing three different roles at once, get left for a human rather than guessed at wrong).
+- **Also added, as you asked:** Role and Company now show up as editable fields on the attendee review screen too, right alongside Name and Email — pre-filled with the best guess, but you can fix them before creating a profile, exactly like the existing name/email editing.
+- **For attendees who already have a profile:** works the same safe way as role/company size already do — fills in the field if it's blank, and queues it as a "possible update" for you to approve if it's already set to something different.
+- **Accuracy note:** this genuinely needs an AI model to do well — reading "Pyper Vision - Chair, Victory and Grace - Co-Founder, Chitogel - Director" and knowing which is which isn't something a fixed rule can do reliably. Without an `ANTHROPIC_API_KEY` configured, it falls back to a simpler guess that handles clean two-part answers fine but bails out (leaving the whole answer in Role, Company blank) on messier ones — which is exactly why the new editable review fields matter.
+- **What you need to do:** run the migration below in Supabase SQL Editor (just widens what a question mapping is allowed to be set to — no data changes).
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings).
+
 ## 2026-08-20 (28)
 
 **Built: the four "before the 40+ event rollout" fixes from the workflow review**

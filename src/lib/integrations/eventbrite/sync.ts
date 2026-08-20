@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { cleanupTextBatch } from "@/lib/ai/text-cleanup";
+import { splitCompanyAndRoleBatch } from "@/lib/ai/split-company-role";
 import {
   ensureEventAttendanceEvidence,
   findOrCreateEventTag,
@@ -21,31 +22,41 @@ import type {
   EventbriteAttendeeAnswer,
 } from "@/lib/integrations/eventbrite/client";
 import { EventbriteAuthError, listEventAttendees } from "@/lib/integrations/eventbrite/client";
+import { normaliseOrganisationName } from "@/lib/normalise/organisation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
 
 type AdminClient = SupabaseClient<Database>;
 
-type MappedField = "role" | "company_size" | "phone";
+type MappedField = "role" | "company_size" | "phone" | "organisation_name";
 type MappedProfileFields = Partial<Record<MappedField, string>>;
 
-const FIELD_TO_COLUMN: Record<MappedField, "occupation" | "company_size" | "phone"> = {
+const FIELD_TO_COLUMN: Record<
+  MappedField,
+  "occupation" | "company_size" | "phone" | "organisation_name"
+> = {
   role: "occupation",
   company_size: "company_size",
   phone: "phone",
+  organisation_name: "organisation_name",
 };
 
 /**
  * Pulls out each attendee's answers to questions mapped to a profile field
- * (role/company size/phone), then batch-cleans the free-text ones (role,
- * company size) through cleanupTextBatch in one shot rather than one API
- * call per attendee. Phone is left as typed.
+ * (role/company size/phone/company-and-role-combined), then batch-processes
+ * the free-text ones in one shot rather than one API call per attendee:
+ * cleanupTextBatch for simple role/company-size answers, and
+ * splitCompanyAndRoleBatch for the combined "what's your company & role"
+ * style question, which needs splitting into two fields. Phone is left as
+ * typed. An explicit "Role" question mapping (if the event has one) always
+ * wins over whatever the combined split guesses.
  */
 async function buildMappedFieldsByAttendee(
   attendees: EventbriteAttendee[],
   fieldMap: Map<string, MappableField>,
 ): Promise<Map<string, MappedProfileFields>> {
   const byAttendee = new Map<string, MappedProfileFields>();
+  const combinedRawByAttendee = new Map<string, string>();
 
   if (fieldMap.size === 0) {
     return byAttendee;
@@ -62,10 +73,17 @@ async function buildMappedFieldsByAttendee(
       if (!target || target === "ignore") {
         continue;
       }
+      if (target === "company_and_role") {
+        // Keep the first one seen if an event somehow has more than one.
+        if (!combinedRawByAttendee.has(attendee.id)) {
+          combinedRawByAttendee.set(attendee.id, answer.answer);
+        }
+        continue;
+      }
       fields[target] = answer.answer;
     }
 
-    if (Object.keys(fields).length > 0) {
+    if (Object.keys(fields).length > 0 || combinedRawByAttendee.has(attendee.id)) {
       byAttendee.set(attendee.id, fields);
     }
   }
@@ -97,6 +115,26 @@ async function buildMappedFieldsByAttendee(
     });
   }
 
+  if (combinedRawByAttendee.size > 0) {
+    const attendeeIds = Array.from(combinedRawByAttendee.keys());
+    const rawValues = attendeeIds.map((id) => combinedRawByAttendee.get(id) as string);
+    const splits = await splitCompanyAndRoleBatch(rawValues);
+
+    attendeeIds.forEach((attendeeId, index) => {
+      const fields = byAttendee.get(attendeeId);
+      if (!fields) {
+        return;
+      }
+      const { role, company } = splits[index];
+      if (role && !fields.role) {
+        fields.role = role;
+      }
+      if (company && !fields.organisation_name) {
+        fields.organisation_name = company;
+      }
+    });
+  }
+
   return byAttendee;
 }
 
@@ -117,7 +155,7 @@ async function applyMappedFieldsToMatchedProfile(
 ): Promise<void> {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("occupation, company_size, phone")
+    .select("occupation, company_size, phone, organisation_name")
     .eq("id", profileId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -126,12 +164,19 @@ async function applyMappedFieldsToMatchedProfile(
     return;
   }
 
-  const fill: { occupation?: string; company_size?: string; phone?: string } = {};
+  const fill: {
+    occupation?: string;
+    company_size?: string;
+    phone?: string;
+    organisation_name?: string;
+    organisation_name_normalised?: string | null;
+  } = {};
   const changes: Record<string, { old: string; new: string }> = {};
   const profileValues: Record<string, string | null> = {
     occupation: profile.occupation,
     company_size: profile.company_size,
     phone: profile.phone,
+    organisation_name: profile.organisation_name,
   };
 
   for (const [field, newValue] of Object.entries(mapped) as Array<
@@ -142,6 +187,9 @@ async function applyMappedFieldsToMatchedProfile(
 
     if (!current || !current.trim()) {
       fill[column] = newValue;
+      if (column === "organisation_name") {
+        fill.organisation_name_normalised = normaliseOrganisationName(newValue);
+      }
     } else if (current.trim() !== newValue.trim()) {
       changes[field] = { old: current, new: newValue };
     }

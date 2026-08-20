@@ -14,7 +14,13 @@ import type { EventbriteReviewRow as EventbriteReviewRowData } from "@/lib/data/
 import { toastSuccess } from "@/lib/toast";
 import { useAsyncAction } from "@/lib/use-async-action";
 
-type RowState = { fullName: string; email: string; selected: boolean };
+type RowState = {
+  fullName: string;
+  email: string;
+  role: string;
+  organisationName: string;
+  selected: boolean;
+};
 type BatchError = { reviewId: string; message: string };
 
 // Kept small on purpose: each batch is one server round-trip that resolves
@@ -112,6 +118,8 @@ export function EventbriteReviewList({
         {
           fullName: review.displayName ?? "",
           email: review.email,
+          role: review.suggestedRole ?? "",
+          organisationName: review.suggestedOrganisationName ?? "",
           selected: false,
         },
       ]),
@@ -144,7 +152,13 @@ export function EventbriteReviewList({
 
   function defaultRowFor(id: string): RowState {
     const review = reviews.find((entry) => entry.id === id);
-    return { fullName: review?.displayName ?? "", email: review?.email ?? "", selected: false };
+    return {
+      fullName: review?.displayName ?? "",
+      email: review?.email ?? "",
+      role: review?.suggestedRole ?? "",
+      organisationName: review?.suggestedOrganisationName ?? "",
+      selected: false,
+    };
   }
 
   function rowFor(id: string): RowState {
@@ -162,6 +176,8 @@ export function EventbriteReviewList({
         reviewId,
         fullName: rowFor(reviewId).fullName,
         email: rowFor(reviewId).email,
+        role: rowFor(reviewId).role || undefined,
+        organisationName: rowFor(reviewId).organisationName || undefined,
       }));
 
       let createdTotal = 0;
@@ -285,8 +301,12 @@ export function EventbriteReviewList({
             review={review}
             fullName={rowFor(review.id).fullName}
             email={rowFor(review.id).email}
+            role={rowFor(review.id).role}
+            organisationName={rowFor(review.id).organisationName}
             onFullNameChange={(value) => updateRow(review.id, { fullName: value })}
             onEmailChange={(value) => updateRow(review.id, { email: value })}
+            onRoleChange={(value) => updateRow(review.id, { role: value })}
+            onOrganisationNameChange={(value) => updateRow(review.id, { organisationName: value })}
             selected={rowFor(review.id).selected}
             onToggleSelected={(value) => updateRow(review.id, { selected: value })}
           />

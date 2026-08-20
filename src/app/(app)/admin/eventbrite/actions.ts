@@ -111,6 +111,8 @@ export async function resolveEventbriteReviewAction(formData: FormData) {
     profileId: formData.get("profileId") || undefined,
     fullName: formData.get("fullName") || undefined,
     email: formData.get("email") || undefined,
+    role: formData.get("role") || undefined,
+    organisationName: formData.get("organisationName") || undefined,
   });
 
   if (!parsed.success) {
@@ -129,7 +131,13 @@ export async function resolveEventbriteReviewAction(formData: FormData) {
 }
 
 export async function bulkCreateProfilesFromReviewsAction(
-  items: Array<{ reviewId: string; fullName: string; email: string }>,
+  items: Array<{
+    reviewId: string;
+    fullName: string;
+    email: string;
+    role?: string;
+    organisationName?: string;
+  }>,
   // We're on the /admin/eventbrite/review page while this runs, so each
   // revalidatePath() call forces Next to re-render that page's data and
   // stream it back as part of THIS action's response — worth doing once

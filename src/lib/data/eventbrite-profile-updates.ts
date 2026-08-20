@@ -1,10 +1,11 @@
 import "server-only";
 
 import { getOrgId, requireAdmin } from "@/lib/auth/session";
+import { normaliseOrganisationName } from "@/lib/normalise/organisation";
 import { createClient } from "@/lib/supabase/server";
 
 export type ProposedFieldChange = {
-  field: "role" | "company_size" | "phone";
+  field: "role" | "company_size" | "phone" | "organisation_name";
   label: string;
   oldValue: string;
   newValue: string;
@@ -23,6 +24,7 @@ const FIELD_LABELS: Record<ProposedFieldChange["field"], string> = {
   role: "Role",
   company_size: "Company size",
   phone: "Phone",
+  organisation_name: "Company",
 };
 
 export async function listPendingProfileUpdateReviews(): Promise<
@@ -72,7 +74,10 @@ export async function listPendingProfileUpdateReviews(): Promise<
 
       const changes: ProposedFieldChange[] = Object.entries(changesRaw)
         .filter((entry): entry is [ProposedFieldChange["field"], { old: string; new: string }] =>
-          entry[0] === "role" || entry[0] === "company_size" || entry[0] === "phone",
+          entry[0] === "role" ||
+          entry[0] === "company_size" ||
+          entry[0] === "phone" ||
+          entry[0] === "organisation_name",
         )
         .map(([field, value]) => ({
           field,
@@ -128,7 +133,13 @@ export async function resolveProfileUpdateReview(
       { old: string; new: string }
     >;
 
-    const update: { occupation?: string; company_size?: string; phone?: string } = {};
+    const update: {
+      occupation?: string;
+      company_size?: string;
+      phone?: string;
+      organisation_name?: string;
+      organisation_name_normalised?: string | null;
+    } = {};
     for (const [field, value] of Object.entries(changes)) {
       if (field === "role") {
         update.occupation = value.new;
@@ -136,6 +147,9 @@ export async function resolveProfileUpdateReview(
         update.company_size = value.new;
       } else if (field === "phone") {
         update.phone = value.new;
+      } else if (field === "organisation_name") {
+        update.organisation_name = value.new;
+        update.organisation_name_normalised = normaliseOrganisationName(value.new);
       }
     }
 

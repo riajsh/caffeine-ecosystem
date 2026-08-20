@@ -21,6 +21,7 @@ import { useAsyncAction } from "@/lib/use-async-action";
 const FIELD_OPTIONS: Array<{ value: MappableField; label: string }> = [
   { value: "ignore", label: "Don't use" },
   { value: "role", label: "Role" },
+  { value: "company_and_role", label: "Company & role (combined)" },
   { value: "company_size", label: "Company size" },
   { value: "phone", label: "Phone" },
 ];
@@ -94,9 +95,12 @@ export function EventbriteQuestionMappingPanel({
   return (
     <div className="mt-3 space-y-3 rounded-lg border border-border bg-muted/30 p-3">
       <p className="text-caption text-muted-foreground">
-        If this event&apos;s registration form asked for role, company size, or
-        phone, match those questions here — answers will fill those fields on
-        each attendee&apos;s profile.
+        If this event&apos;s registration form asked for role, company size,
+        or phone, match those questions here — answers will fill those
+        fields on each attendee&apos;s profile. If one question asks for
+        company and role together in a single answer, use &quot;Company &amp;
+        role (combined)&quot; and it&apos;ll be split into both fields
+        automatically.
       </p>
 
       {loading ? (

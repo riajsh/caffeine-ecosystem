@@ -19,6 +19,11 @@ export type EventbriteReviewRow = {
   eventTitle: string;
   eventDate: string;
   createdAt: string;
+  /** Auto-extracted from mapped registration questions (e.g. a combined
+   * "company & role" answer) — offered as an editable starting point,
+   * same as the name/email fields, before creating a profile. */
+  suggestedRole: string | null;
+  suggestedOrganisationName: string | null;
 };
 
 export async function listPendingEventbriteReviews(): Promise<EventbriteReviewRow[]> {
@@ -35,6 +40,7 @@ export async function listPendingEventbriteReviews(): Promise<EventbriteReviewRo
       display_name,
       ticket_type,
       created_at,
+      mapped_fields,
       events (
         id,
         title,
@@ -58,6 +64,8 @@ export async function listPendingEventbriteReviews(): Promise<EventbriteReviewRo
         return null;
       }
 
+      const mapped = (row.mapped_fields ?? {}) as Record<string, string | undefined>;
+
       return {
         id: row.id,
         email: row.email,
@@ -67,6 +75,8 @@ export async function listPendingEventbriteReviews(): Promise<EventbriteReviewRo
         eventTitle: event.title,
         eventDate: event.event_date,
         createdAt: row.created_at,
+        suggestedRole: mapped.role ?? null,
+        suggestedOrganisationName: mapped.organisation_name ?? null,
       };
     })
     .filter((row): row is EventbriteReviewRow => row !== null);
@@ -111,21 +121,23 @@ export async function searchProfilesForEventbriteLink(
 }
 
 type MappedProfileFields = Partial<
-  Record<"role" | "company_size" | "phone", string>
+  Record<"role" | "company_size" | "phone" | "organisation_name", string>
 >;
 
 const FIELD_TO_COLUMN: Record<
   keyof MappedProfileFields,
-  "occupation" | "company_size" | "phone"
+  "occupation" | "company_size" | "phone" | "organisation_name"
 > = {
   role: "occupation",
   company_size: "company_size",
   phone: "phone",
+  organisation_name: "organisation_name",
 };
 
 /** Fills in any blank profile fields from the review's mapped Eventbrite
- * answers (role/company size/phone) — never overwrites something already
- * set, since that's what the profile-update review queue is for. */
+ * answers (role/company size/phone/company name) — never overwrites
+ * something already set, since that's what the profile-update review queue
+ * is for. */
 async function fillBlankFieldsFromMappedAnswers(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
@@ -138,7 +150,7 @@ async function fillBlankFieldsFromMappedAnswers(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("occupation, company_size, phone")
+    .select("occupation, company_size, phone, organisation_name")
     .eq("id", profileId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -151,15 +163,25 @@ async function fillBlankFieldsFromMappedAnswers(
     occupation: profile.occupation,
     company_size: profile.company_size,
     phone: profile.phone,
+    organisation_name: profile.organisation_name,
   };
 
-  const fill: { occupation?: string; company_size?: string; phone?: string } = {};
+  const fill: {
+    occupation?: string;
+    company_size?: string;
+    phone?: string;
+    organisation_name?: string;
+    organisation_name_normalised?: string | null;
+  } = {};
   for (const [field, value] of Object.entries(mappedFields) as Array<
     [keyof MappedProfileFields, string]
   >) {
     const column = FIELD_TO_COLUMN[field];
     if (!profileValues[column]?.trim() && value) {
       fill[column] = value;
+      if (column === "organisation_name") {
+        fill.organisation_name_normalised = normaliseOrganisationName(value);
+      }
     }
   }
 
@@ -190,12 +212,21 @@ async function createProfileFromReview(
   const fullName = review.displayName?.trim() || email;
 
   const mapped = review.mappedFields ?? {};
-  const extraFields: { occupation?: string; company_size?: string; phone?: string } = {};
+  const extraFields: {
+    occupation?: string;
+    company_size?: string;
+    phone?: string;
+    organisation_name?: string;
+    organisation_name_normalised?: string | null;
+  } = {};
   for (const [field, value] of Object.entries(mapped) as Array<
     [keyof MappedProfileFields, string]
   >) {
     if (value) {
       extraFields[FIELD_TO_COLUMN[field]] = value;
+      if (field === "organisation_name") {
+        extraFields.organisation_name_normalised = normaliseOrganisationName(value);
+      }
     }
   }
 
@@ -290,7 +321,15 @@ export async function resolveEventbriteReview(
     return;
   }
 
-  const mappedFields = (review.mapped_fields ?? {}) as MappedProfileFields;
+  const mappedFields: MappedProfileFields = {
+    ...((review.mapped_fields ?? {}) as MappedProfileFields),
+  };
+  if (input.role) {
+    mappedFields.role = input.role;
+  }
+  if (input.organisationName) {
+    mappedFields.organisation_name = input.organisationName;
+  }
 
   let profileId: string;
   if (input.action === "link" && input.profileId) {
@@ -355,7 +394,13 @@ export type BulkCreateProfilesResult = {
  * created and reuse it instead of making a duplicate.
  */
 export async function bulkCreateProfilesFromReviews(
-  items: Array<{ reviewId: string; fullName: string; email: string }>,
+  items: Array<{
+    reviewId: string;
+    fullName: string;
+    email: string;
+    role?: string;
+    organisationName?: string;
+  }>,
 ): Promise<BulkCreateProfilesResult> {
   const result: BulkCreateProfilesResult = { createdCount: 0, errors: [] };
 
@@ -366,6 +411,8 @@ export async function bulkCreateProfilesFromReviews(
         action: "create",
         fullName: item.fullName,
         email: item.email,
+        role: item.role,
+        organisationName: item.organisationName,
       });
       result.createdCount += 1;
     } catch (error) {
@@ -400,6 +447,8 @@ export async function bulkIgnoreReviews(
         action: "ignore",
         fullName: undefined,
         email: undefined,
+        role: undefined,
+        organisationName: undefined,
       });
       result.ignoredCount += 1;
     } catch (error) {

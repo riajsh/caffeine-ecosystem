@@ -20,16 +20,24 @@ export function EventbriteReviewRow({
   review,
   fullName,
   email,
+  role,
+  organisationName,
   onFullNameChange,
   onEmailChange,
+  onRoleChange,
+  onOrganisationNameChange,
   selected,
   onToggleSelected,
 }: {
   review: EventbriteReviewRowData;
   fullName: string;
   email: string;
+  role: string;
+  organisationName: string;
   onFullNameChange: (value: string) => void;
   onEmailChange: (value: string) => void;
+  onRoleChange: (value: string) => void;
+  onOrganisationNameChange: (value: string) => void;
   selected: boolean;
   onToggleSelected: (value: boolean) => void;
 }) {
@@ -62,6 +70,12 @@ export function EventbriteReviewRow({
       if (action === "create") {
         formData.set("fullName", fullName);
         formData.set("email", email);
+        if (role) {
+          formData.set("role", role);
+        }
+        if (organisationName) {
+          formData.set("organisationName", organisationName);
+        }
       }
       const result = await resolveEventbriteReviewAction(formData);
       if (result.error) {
@@ -123,6 +137,33 @@ export function EventbriteReviewRow({
             onChange={(event) => onEmailChange(event.target.value)}
             placeholder="Email"
             className="w-full sm:w-64"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-caption text-muted-foreground" htmlFor={`role-${review.id}`}>
+            Role
+          </label>
+          <Input
+            id={`role-${review.id}`}
+            value={role}
+            onChange={(event) => onRoleChange(event.target.value)}
+            placeholder="Role"
+            className="w-full sm:w-48"
+          />
+        </div>
+        <div className="space-y-1">
+          <label
+            className="text-caption text-muted-foreground"
+            htmlFor={`organisation-${review.id}`}
+          >
+            Company
+          </label>
+          <Input
+            id={`organisation-${review.id}`}
+            value={organisationName}
+            onChange={(event) => onOrganisationNameChange(event.target.value)}
+            placeholder="Company"
+            className="w-full sm:w-48"
           />
         </div>
       </div>

@@ -41,6 +41,18 @@ export const resolveEventbriteReviewSchema = z
       .max(320)
       .optional()
       .transform((value) => value || undefined),
+    role: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .transform((value) => value || undefined),
+    organisationName: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .superRefine((data, ctx) => {
     if (data.action === "link" && !data.profileId) {

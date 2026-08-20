@@ -8,7 +8,12 @@ import { listEventQuestions } from "@/lib/integrations/eventbrite/client";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 
-export type MappableField = "role" | "company_size" | "phone" | "ignore";
+export type MappableField =
+  | "role"
+  | "company_size"
+  | "phone"
+  | "company_and_role"
+  | "ignore";
 
 export type QuestionMappingRow = {
   eventbriteQuestionId: string;
