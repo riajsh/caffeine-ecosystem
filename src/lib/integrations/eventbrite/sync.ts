@@ -326,6 +326,15 @@ async function syncAttendeesForEvent(
   const fieldMap = await loadQuestionFieldMapForSync(supabase, orgId, event.id);
   const mappedFieldsByAttendee = await buildMappedFieldsByAttendee(attendeesWithEmail, fieldMap);
 
+  // Attendance evidence ("Attended this event") and notes-from-this-event
+  // both use source "event_system", but a profile can only have one
+  // activities row per (org_id, profile_id, source, source_ref) — the
+  // database enforces this with its own unique index, regardless of
+  // activity_type. So notes get their own source_ref, distinct from the
+  // plain event id used for attendance evidence, or the two would collide
+  // on every re-sync of an event that already has attendance evidence.
+  const noteSourceRef = `${event.id}:note`;
+
   const [profileByEmail, existingAttendeesResult, existingActivitiesResult, existingReviewsResult] =
     await Promise.all([
       loadOrgProfileLookup(supabase, orgId),
@@ -336,10 +345,10 @@ async function syncAttendeesForEvent(
         .eq("event_id", event.id),
       supabase
         .from("activities")
-        .select("profile_id, activity_type")
+        .select("profile_id, source_ref")
         .eq("org_id", orgId)
         .eq("source", "event_system")
-        .eq("source_ref", event.id),
+        .in("source_ref", [event.id, noteSourceRef]),
       supabase
         .from("eventbrite_attendee_reviews")
         .select("eventbrite_attendee_id, status")
@@ -362,17 +371,14 @@ async function syncAttendeesForEvent(
   const existingAttendeeProfileIds = new Set(
     (existingAttendeesResult.data ?? []).map((row) => row.profile_id),
   );
-  // Both "attended this event" evidence and "note from this event" entries
-  // share the same source/source_ref, so split them apart by activity_type
-  // — otherwise having one would look like having the other.
   const existingEvidenceProfileIds = new Set(
     (existingActivitiesResult.data ?? [])
-      .filter((row) => row.activity_type === "event")
+      .filter((row) => row.source_ref === event.id)
       .map((row) => row.profile_id),
   );
   const existingNoteProfileIds = new Set(
     (existingActivitiesResult.data ?? [])
-      .filter((row) => row.activity_type === "note")
+      .filter((row) => row.source_ref === noteSourceRef)
       .map((row) => row.profile_id),
   );
   const existingReviewStatusByAttendeeId = new Map(
@@ -484,7 +490,7 @@ async function syncAttendeesForEvent(
           summary: mappedFields.note,
           activity_date: event.event_date,
           source: "event_system",
-          source_ref: event.id,
+          source_ref: noteSourceRef,
           created_by: systemUserId,
         });
         existingNoteProfileIds.add(profile.id);

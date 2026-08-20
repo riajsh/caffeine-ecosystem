@@ -4,6 +4,15 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-21 (35)
+
+**Fixed: re-syncing an already-synced event failed with "duplicate key value violates unique constraint" on notes**
+
+- **What was wrong:** the database only allows one activity record per profile per event per "source" — it doesn't care about the difference between an "Attended this event" record and a "Note from this event" record if they're tagged the same way underneath. My note feature was tagging both the same way, so the very first re-sync of an event that already had attendance recorded failed trying to add the note.
+- **What changed:** notes now get their own distinct tag underneath (still tied to the same event, still only ever added once), so they sit alongside the "attended" record instead of colliding with it.
+- **Nothing to run in Supabase for this one** — pure app-side fix.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
 ## 2026-08-21 (34)
 
 **Added: a "Note" question mapping that writes straight into a profile's timeline**
