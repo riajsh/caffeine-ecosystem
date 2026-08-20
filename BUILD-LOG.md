@@ -4,6 +4,24 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (31)
+
+**Added: a standalone "Company" question mapping**
+
+- **What it does:** when mapping an event's registration questions, there's now a "Company" option alongside "Role" — for events that ask company name as its own separate question (not combined with role). An answer mapped this way fills the profile's Company field directly, same as Role already does.
+- **How it's different from "Company & role (combined)":** that option is still there for when one question asks for both together and needs splitting. Use "Company" instead when the form already asks for company name on its own.
+- **To run in Supabase:** one migration, widening the allowed mapping values to include "company" — see file below.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 pre-existing warnings).
+
+## 2026-08-20 (30)
+
+**Fixed: a still-pending review's suggested Role/Company never refreshed after changing the question mapping**
+
+- **What was wrong:** if an attendee was still sitting in the review queue (not yet turned into a profile) when you added a "Company & role" mapping afterwards, re-syncing wouldn't update that review's pre-filled suggestion — it kept whatever it had (nothing) from before the mapping existed.
+- **What we changed:** a re-sync now refreshes the suggested answers on any review that's still pending, so mapping changes show up there too. Anything already turned into a profile is never touched by this.
+- **Nothing to run in Supabase for this one.**
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
 ## 2026-08-20 (29)
 
 **Built: split a combined "company & role" registration question into two profile fields**

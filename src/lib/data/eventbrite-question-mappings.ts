@@ -10,6 +10,7 @@ import type { Database } from "@/types/database";
 
 export type MappableField =
   | "role"
+  | "company"
   | "company_size"
   | "phone"
   | "company_and_role"

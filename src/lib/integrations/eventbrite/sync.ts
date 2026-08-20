@@ -80,6 +80,12 @@ async function buildMappedFieldsByAttendee(
         }
         continue;
       }
+      if (target === "company") {
+        // "Company" is its own separate question but maps to the
+        // organisation_name profile column, not a "company" column.
+        fields.organisation_name = answer.answer;
+        continue;
+      }
       fields[target] = answer.answer;
     }
 
@@ -92,11 +98,14 @@ async function buildMappedFieldsByAttendee(
     return byAttendee;
   }
 
-  const textEntries: Array<{ attendeeId: string; field: "role" | "company_size" }> = [];
+  const textEntries: Array<{
+    attendeeId: string;
+    field: "role" | "company_size" | "organisation_name";
+  }> = [];
   const textValues: string[] = [];
 
   for (const [attendeeId, fields] of byAttendee) {
-    for (const field of ["role", "company_size"] as const) {
+    for (const field of ["role", "company_size", "organisation_name"] as const) {
       const value = fields[field];
       if (value) {
         textEntries.push({ attendeeId, field });
@@ -361,11 +370,24 @@ async function syncAttendeesForEvent(
       mapped_fields: mappedFields ?? {},
     });
 
-    // 23505 = we've already recorded this exact attendee before (whether
-    // still pending review or already resolved) — nothing new to do.
     if (!error) {
       queued += 1;
-    } else if (error.code !== "23505") {
+    } else if (error.code === "23505") {
+      // Already queued from an earlier sync. If it's still sitting there
+      // unresolved (no profile created yet), refresh its mapped answers —
+      // otherwise a question-mapping change made after the first sync would
+      // never show up as a suggestion on a review that's still pending.
+      // Never touch one that's already been resolved into a profile.
+      if (mappedFields && Object.keys(mappedFields).length > 0) {
+        await supabase
+          .from("eventbrite_attendee_reviews")
+          .update({ mapped_fields: mappedFields })
+          .eq("org_id", orgId)
+          .eq("event_id", event.id)
+          .eq("eventbrite_attendee_id", attendee.id)
+          .eq("status", "pending");
+      }
+    } else {
       throw new Error(`Failed to queue attendee for review: ${error.message}`);
     }
   }
