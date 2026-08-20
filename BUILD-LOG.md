@@ -4,6 +4,23 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (33)
+
+**Fixed: "Sync now" being slow — actually fixed this time, not just worked around**
+
+- **What was actually wrong:** every sync (the cron, "Sync now", and now the new per-event button) was doing a handful of separate database checks for every single attendee, one at a time — "does this person already have a profile match", "are they already recorded as an attendee", "do we already have evidence they attended", "are they already tagged". For an event with a few hundred attendees, that's hundreds of tiny back-and-forths, one after another, before it can even start writing anything. That's what made it feel like it hung for minutes, and why it was only going to get worse as you link more of your 40+ events.
+- **What changed:** for each event, the sync now asks those same questions once, in bulk, for everyone at once — then only writes the handful of things that actually changed. Nothing about what it does or how it decides things is different (it still never re-creates something that already exists, never overwrites a changed role/company without asking you first, still queues the same reviews) — it just does the same work in a handful of trips instead of hundreds.
+- **Nothing to run in Supabase for this one** — this is all in how the app talks to the database, not the database itself.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 pre-existing warnings). I re-read through the whole rewritten flow line by line against the old version to make sure the actual behaviour (what gets created, what gets skipped, what gets flagged for your review) is identical — only the number of trips to the database changed.
+
+## 2026-08-20 (32)
+
+**Added: a "Sync this event" button on each linked event**
+
+- **Why:** the only "Sync now" button on the main Admin page re-syncs every single Eventbrite event you've ever linked, not just the one you're working on — so testing a change to one event (like a new question mapping) meant waiting on a full resync of everything. This adds a fast, one-event version next to each linked event's question mapping.
+- **Nothing to run in Supabase for this one.**
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
 ## 2026-08-20 (31)
 
 **Added: a standalone "Company" question mapping**

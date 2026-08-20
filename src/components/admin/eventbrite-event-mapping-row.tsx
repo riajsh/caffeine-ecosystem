@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { linkEventbriteEventAction } from "@/app/(app)/admin/eventbrite/actions";
+import {
+  linkEventbriteEventAction,
+  syncEventbriteEventNowAction,
+} from "@/app/(app)/admin/eventbrite/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EventbriteQuestionMappingPanel } from "@/components/admin/eventbrite-question-mapping-panel";
@@ -38,6 +41,7 @@ export function EventbriteEventMappingRow({
 }: EventbriteEventMappingRowProps) {
   const router = useRouter();
   const { isPending, run } = useAsyncAction();
+  const { isPending: isSyncing, run: runSync } = useAsyncAction();
   const [choice, setChoice] = useState("new");
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +70,37 @@ export function EventbriteEventMappingRow({
       </div>
 
       {linkedEvent ? (
-        <EventbriteQuestionMappingPanel caffeineEventId={linkedEvent.id} />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <EventbriteQuestionMappingPanel caffeineEventId={linkedEvent.id} />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={isSyncing}
+            onClick={() => {
+              void runSync(async () => {
+                setError(null);
+                const result = await syncEventbriteEventNowAction(linkedEvent.id);
+                if (result.error) {
+                  setError(result.error);
+                  return;
+                }
+                if (!result.result) {
+                  setError("Couldn't sync — check the Eventbrite connection.");
+                  return;
+                }
+                const { matched, queued } = result.result;
+                const parts: string[] = [];
+                if (matched > 0) parts.push(`${matched} attendee${matched === 1 ? "" : "s"} added`);
+                if (queued > 0) parts.push(`${queued} queued for review`);
+                toastSuccess(parts.length > 0 ? parts.join(", ") : "No changes");
+                router.refresh();
+              });
+            }}
+          >
+            {isSyncing ? "Syncing…" : "Sync this event"}
+          </Button>
+        </div>
       ) : null}
 
       {!linkedEvent ? (

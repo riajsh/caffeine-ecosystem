@@ -4,11 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { cleanupTextBatch } from "@/lib/ai/text-cleanup";
 import { splitCompanyAndRoleBatch } from "@/lib/ai/split-company-role";
-import {
-  ensureEventAttendanceEvidence,
-  findOrCreateEventTag,
-  linkProfileToTag,
-} from "@/lib/data/events";
+import { findOrCreateEventTag } from "@/lib/data/events";
 import {
   disableEventbriteSyncAfterAuthFailure,
   getDecryptedEventbriteTokenForSync,
@@ -17,6 +13,7 @@ import {
   loadQuestionFieldMapForSync,
   type MappableField,
 } from "@/lib/data/eventbrite-question-mappings";
+import { formatInteractionDate } from "@/lib/format/date";
 import type {
   EventbriteAttendee,
   EventbriteAttendeeAnswer,
@@ -147,32 +144,65 @@ async function buildMappedFieldsByAttendee(
   return byAttendee;
 }
 
+type ProfileLookupRow = {
+  id: string;
+  email: string;
+  occupation: string | null;
+  company_size: string | null;
+  phone: string | null;
+  organisation_name: string | null;
+};
+
+/**
+ * Loads every profile in the org that has an email, once per sync run,
+ * keyed by lower-cased email. Replaces what used to be one "find profile by
+ * email" database round trip per attendee — for an event with a few hundred
+ * attendees that added up fast, especially once "Sync now" started walking
+ * every linked event in one go. A whole org's worth of profiles (just a
+ * handful of columns) is small enough to hold in memory for the length of
+ * one sync.
+ */
+async function loadOrgProfileLookup(
+  supabase: AdminClient,
+  orgId: string,
+): Promise<Map<string, ProfileLookupRow>> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, occupation, company_size, phone, organisation_name")
+    .eq("org_id", orgId)
+    .not("email", "is", null);
+
+  if (error) {
+    throw new Error(`Failed to load profiles: ${error.message}`);
+  }
+
+  const byEmail = new Map<string, ProfileLookupRow>();
+  for (const row of data ?? []) {
+    if (row.email) {
+      byEmail.set(row.email.trim().toLowerCase(), row as ProfileLookupRow);
+    }
+  }
+  return byEmail;
+}
+
 /**
  * For an attendee who matched an existing profile: fills any of the
  * mapped fields that are currently blank on the profile directly, and
  * queues a human review (rather than overwriting) for any field that's
  * already set to something different — Ria wants to be the pulse on
- * changed roles/companies, not silently lose the old value.
+ * changed roles/companies, not silently lose the old value. Takes the
+ * profile's current field values directly (already fetched in bulk by
+ * loadOrgProfileLookup) rather than looking them up itself.
  */
 async function applyMappedFieldsToMatchedProfile(
   supabase: AdminClient,
   orgId: string,
   event: MappedEvent,
   eventbriteAttendeeId: string,
-  profileId: string,
+  profile: ProfileLookupRow,
   mapped: MappedProfileFields,
 ): Promise<void> {
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("occupation, company_size, phone, organisation_name")
-    .eq("id", profileId)
-    .eq("org_id", orgId)
-    .maybeSingle();
-
-  if (error || !profile) {
-    return;
-  }
-
+  const profileId = profile.id;
   const fill: {
     occupation?: string;
     company_size?: string;
@@ -243,57 +273,6 @@ export type EventbriteSyncStats = {
   errors: string[];
 };
 
-async function findProfileIdByEmail(
-  supabase: AdminClient,
-  orgId: string,
-  email: string,
-): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("org_id", orgId)
-    .ilike("email", email)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to look up profile: ${error.message}`);
-  }
-
-  return data?.id ?? null;
-}
-
-/** Adds the attendee if not already recorded. Never downgrades an
- * existing "Attended" row back to "Registered" on a re-sync. */
-async function ensureAttendeeRow(
-  supabase: AdminClient,
-  orgId: string,
-  eventId: string,
-  profileId: string,
-): Promise<void> {
-  const { data: existing } = await supabase
-    .from("event_attendees")
-    .select("id")
-    .eq("org_id", orgId)
-    .eq("event_id", eventId)
-    .eq("profile_id", profileId)
-    .maybeSingle();
-
-  if (existing) {
-    return;
-  }
-
-  const { error } = await supabase.from("event_attendees").insert({
-    org_id: orgId,
-    event_id: eventId,
-    profile_id: profileId,
-    attended: false,
-  });
-
-  if (error && error.code !== "23505") {
-    throw new Error(`Failed to add attendee: ${error.message}`);
-  }
-}
-
 type MappedEvent = {
   id: string;
   title: string;
@@ -301,6 +280,21 @@ type MappedEvent = {
   eventbrite_event_id: string;
 };
 
+/**
+ * Syncs one event's attendees against the org's profiles.
+ *
+ * Rewritten to replace what used to be several sequential database round
+ * trips per attendee (look up their profile, check if they're already
+ * recorded as an attendee, check if attendance evidence already exists,
+ * check if they're already tagged) with a handful of batched queries for
+ * the whole event up front, then batched inserts for whatever's actually
+ * new. That's what made "Sync now" take minutes once there were dozens of
+ * linked events each with real attendee counts — this keeps the same
+ * behaviour (never downgrades existing rows, never overwrites a resolved
+ * review, still queues profile-update reviews rather than silently
+ * overwriting changed answers) but does it in a small fixed number of
+ * queries per event instead of one set per attendee.
+ */
 async function syncAttendeesForEvent(
   supabase: AdminClient,
   orgId: string,
@@ -309,87 +303,235 @@ async function syncAttendeesForEvent(
   systemUserId: string,
 ): Promise<{ matched: number; queued: number }> {
   const attendees = await listEventAttendees(token, event.eventbrite_event_id);
-  const fieldMap = await loadQuestionFieldMapForSync(supabase, orgId, event.id);
-  const mappedFieldsByAttendee = await buildMappedFieldsByAttendee(attendees, fieldMap);
+  const attendeesWithEmail = attendees.filter(
+    (attendee): attendee is EventbriteAttendee & { email: string } => Boolean(attendee.email),
+  );
 
-  let tagId: string | null = null;
-  let tagFetched = false;
+  if (attendeesWithEmail.length === 0) {
+    return { matched: 0, queued: 0 };
+  }
+
+  const fieldMap = await loadQuestionFieldMapForSync(supabase, orgId, event.id);
+  const mappedFieldsByAttendee = await buildMappedFieldsByAttendee(attendeesWithEmail, fieldMap);
+
+  const [profileByEmail, existingAttendeesResult, existingActivitiesResult, existingReviewsResult] =
+    await Promise.all([
+      loadOrgProfileLookup(supabase, orgId),
+      supabase
+        .from("event_attendees")
+        .select("profile_id")
+        .eq("org_id", orgId)
+        .eq("event_id", event.id),
+      supabase
+        .from("activities")
+        .select("profile_id")
+        .eq("org_id", orgId)
+        .eq("source", "event_system")
+        .eq("source_ref", event.id),
+      supabase
+        .from("eventbrite_attendee_reviews")
+        .select("eventbrite_attendee_id, status")
+        .eq("org_id", orgId)
+        .eq("event_id", event.id),
+    ]);
+
+  if (existingAttendeesResult.error) {
+    throw new Error(`Failed to load existing attendees: ${existingAttendeesResult.error.message}`);
+  }
+  if (existingActivitiesResult.error) {
+    throw new Error(
+      `Failed to load existing attendance evidence: ${existingActivitiesResult.error.message}`,
+    );
+  }
+  if (existingReviewsResult.error) {
+    throw new Error(`Failed to load existing reviews: ${existingReviewsResult.error.message}`);
+  }
+
+  const existingAttendeeProfileIds = new Set(
+    (existingAttendeesResult.data ?? []).map((row) => row.profile_id),
+  );
+  const existingEvidenceProfileIds = new Set(
+    (existingActivitiesResult.data ?? []).map((row) => row.profile_id),
+  );
+  const existingReviewStatusByAttendeeId = new Map(
+    (existingReviewsResult.data ?? []).map((row) => [row.eventbrite_attendee_id, row.status]),
+  );
+
+  const tagResult = await findOrCreateEventTag(supabase, orgId, event.title);
+  const tagId = tagResult.tagId;
+
+  let existingTaggedProfileIds = new Set<string>();
+  if (tagId) {
+    const { data: taggedRows, error: taggedError } = await supabase
+      .from("profile_tags")
+      .select("profile_id")
+      .eq("org_id", orgId)
+      .eq("tag_id", tagId);
+    if (taggedError) {
+      throw new Error(`Failed to load existing tag links: ${taggedError.message}`);
+    }
+    existingTaggedProfileIds = new Set((taggedRows ?? []).map((row) => row.profile_id));
+  }
+
+  const newAttendeeRows: Array<{
+    org_id: string;
+    event_id: string;
+    profile_id: string;
+    attended: boolean;
+  }> = [];
+  const newActivityRows: Array<{
+    org_id: string;
+    profile_id: string;
+    activity_type: "event";
+    title: string;
+    summary: string;
+    activity_date: string;
+    source: "event_system";
+    source_ref: string;
+    created_by: string;
+  }> = [];
+  const newTagRows: Array<{ org_id: string; profile_id: string; tag_id: string }> = [];
+  const newReviewRows: Array<{
+    org_id: string;
+    event_id: string;
+    eventbrite_attendee_id: string;
+    email: string;
+    display_name: string | null;
+    ticket_type: string | null;
+    mapped_fields: MappedProfileFields;
+  }> = [];
+  const reviewsNeedingRefresh: Array<{ eventbriteAttendeeId: string; mappedFields: MappedProfileFields }> = [];
+  const mappedFieldUpdates: Array<{
+    profile: ProfileLookupRow;
+    eventbriteAttendeeId: string;
+    mappedFields: MappedProfileFields;
+  }> = [];
+
   let matched = 0;
   let queued = 0;
 
-  for (const attendee of attendees) {
-    if (!attendee.email) {
-      // No email on the ticket — nothing to match or review against.
-      continue;
-    }
-
-    const profileId = await findProfileIdByEmail(supabase, orgId, attendee.email);
+  for (const attendee of attendeesWithEmail) {
+    const profile = profileByEmail.get(attendee.email.trim().toLowerCase());
     const mappedFields = mappedFieldsByAttendee.get(attendee.id);
 
-    if (profileId) {
-      await ensureAttendeeRow(supabase, orgId, event.id, profileId);
-      await ensureEventAttendanceEvidence(
-        orgId,
-        event,
-        profileId,
-        systemUserId,
-        supabase,
-      );
-
+    if (profile) {
+      if (!existingAttendeeProfileIds.has(profile.id)) {
+        newAttendeeRows.push({
+          org_id: orgId,
+          event_id: event.id,
+          profile_id: profile.id,
+          attended: false,
+        });
+        existingAttendeeProfileIds.add(profile.id);
+      }
+      if (!existingEvidenceProfileIds.has(profile.id)) {
+        newActivityRows.push({
+          org_id: orgId,
+          profile_id: profile.id,
+          activity_type: "event",
+          title: event.title,
+          summary: `Attended ${formatInteractionDate(event.event_date)}`,
+          activity_date: event.event_date,
+          source: "event_system",
+          source_ref: event.id,
+          created_by: systemUserId,
+        });
+        existingEvidenceProfileIds.add(profile.id);
+      }
+      if (tagId && !existingTaggedProfileIds.has(profile.id)) {
+        newTagRows.push({ org_id: orgId, profile_id: profile.id, tag_id: tagId });
+        existingTaggedProfileIds.add(profile.id);
+      }
       if (mappedFields) {
-        await applyMappedFieldsToMatchedProfile(
-          supabase,
-          orgId,
-          event,
-          attendee.id,
-          profileId,
-          mappedFields,
-        );
+        mappedFieldUpdates.push({ profile, eventbriteAttendeeId: attendee.id, mappedFields });
       }
-
-      if (!tagFetched) {
-        const tagResult = await findOrCreateEventTag(supabase, orgId, event.title);
-        tagId = tagResult.tagId;
-        tagFetched = true;
-      }
-      if (tagId) {
-        await linkProfileToTag(supabase, orgId, profileId, tagId);
-      }
-
       matched += 1;
       continue;
     }
 
-    const { error } = await supabase.from("eventbrite_attendee_reviews").insert({
-      org_id: orgId,
-      event_id: event.id,
-      eventbrite_attendee_id: attendee.id,
-      email: attendee.email,
-      display_name: attendee.name,
-      ticket_type: attendee.ticketType,
-      mapped_fields: mappedFields ?? {},
-    });
-
-    if (!error) {
+    const existingStatus = existingReviewStatusByAttendeeId.get(attendee.id);
+    if (existingStatus === undefined) {
+      newReviewRows.push({
+        org_id: orgId,
+        event_id: event.id,
+        eventbrite_attendee_id: attendee.id,
+        email: attendee.email,
+        display_name: attendee.name,
+        ticket_type: attendee.ticketType,
+        mapped_fields: mappedFields ?? {},
+      });
       queued += 1;
-    } else if (error.code === "23505") {
-      // Already queued from an earlier sync. If it's still sitting there
-      // unresolved (no profile created yet), refresh its mapped answers —
-      // otherwise a question-mapping change made after the first sync would
-      // never show up as a suggestion on a review that's still pending.
-      // Never touch one that's already been resolved into a profile.
-      if (mappedFields && Object.keys(mappedFields).length > 0) {
-        await supabase
-          .from("eventbrite_attendee_reviews")
-          .update({ mapped_fields: mappedFields })
-          .eq("org_id", orgId)
-          .eq("event_id", event.id)
-          .eq("eventbrite_attendee_id", attendee.id)
-          .eq("status", "pending");
-      }
-    } else {
-      throw new Error(`Failed to queue attendee for review: ${error.message}`);
+    } else if (existingStatus === "pending" && mappedFields && Object.keys(mappedFields).length > 0) {
+      // Already queued from an earlier sync and still sitting there
+      // unresolved — refresh its mapped answers so a question-mapping
+      // change made after the first sync shows up as a suggestion. Never
+      // touch one that's already been resolved into a profile.
+      reviewsNeedingRefresh.push({ eventbriteAttendeeId: attendee.id, mappedFields });
     }
+  }
+
+  if (newAttendeeRows.length > 0) {
+    const { error } = await supabase
+      .from("event_attendees")
+      .upsert(newAttendeeRows, { onConflict: "event_id,profile_id", ignoreDuplicates: true });
+    if (error) {
+      throw new Error(`Failed to add attendees: ${error.message}`);
+    }
+  }
+
+  if (newActivityRows.length > 0) {
+    const { error } = await supabase.from("activities").insert(newActivityRows);
+    if (error) {
+      throw new Error(`Failed to record event attendance evidence: ${error.message}`);
+    }
+  }
+
+  if (newTagRows.length > 0) {
+    const { error } = await supabase
+      .from("profile_tags")
+      .upsert(newTagRows, { onConflict: "profile_id,tag_id", ignoreDuplicates: true });
+    if (error) {
+      throw new Error(`Failed to tag attendees: ${error.message}`);
+    }
+  }
+
+  if (newReviewRows.length > 0) {
+    const { error } = await supabase
+      .from("eventbrite_attendee_reviews")
+      .upsert(newReviewRows, {
+        onConflict: "org_id,event_id,eventbrite_attendee_id",
+        ignoreDuplicates: true,
+      });
+    if (error) {
+      throw new Error(`Failed to queue attendees for review: ${error.message}`);
+    }
+  }
+
+  // Small, targeted set — only reviews that are still pending and got a
+  // different mapped answer this time — so these stay individual updates
+  // rather than needing their own batch machinery.
+  for (const { eventbriteAttendeeId, mappedFields } of reviewsNeedingRefresh) {
+    await supabase
+      .from("eventbrite_attendee_reviews")
+      .update({ mapped_fields: mappedFields })
+      .eq("org_id", orgId)
+      .eq("event_id", event.id)
+      .eq("eventbrite_attendee_id", eventbriteAttendeeId)
+      .eq("status", "pending");
+  }
+
+  // Also small and targeted — only matched attendees who actually answered
+  // a mapped question — and each profile's fill/queue-for-review decision
+  // depends on that profile's own current values, so these stay per-profile.
+  for (const { profile, eventbriteAttendeeId, mappedFields } of mappedFieldUpdates) {
+    await applyMappedFieldsToMatchedProfile(
+      supabase,
+      orgId,
+      event,
+      eventbriteAttendeeId,
+      profile,
+      mappedFields,
+    );
   }
 
   return { matched, queued };

@@ -104,6 +104,27 @@ export async function syncEventbriteNowAction() {
   }
 }
 
+/**
+ * Re-syncs just one linked event, rather than every Eventbrite event in the
+ * org ("Sync now" on the main Admin page does the full-org sync, which gets
+ * slower as more events get linked). Useful right after changing a single
+ * event's question mapping, when waiting on a full org sync isn't worth it.
+ */
+export async function syncEventbriteEventNowAction(caffeineEventId: string) {
+  await requireAdmin();
+  const orgId = await getOrgId();
+
+  try {
+    const result = await syncEventbriteAttendeesForEvent(orgId, caffeineEventId);
+    revalidateEventbrite();
+    return { success: true as const, result };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Sync failed",
+    };
+  }
+}
+
 export async function resolveEventbriteReviewAction(formData: FormData) {
   const parsed = resolveEventbriteReviewSchema.safeParse({
     reviewId: formData.get("reviewId"),
