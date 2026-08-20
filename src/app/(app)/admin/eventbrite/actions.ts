@@ -22,7 +22,10 @@ import {
   searchProfilesForEventbriteLink,
 } from "@/lib/data/eventbrite-reviews";
 import { resolveProfileUpdateReview } from "@/lib/data/eventbrite-profile-updates";
-import { syncEventbriteAttendeesForOrg } from "@/lib/integrations/eventbrite/sync";
+import {
+  syncEventbriteAttendeesForEvent,
+  syncEventbriteAttendeesForOrg,
+} from "@/lib/integrations/eventbrite/sync";
 import {
   linkEventbriteEventSchema,
   resolveEventbriteReviewSchema,
@@ -49,27 +52,41 @@ export async function linkEventbriteEventAction(formData: FormData) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
+  const orgId = await getOrgId();
+  let caffeineEventId: string;
+
   try {
     if (parsed.data.mode === "existing" && parsed.data.caffeineEventId) {
-      await linkEventbriteEventToExisting(
-        parsed.data.eventbriteEventId,
-        parsed.data.caffeineEventId,
-      );
+      caffeineEventId = parsed.data.caffeineEventId;
+      await linkEventbriteEventToExisting(parsed.data.eventbriteEventId, caffeineEventId);
     } else {
-      await createEventFromEventbrite(
+      const created = await createEventFromEventbrite(
         parsed.data.eventbriteEventId,
         parsed.data.eventbriteTitle,
         parsed.data.eventbriteStartIso,
       );
+      caffeineEventId = created.id;
     }
-
-    revalidateEventbrite();
-    return { success: true as const };
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Failed to link event",
     };
   }
+
+  // Pull in attendees right away rather than making the admin wait for the
+  // next cron tick or remember to click "Sync now" — best-effort: the link
+  // itself already succeeded above, so a sync hiccup here shouldn't be
+  // reported as a failure to link, just skipped silently (the cron will
+  // pick it up within 30 minutes regardless).
+  let syncResult: { matched: number; queued: number } | null = null;
+  try {
+    syncResult = await syncEventbriteAttendeesForEvent(orgId, caffeineEventId);
+  } catch {
+    syncResult = null;
+  }
+
+  revalidateEventbrite();
+  return { success: true as const, syncResult };
 }
 
 export async function syncEventbriteNowAction() {

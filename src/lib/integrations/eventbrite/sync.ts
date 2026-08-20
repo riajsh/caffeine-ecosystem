@@ -425,3 +425,63 @@ export async function syncEventbriteAttendeesForOrg(
 
   return stats;
 }
+
+/**
+ * Syncs attendees for just one newly-linked event, right after linking —
+ * so attendees show up immediately instead of the admin having to wait for
+ * the next cron tick (up to 30 minutes away) or remember to click "Sync
+ * now". Scoped to one event, so it stays fast regardless of how many other
+ * events are mapped.
+ */
+export async function syncEventbriteAttendeesForEvent(
+  orgId: string,
+  caffeineEventId: string,
+): Promise<{ matched: number; queued: number } | null> {
+  const token = await getDecryptedEventbriteTokenForSync(orgId);
+  if (!token) {
+    return null;
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: row, error } = await supabase
+    .from("events")
+    .select("id, title, event_date, eventbrite_event_id")
+    .eq("id", caffeineEventId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load event: ${error.message}`);
+  }
+  if (!row?.eventbrite_event_id) {
+    return null;
+  }
+
+  const { data: connector } = await supabase
+    .from("eventbrite_accounts")
+    .select("connected_by")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  const systemUserId = connector?.connected_by;
+  if (!systemUserId) {
+    return null;
+  }
+
+  const event: MappedEvent = {
+    id: row.id,
+    title: row.title,
+    event_date: row.event_date,
+    eventbrite_event_id: row.eventbrite_event_id,
+  };
+
+  const result = await syncAttendeesForEvent(supabase, orgId, event, token, systemUserId);
+
+  await supabase
+    .from("eventbrite_accounts")
+    .update({ last_sync_at: new Date().toISOString() })
+    .eq("org_id", orgId);
+
+  return result;
+}

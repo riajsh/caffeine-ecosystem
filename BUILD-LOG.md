@@ -4,6 +4,16 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (27)
+
+**Fixed: linking a new event didn't pull attendees in until the next automatic sync**
+
+- **What was wrong:** Linking (or creating) an event on the "Link events" screen only recorded which Eventbrite event it matches — it never actually pulled attendees in right then. They'd only show up once the background sync next ran (every 30 minutes for events happening soon), or if you clicked "Sync now" yourself. That gap made it look like linking had silently failed to do anything.
+- **What we changed:** Linking an event now immediately pulls in its attendees as part of the same action — no more waiting. The confirmation message now tells you what happened (e.g. "Event linked — 12 attendees added, 3 queued for review").
+- **If linking still shows "no attendees yet":** that likely means Eventbrite itself doesn't have any real registrations on that event yet, rather than anything broken — worth double-checking the event on Eventbrite's own site if that happens somewhere you expect people.
+- **Nothing to run in Supabase for this one** — purely a code/logic change.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings).
+
 ## 2026-08-20 (26)
 
 **Fixed: Eventbrite's "Info Requested" placeholder attendees were flooding the review queue**

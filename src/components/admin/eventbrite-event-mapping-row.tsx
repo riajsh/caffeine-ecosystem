@@ -107,7 +107,19 @@ export function EventbriteEventMappingRow({
                   setError(result.error);
                   return;
                 }
-                toastSuccess("Event linked");
+                if (result.syncResult) {
+                  const { matched, queued } = result.syncResult;
+                  const parts: string[] = [];
+                  if (matched > 0) parts.push(`${matched} attendee${matched === 1 ? "" : "s"} added`);
+                  if (queued > 0) parts.push(`${queued} queued for review`);
+                  toastSuccess(
+                    parts.length > 0
+                      ? `Event linked — ${parts.join(", ")}`
+                      : "Event linked — no attendees yet",
+                  );
+                } else {
+                  toastSuccess("Event linked");
+                }
                 router.refresh();
               });
             }}
