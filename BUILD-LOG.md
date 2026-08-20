@@ -4,6 +4,21 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-20 (28)
+
+**Built: the four "before the 40+ event rollout" fixes from the workflow review**
+
+Following the review at `docs/eventbrite-scaling-review.md`, built the top four items in priority order:
+
+- **Sync health is now visible.** The Eventbrite card on Admin now shows "Last synced X ago" (or "Disconnected", or a count of issues from the last run) instead of only ever showing up as a toast the moment you personally click "Sync now." The background cron's results are now just as visible as a manual sync.
+- **A revoked/expired token is detected and flagged.** If Eventbrite ever rejects the connection (401/403), sync now stops immediately, switches itself off, and shows a clear "Your Eventbrite connection stopped working — reconnect below" message with the reconnect form right there — instead of quietly failing on every one of the 40+ events forever with no visible sign anything was wrong.
+- **Question mappings can now be reused.** Opening "Map registration questions" on an event that hasn't been mapped yet will suggest field choices carried over from a previous event that asked the same question (matched by question text), marked "(suggested)" — check it looks right and save to confirm, instead of mapping every event completely from scratch.
+- **The review screen is now grouped by event, with a filter.** Unmatched attendees are grouped under their event (with a "select all" / bulk create-or-ignore scoped to just that event's group), and a filter box at the top narrows everything — attendee reviews and possible profile updates both — down to one event or person by name.
+- **Nothing to run in Supabase for any of this** — all application-level changes, no schema changes.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 unrelated pre-existing warnings) after each of the four changes.
+
+**Still on the list (lower priority, not built yet):** a summary count of "X of 40 linked" on the events screen, and smarter bulk-linking suggestions. See the review doc for detail — happy to pick these up too if useful.
+
 ## 2026-08-20 (27)
 
 **Fixed: linking a new event didn't pull attendees in until the next automatic sync**

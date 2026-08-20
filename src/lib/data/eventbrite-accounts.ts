@@ -13,7 +13,86 @@ export type EventbriteAccountSummary = {
   syncEnabled: boolean;
   lastSyncAt: string | null;
   connectedByName: string | null;
+  syncStatus: string;
+  lastSyncError: string | null;
+  disabledReason: string | null;
 };
+
+type EventbriteAccountMetadata = {
+  last_run?: { at?: string; stats?: { errors?: string[] } };
+  disabled_reason?: string;
+  disabled_at?: string;
+};
+
+function parseEventbriteMetadata(value: unknown): EventbriteAccountMetadata {
+  if (value && typeof value === "object") {
+    return value as EventbriteAccountMetadata;
+  }
+  return {};
+}
+
+function formatEventbriteSyncStatus(params: {
+  syncEnabled: boolean;
+  lastSyncAt: string | null;
+  disabledReason: string | null;
+  lastRunErrorCount: number;
+}): string {
+  if (!params.syncEnabled) {
+    return params.disabledReason
+      ? `Disconnected — ${params.disabledReason}`
+      : "Disconnected";
+  }
+
+  const when = params.lastSyncAt ? formatRelativeTime(params.lastSyncAt) : null;
+
+  if (params.lastRunErrorCount > 0) {
+    const issueWord = params.lastRunErrorCount === 1 ? "issue" : "issues";
+    return when
+      ? `Last synced ${when} — ${params.lastRunErrorCount} ${issueWord}`
+      : `${params.lastRunErrorCount} ${issueWord} on last sync`;
+  }
+
+  return when ? `Last synced ${when}` : "Never synced yet";
+}
+
+function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.round(diffMs / 60000);
+
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+/**
+ * Called when a sync run hits a 401/403 from Eventbrite — the token itself
+ * has stopped working, so every event would fail the same way from here on.
+ * Rather than let that happen silently 40+ times, this switches sync off and
+ * records why, so the Admin screen falls back to the "reconnect" form with a
+ * clear explanation instead of quietly failing forever.
+ */
+export async function disableEventbriteSyncAfterAuthFailure(
+  orgId: string,
+  message: string,
+): Promise<void> {
+  const supabase = createAdminClient();
+
+  await supabase
+    .from("eventbrite_accounts")
+    .update({
+      sync_enabled: false,
+      metadata: {
+        disabled_reason: message,
+        disabled_at: new Date().toISOString(),
+      },
+    })
+    .eq("org_id", orgId);
+}
 
 export async function getEventbriteAccountForOrg(): Promise<EventbriteAccountSummary | null> {
   const user = await requireAdmin();
@@ -28,6 +107,7 @@ export async function getEventbriteAccountForOrg(): Promise<EventbriteAccountSum
       account_email,
       sync_enabled,
       last_sync_at,
+      metadata,
       users (
         full_name
       )
@@ -44,6 +124,11 @@ export async function getEventbriteAccountForOrg(): Promise<EventbriteAccountSum
     return null;
   }
 
+  const metadata = parseEventbriteMetadata(data.metadata);
+  const errors = metadata.last_run?.stats?.errors ?? [];
+  const lastSyncError = errors.length > 0 ? errors.join("; ") : null;
+  const disabledReason = data.sync_enabled ? null : (metadata.disabled_reason ?? null);
+
   return {
     id: data.id,
     accountName: data.account_name,
@@ -51,6 +136,14 @@ export async function getEventbriteAccountForOrg(): Promise<EventbriteAccountSum
     syncEnabled: data.sync_enabled,
     lastSyncAt: data.last_sync_at,
     connectedByName: data.users?.full_name ?? null,
+    lastSyncError,
+    disabledReason,
+    syncStatus: formatEventbriteSyncStatus({
+      syncEnabled: data.sync_enabled,
+      lastSyncAt: data.last_sync_at,
+      disabledReason,
+      lastRunErrorCount: errors.length,
+    }),
   };
 }
 
@@ -93,6 +186,14 @@ export async function connectEventbriteAccount(
     syncEnabled: data.sync_enabled,
     lastSyncAt: data.last_sync_at,
     connectedByName: user.full_name,
+    lastSyncError: null,
+    disabledReason: null,
+    syncStatus: formatEventbriteSyncStatus({
+      syncEnabled: data.sync_enabled,
+      lastSyncAt: data.last_sync_at,
+      disabledReason: null,
+      lastRunErrorCount: 0,
+    }),
   };
 }
 

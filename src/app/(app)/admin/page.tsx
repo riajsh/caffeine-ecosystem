@@ -230,6 +230,8 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
               accountName={eventbriteAccount.accountName}
               accountEmail={eventbriteAccount.accountEmail}
               connectedByName={eventbriteAccount.connectedByName}
+              syncStatus={eventbriteAccount.syncStatus}
+              lastSyncError={eventbriteAccount.lastSyncError}
             />
             <div className="flex flex-wrap items-center gap-3">
               <EventbriteSyncNowButton />
@@ -247,7 +249,15 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
             </div>
           </>
         ) : (
-          <EventbriteConnectForm />
+          <>
+            {eventbriteAccount?.disabledReason ? (
+              <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-body text-destructive">
+                Your Eventbrite connection stopped working: {eventbriteAccount.disabledReason}{" "}
+                Reconnect below to pick sync back up.
+              </p>
+            ) : null}
+            <EventbriteConnectForm />
+          </>
         )}
       </section>
 

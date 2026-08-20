@@ -61,7 +61,7 @@ export function EventbriteQuestionMappingPanel({
       current
         ? current.map((question) =>
             question.eventbriteQuestionId === questionId
-              ? { ...question, targetField }
+              ? { ...question, targetField, suggested: false }
               : question,
           )
         : current,
@@ -111,6 +111,14 @@ export function EventbriteQuestionMappingPanel({
         </p>
       ) : questions ? (
         <div className="space-y-2">
+          {questions.some((question) => question.suggested) ? (
+            <p className="text-caption text-muted-foreground">
+              Fields marked <span className="italic">(suggested)</span> were
+              carried over from a previous event that asked the same
+              question — check they look right, then save to confirm them
+              for this event too.
+            </p>
+          ) : null}
           {questions.map((question) => (
             <div
               key={question.eventbriteQuestionId}
@@ -118,6 +126,11 @@ export function EventbriteQuestionMappingPanel({
             >
               <span className="flex-1 text-body text-foreground">
                 {question.questionText}
+                {question.suggested ? (
+                  <span className="ml-1.5 text-caption text-muted-foreground italic">
+                    (suggested)
+                  </span>
+                ) : null}
               </span>
               <Select
                 value={question.targetField}

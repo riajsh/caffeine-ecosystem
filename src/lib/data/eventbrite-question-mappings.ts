@@ -14,7 +14,16 @@ export type QuestionMappingRow = {
   eventbriteQuestionId: string;
   questionText: string;
   targetField: MappableField;
+  /** True when this field wasn't explicitly saved for this event yet — it's
+   * a suggestion carried over from a previous event that asked the same
+   * question, offered as a starting point rather than applied automatically.
+   * Saving the mapping (even unchanged) confirms it for this event. */
+  suggested: boolean;
 };
+
+function normaliseQuestionText(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
 
 export type QuestionMappingList = {
   connected: boolean;
@@ -51,30 +60,68 @@ export async function listQuestionMappingsForEvent(
     return { connected: false, questions: [] };
   }
 
-  const [questions, { data: savedMappings, error: mappingError }] = await Promise.all([
-    listEventQuestions(token, event.eventbrite_event_id),
-    supabase
-      .from("eventbrite_question_mappings")
-      .select("eventbrite_question_id, target_field")
-      .eq("org_id", orgId)
-      .eq("event_id", caffeineEventId),
-  ]);
+  const [questions, { data: savedMappings, error: mappingError }, { data: priorMappings, error: priorError }] =
+    await Promise.all([
+      listEventQuestions(token, event.eventbrite_event_id),
+      supabase
+        .from("eventbrite_question_mappings")
+        .select("eventbrite_question_id, target_field")
+        .eq("org_id", orgId)
+        .eq("event_id", caffeineEventId),
+      // Every other event's saved (non-"ignore") mappings, most recent
+      // first — used to suggest a starting point for a question this event
+      // hasn't been mapped yet but a previous event already answered the
+      // same way (Ria expects most events to ask "more or less the same"
+      // questions, so this saves re-doing the same decision 40+ times).
+      supabase
+        .from("eventbrite_question_mappings")
+        .select("question_text, target_field, updated_at")
+        .eq("org_id", orgId)
+        .neq("event_id", caffeineEventId)
+        .neq("target_field", "ignore")
+        .order("updated_at", { ascending: false }),
+    ]);
 
   if (mappingError) {
     throw new Error(`Failed to load saved mappings: ${mappingError.message}`);
+  }
+  if (priorError) {
+    throw new Error(`Failed to load prior mappings: ${priorError.message}`);
   }
 
   const savedByQuestionId = new Map(
     (savedMappings ?? []).map((row) => [row.eventbrite_question_id, row.target_field]),
   );
 
+  const suggestionByText = new Map<string, MappableField>();
+  for (const row of priorMappings ?? []) {
+    const key = normaliseQuestionText(row.question_text);
+    if (!suggestionByText.has(key)) {
+      suggestionByText.set(key, row.target_field as MappableField);
+    }
+  }
+
   return {
     connected: true,
-    questions: questions.map((question) => ({
-      eventbriteQuestionId: question.id,
-      questionText: question.text,
-      targetField: (savedByQuestionId.get(question.id) as MappableField) ?? "ignore",
-    })),
+    questions: questions.map((question) => {
+      const saved = savedByQuestionId.get(question.id) as MappableField | undefined;
+      if (saved) {
+        return {
+          eventbriteQuestionId: question.id,
+          questionText: question.text,
+          targetField: saved,
+          suggested: false,
+        };
+      }
+
+      const suggestion = suggestionByText.get(normaliseQuestionText(question.text));
+      return {
+        eventbriteQuestionId: question.id,
+        questionText: question.text,
+        targetField: suggestion ?? "ignore",
+        suggested: Boolean(suggestion),
+      };
+    }),
   };
 }
 

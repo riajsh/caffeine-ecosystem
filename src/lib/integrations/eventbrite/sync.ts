@@ -8,7 +8,10 @@ import {
   findOrCreateEventTag,
   linkProfileToTag,
 } from "@/lib/data/events";
-import { getDecryptedEventbriteTokenForSync } from "@/lib/data/eventbrite-accounts";
+import {
+  disableEventbriteSyncAfterAuthFailure,
+  getDecryptedEventbriteTokenForSync,
+} from "@/lib/data/eventbrite-accounts";
 import {
   loadQuestionFieldMapForSync,
   type MappableField,
@@ -17,7 +20,7 @@ import type {
   EventbriteAttendee,
   EventbriteAttendeeAnswer,
 } from "@/lib/integrations/eventbrite/client";
-import { listEventAttendees } from "@/lib/integrations/eventbrite/client";
+import { EventbriteAuthError, listEventAttendees } from "@/lib/integrations/eventbrite/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
 
@@ -409,6 +412,15 @@ export async function syncEventbriteAttendeesForOrg(
       stats.attendeesMatched += result.matched;
       stats.attendeesQueuedForReview += result.queued;
     } catch (syncError) {
+      if (syncError instanceof EventbriteAuthError) {
+        // The token itself has stopped working — every remaining event
+        // would fail the exact same way, so stop here instead of hammering
+        // Eventbrite 40 more times, and switch sync off with a clear reason
+        // rather than letting it silently fail forever in the background.
+        stats.errors.push(`Eventbrite connection stopped working: ${syncError.message}`);
+        await disableEventbriteSyncAfterAuthFailure(orgId, syncError.message);
+        return stats;
+      }
       stats.errors.push(
         `${row.title}: ${syncError instanceof Error ? syncError.message : "sync failed"}`,
       );
@@ -476,7 +488,16 @@ export async function syncEventbriteAttendeesForEvent(
     eventbrite_event_id: row.eventbrite_event_id,
   };
 
-  const result = await syncAttendeesForEvent(supabase, orgId, event, token, systemUserId);
+  let result: { matched: number; queued: number };
+  try {
+    result = await syncAttendeesForEvent(supabase, orgId, event, token, systemUserId);
+  } catch (syncError) {
+    if (syncError instanceof EventbriteAuthError) {
+      await disableEventbriteSyncAfterAuthFailure(orgId, syncError.message);
+      return null;
+    }
+    throw syncError;
+  }
 
   await supabase
     .from("eventbrite_accounts")

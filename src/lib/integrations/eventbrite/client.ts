@@ -14,6 +14,14 @@ type EventbriteMeResponse = {
   emails?: Array<{ email: string; primary?: boolean; verified?: boolean }>;
 };
 
+/**
+ * Thrown specifically for a 401/403 from Eventbrite during a sync — distinct
+ * from a generic Error so callers can tell "this token stopped working" (which
+ * will keep failing on every event until reconnected) apart from a one-off
+ * per-event problem worth just logging and moving on from.
+ */
+export class EventbriteAuthError extends Error {}
+
 function friendlyErrorForStatus(status: number): string {
   if (status === 401 || status === 403) {
     return "That token wasn't accepted by Eventbrite — double check you copied the whole private token.";
@@ -113,7 +121,11 @@ async function eventbriteGet<T>(
   }
 
   if (!response.ok) {
-    throw new Error(friendlyErrorForStatus(response.status));
+    const message = friendlyErrorForStatus(response.status);
+    if (response.status === 401 || response.status === 403) {
+      throw new EventbriteAuthError(message);
+    }
+    throw new Error(message);
   }
 
   try {

@@ -11,12 +11,16 @@ type EventbriteAccountRowProps = {
   accountName: string | null;
   accountEmail: string | null;
   connectedByName: string | null;
+  syncStatus: string;
+  lastSyncError: string | null;
 };
 
 export function EventbriteAccountRow({
   accountName,
   accountEmail,
   connectedByName,
+  syncStatus,
+  lastSyncError,
 }: EventbriteAccountRowProps) {
   const { alert } = useAppDialog();
   const { isPending, run } = useAsyncAction();
@@ -31,7 +35,14 @@ export function EventbriteAccountRow({
         <p className="text-caption text-muted-foreground">
           {accountEmail ? `${accountEmail} · ` : ""}
           {connectedByName ? `Connected by ${connectedByName}` : "Connected"}
+          {" · "}
+          {syncStatus}
         </p>
+        {lastSyncError ? (
+          <p className="mt-1 text-caption text-destructive" role="alert">
+            {lastSyncError}
+          </p>
+        ) : null}
         {error ? (
           <p className="mt-1 text-caption text-destructive" role="alert">
             {error}
