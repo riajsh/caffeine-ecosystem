@@ -25,6 +25,7 @@ const FIELD_OPTIONS: Array<{ value: MappableField; label: string }> = [
   { value: "company_and_role", label: "Company & role (combined)" },
   { value: "company_size", label: "Company size" },
   { value: "phone", label: "Phone" },
+  { value: "note", label: "Note (adds to their profile timeline)" },
 ];
 
 export function EventbriteQuestionMappingPanel({
@@ -101,7 +102,11 @@ export function EventbriteQuestionMappingPanel({
         here — answers will fill those fields on each attendee&apos;s
         profile. If one question asks for company and role together in a
         single answer instead, use &quot;Company &amp; role (combined)&quot;
-        and it&apos;ll be split into both fields automatically.
+        and it&apos;ll be split into both fields automatically. For an
+        open-ended question (like &quot;what are you struggling with right
+        now?&quot;), use &quot;Note&quot; — each answer gets added as its own
+        dated entry in that attendee&apos;s profile timeline, tagged to this
+        event, rather than filling in a profile field.
       </p>
 
       {loading ? (

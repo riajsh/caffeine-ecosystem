@@ -14,6 +14,7 @@ export type MappableField =
   | "company_size"
   | "phone"
   | "company_and_role"
+  | "note"
   | "ignore";
 
 export type QuestionMappingRow = {

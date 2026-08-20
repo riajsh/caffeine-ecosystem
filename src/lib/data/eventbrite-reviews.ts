@@ -122,10 +122,15 @@ export async function searchProfilesForEventbriteLink(
 
 type MappedProfileFields = Partial<
   Record<"role" | "company_size" | "phone" | "organisation_name", string>
->;
+> & {
+  /** Not a profile column — an open-ended answer mapped to "Note" becomes
+   * its own timeline entry once the review turns into a profile, handled
+   * separately from the fill/queue-for-review logic below. */
+  note?: string;
+};
 
 const FIELD_TO_COLUMN: Record<
-  keyof MappedProfileFields,
+  Exclude<keyof MappedProfileFields, "note">,
   "occupation" | "company_size" | "phone" | "organisation_name"
 > = {
   role: "occupation",
@@ -176,6 +181,11 @@ async function fillBlankFieldsFromMappedAnswers(
   for (const [field, value] of Object.entries(mappedFields) as Array<
     [keyof MappedProfileFields, string]
   >) {
+    if (field === "note") {
+      // Handled separately once a profile actually exists — see
+      // resolveEventbriteReview.
+      continue;
+    }
     const column = FIELD_TO_COLUMN[field];
     if (!profileValues[column]?.trim() && value) {
       fill[column] = value;
@@ -222,6 +232,11 @@ async function createProfileFromReview(
   for (const [field, value] of Object.entries(mapped) as Array<
     [keyof MappedProfileFields, string]
   >) {
+    if (field === "note") {
+      // Handled separately once a profile actually exists — see
+      // resolveEventbriteReview.
+      continue;
+    }
     if (value) {
       extraFields[FIELD_TO_COLUMN[field]] = value;
       if (field === "organisation_name") {
@@ -355,6 +370,28 @@ export async function resolveEventbriteReview(
 
   if (attendeeError) {
     throw new Error(`Failed to add attendee: ${attendeeError.message}`);
+  }
+
+  // A "Note" question mapping isn't a profile field to fill in — it's an
+  // open-ended answer that becomes its own dated entry on the profile's
+  // timeline, tagged to this event. Each review only resolves once (the
+  // pending check above guarantees that), so there's no risk of adding the
+  // same note twice.
+  if (mappedFields.note) {
+    const { error: noteError } = await supabase.from("activities").insert({
+      org_id: orgId,
+      profile_id: profileId,
+      activity_type: "note",
+      title: `Note from ${event.title}`,
+      summary: mappedFields.note,
+      activity_date: event.event_date,
+      source: "event_system",
+      source_ref: event.id,
+      created_by: user.id,
+    });
+    if (noteError) {
+      throw new Error(`Failed to add note: ${noteError.message}`);
+    }
   }
 
   await ensureEventAttendanceEvidence(orgId, event, profileId, user.id);

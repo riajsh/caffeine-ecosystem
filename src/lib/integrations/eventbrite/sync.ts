@@ -26,7 +26,11 @@ import type { Database } from "@/types/database";
 type AdminClient = SupabaseClient<Database>;
 
 type MappedField = "role" | "company_size" | "phone" | "organisation_name";
-type MappedProfileFields = Partial<Record<MappedField, string>>;
+// "note" isn't a profile column — it never goes through FIELD_TO_COLUMN or
+// the fill/queue-review comparison logic. It's additive: every mapped
+// answer becomes its own new timeline entry on the profile, never something
+// to compare against an existing value.
+type MappedProfileFields = Partial<Record<MappedField, string>> & { note?: string };
 
 const FIELD_TO_COLUMN: Record<
   MappedField,
@@ -81,6 +85,14 @@ async function buildMappedFieldsByAttendee(
         // "Company" is its own separate question but maps to the
         // organisation_name profile column, not a "company" column.
         fields.organisation_name = answer.answer;
+        continue;
+      }
+      if (target === "note") {
+        // Left exactly as typed — deliberately not run through the AI
+        // text cleanup used for role/company/etc, since that's tuned for
+        // tidying up short job-title-style answers and could easily mangle
+        // the tone or meaning of a personal, open-ended answer.
+        fields.note = answer.answer;
         continue;
       }
       fields[target] = answer.answer;
@@ -324,7 +336,7 @@ async function syncAttendeesForEvent(
         .eq("event_id", event.id),
       supabase
         .from("activities")
-        .select("profile_id")
+        .select("profile_id, activity_type")
         .eq("org_id", orgId)
         .eq("source", "event_system")
         .eq("source_ref", event.id),
@@ -350,8 +362,18 @@ async function syncAttendeesForEvent(
   const existingAttendeeProfileIds = new Set(
     (existingAttendeesResult.data ?? []).map((row) => row.profile_id),
   );
+  // Both "attended this event" evidence and "note from this event" entries
+  // share the same source/source_ref, so split them apart by activity_type
+  // — otherwise having one would look like having the other.
   const existingEvidenceProfileIds = new Set(
-    (existingActivitiesResult.data ?? []).map((row) => row.profile_id),
+    (existingActivitiesResult.data ?? [])
+      .filter((row) => row.activity_type === "event")
+      .map((row) => row.profile_id),
+  );
+  const existingNoteProfileIds = new Set(
+    (existingActivitiesResult.data ?? [])
+      .filter((row) => row.activity_type === "note")
+      .map((row) => row.profile_id),
   );
   const existingReviewStatusByAttendeeId = new Map(
     (existingReviewsResult.data ?? []).map((row) => [row.eventbrite_attendee_id, row.status]),
@@ -391,6 +413,17 @@ async function syncAttendeesForEvent(
     created_by: string;
   }> = [];
   const newTagRows: Array<{ org_id: string; profile_id: string; tag_id: string }> = [];
+  const newNoteRows: Array<{
+    org_id: string;
+    profile_id: string;
+    activity_type: "note";
+    title: string;
+    summary: string;
+    activity_date: string;
+    source: "event_system";
+    source_ref: string;
+    created_by: string;
+  }> = [];
   const newReviewRows: Array<{
     org_id: string;
     event_id: string;
@@ -442,8 +475,31 @@ async function syncAttendeesForEvent(
         newTagRows.push({ org_id: orgId, profile_id: profile.id, tag_id: tagId });
         existingTaggedProfileIds.add(profile.id);
       }
-      if (mappedFields) {
-        mappedFieldUpdates.push({ profile, eventbriteAttendeeId: attendee.id, mappedFields });
+      if (mappedFields?.note && !existingNoteProfileIds.has(profile.id)) {
+        newNoteRows.push({
+          org_id: orgId,
+          profile_id: profile.id,
+          activity_type: "note",
+          title: `Note from ${event.title}`,
+          summary: mappedFields.note,
+          activity_date: event.event_date,
+          source: "event_system",
+          source_ref: event.id,
+          created_by: systemUserId,
+        });
+        existingNoteProfileIds.add(profile.id);
+      }
+      // "note" isn't a profile column, so it never goes through the
+      // fill/queue-for-review comparison below — only pass the
+      // column-backed fields (role/company size/phone/company) along.
+      const columnFields: MappedProfileFields = { ...mappedFields };
+      delete columnFields.note;
+      if (Object.keys(columnFields).length > 0) {
+        mappedFieldUpdates.push({
+          profile,
+          eventbriteAttendeeId: attendee.id,
+          mappedFields: columnFields,
+        });
       }
       matched += 1;
       continue;
@@ -483,6 +539,13 @@ async function syncAttendeesForEvent(
     const { error } = await supabase.from("activities").insert(newActivityRows);
     if (error) {
       throw new Error(`Failed to record event attendance evidence: ${error.message}`);
+    }
+  }
+
+  if (newNoteRows.length > 0) {
+    const { error } = await supabase.from("activities").insert(newNoteRows);
+    if (error) {
+      throw new Error(`Failed to add notes to profiles: ${error.message}`);
     }
   }
 

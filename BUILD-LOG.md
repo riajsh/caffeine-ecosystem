@@ -4,6 +4,16 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-21 (34)
+
+**Added: a "Note" question mapping that writes straight into a profile's timeline**
+
+- **What it does:** you can now map an open-ended registration question (like "what are you struggling with right now?") to "Note" instead of a profile field. Whichever attendee answers it gets a new dated entry in their profile's existing activity timeline — the same timeline manual notes, meetings, and intros already show up in — tagged with the event name and dated to the event.
+- **How it behaves:** each event only ever adds one note per person, even if you sync the same event again later. If the same person answers a similar question at a different event, that's a separate dated entry, not a merge into the first one — so you build up a real history over time rather than losing earlier answers.
+- **Where it doesn't show up:** unlike Role/Company, note answers aren't previewed as an editable box on the review screen — they're written once the review turns into (or links to) a profile, kept out of that already-busy row to keep it simple. Let me know if you'd rather see a preview there too.
+- **To run in Supabase:** one migration widening the allowed mapping values to include "note" — see file below.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean (0 errors, same 5 pre-existing warnings).
+
 ## 2026-08-20 (33)
 
 **Fixed: "Sync now" being slow — actually fixed this time, not just worked around**
