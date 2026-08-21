@@ -549,18 +549,17 @@ async function syncAttendeesForEvent(
   }
 
   if (newNoteRows.length > 0) {
-    // upsert + ignoreDuplicates rather than a plain insert: two different
-    // attendees under the same email (a duplicate registration) can both
-    // resolve to the same profile within this same batch, or a second sync
-    // could race with this one — either way, "this profile already has a
-    // note for this event" should be a silent no-op, not a failure.
-    const { error } = await supabase
-      .from("activities")
-      .upsert(newNoteRows, {
-        onConflict: "org_id,profile_id,source,source_ref",
-        ignoreDuplicates: true,
-      });
-    if (error) {
+    // Plain insert, not upsert: the activities table's dedup index is
+    // partial (only applies where source_ref isn't null), and Postgres
+    // won't match a partial unique index against a plain ON CONFLICT
+    // column list — upsert() has no way to express that here, and errors
+    // with "no unique or exclusion constraint matching the ON CONFLICT
+    // specification" every time. Catching 23505 instead does the same job:
+    // in-memory de-duping above already stops two rows in this same batch
+    // from colliding, so a 23505 here can only mean this profile already
+    // has this event's note from somewhere else — safe to treat as done.
+    const { error } = await supabase.from("activities").insert(newNoteRows);
+    if (error && error.code !== "23505") {
       throw new Error(`Failed to add notes to profiles: ${error.message}`);
     }
   }

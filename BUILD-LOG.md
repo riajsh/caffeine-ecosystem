@@ -4,6 +4,15 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-21 (37)
+
+**Fixed: notes failing on every single question, not just duplicates**
+
+- **What was wrong:** my previous fix used the wrong tool for the job — it told the database "skip it quietly if this note already exists" in a way the database couldn't actually carry out, because of how that dedup rule is set up underneath. The result was that it failed on every note, not just genuine duplicates, which is exactly what you saw.
+- **What changed:** switched to the same, simpler approach already working fine elsewhere in this feature (the review screen's version of this fix) — try to add the note, and if the database says "this one's already there," treat that as fine and move on, rather than asking it to pre-check in a way it can't.
+- **Nothing to run in Supabase for this one.**
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean, and this now uses the exact same approach as the review screen's version of this same fix, which you've already confirmed works.
+
 ## 2026-08-21 (36)
 
 **Fixed: one profile still failed to create with the same duplicate-note error**
