@@ -374,12 +374,14 @@ export async function resolveEventbriteReview(
 
   // A "Note" question mapping isn't a profile field to fill in — it's an
   // open-ended answer that becomes its own dated entry on the profile's
-  // timeline, tagged to this event. Each review only resolves once (the
-  // pending check above guarantees that), so there's no risk of adding the
-  // same note twice. Uses its own source_ref (rather than the plain event
-  // id used by attendance evidence below) because activities can only have
-  // one row per (org_id, profile_id, source, source_ref) — reusing the
-  // event id here would collide with the "attended this event" row.
+  // timeline, tagged to this event. Uses its own source_ref (rather than
+  // the plain event id used by attendance evidence below) because
+  // activities can only have one row per (org_id, profile_id, source,
+  // source_ref) — reusing the event id here would collide with the
+  // "attended this event" row. A review only resolves once, but two
+  // separate reviews (e.g. a duplicate registration under the same email)
+  // can still land on the same profile — 23505 there just means this
+  // profile already has this event's note, which is fine, not an error.
   if (mappedFields.note) {
     const { error: noteError } = await supabase.from("activities").insert({
       org_id: orgId,
@@ -392,7 +394,7 @@ export async function resolveEventbriteReview(
       source_ref: `${event.id}:note`,
       created_by: user.id,
     });
-    if (noteError) {
+    if (noteError && noteError.code !== "23505") {
       throw new Error(`Failed to add note: ${noteError.message}`);
     }
   }

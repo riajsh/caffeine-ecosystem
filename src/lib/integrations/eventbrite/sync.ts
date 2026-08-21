@@ -549,7 +549,17 @@ async function syncAttendeesForEvent(
   }
 
   if (newNoteRows.length > 0) {
-    const { error } = await supabase.from("activities").insert(newNoteRows);
+    // upsert + ignoreDuplicates rather than a plain insert: two different
+    // attendees under the same email (a duplicate registration) can both
+    // resolve to the same profile within this same batch, or a second sync
+    // could race with this one — either way, "this profile already has a
+    // note for this event" should be a silent no-op, not a failure.
+    const { error } = await supabase
+      .from("activities")
+      .upsert(newNoteRows, {
+        onConflict: "org_id,profile_id,source,source_ref",
+        ignoreDuplicates: true,
+      });
     if (error) {
       throw new Error(`Failed to add notes to profiles: ${error.message}`);
     }

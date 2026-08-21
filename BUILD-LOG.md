@@ -4,6 +4,15 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-21 (36)
+
+**Fixed: one profile still failed to create with the same duplicate-note error**
+
+- **What was wrong:** the previous fix stopped notes from colliding with "attended this event" records, but missed one case — if two different Eventbrite registrations share the same email for the same event (a duplicate signup), both get resolved against the same profile, and both were trying to add that profile's one note for that event.
+- **What changed:** adding a note now treats "this profile already has this event's note" as fine and moves on, rather than failing — whichever registration gets there first wins, the second is just a no-op instead of an error.
+- **Nothing to run in Supabase for this one.**
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
 ## 2026-08-21 (35)
 
 **Fixed: re-syncing an already-synced event failed with "duplicate key value violates unique constraint" on notes**
