@@ -4,6 +4,15 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-21 (38)
+
+**Added: sync now tells you exactly what happened to every attendee, so "are we missing people" has a real answer**
+
+- **Why:** Ria noticed an event showing only 23 attendees in Caffeine when Eventbrite reported 63, even after reviewing the queue, and was right to be worried — the toast messages after syncing only ever said "X matched, Y to review", with no way to check that against the real total.
+- **What changed:** every sync (Sync now, Sync this event, and linking a new event) now reports the full picture — how many Eventbrite actually returned for the event, how many matched, how many are newly queued for review, how many were skipped because they had no usable email (Eventbrite's own "Info Requested" placeholder rows on group tickets, or a genuinely blank one), and how many were already handled from an earlier sync. These four numbers always add up to the total fetched — if they ever don't, the toast now says so explicitly ("N unaccounted for, something's wrong") instead of staying quiet.
+- **Nothing to run in Supabase for this one.**
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
 ## 2026-08-21 (37)
 
 **Fixed: notes failing on every single question, not just duplicates**

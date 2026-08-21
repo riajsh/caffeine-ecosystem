@@ -30,8 +30,27 @@ export function EventbriteSyncNowButton() {
               return;
             }
             const stats = result.stats;
+            // These four should always add up to what Eventbrite reported
+            // fetching — every attendee lands in exactly one bucket. If they
+            // don't add up, that's a real sign something's being dropped,
+            // not just normal steady-state re-syncing (most attendees on a
+            // re-sync land in "already handled" and that's expected).
+            const accountedFor =
+              stats.attendeesMatched +
+              stats.attendeesQueuedForReview +
+              stats.attendeesSkippedNoEmail +
+              stats.attendeesAlreadyHandled;
+            const mismatch = stats.attendeesFetched - accountedFor;
+            const skippedNote =
+              stats.attendeesSkippedNoEmail > 0
+                ? `, ${stats.attendeesSkippedNoEmail} skipped (no usable email)`
+                : "";
             toastSuccess(
-              `Synced ${stats.eventsProcessed} event${stats.eventsProcessed === 1 ? "" : "s"} — ${stats.attendeesMatched} matched, ${stats.attendeesQueuedForReview} to review`,
+              `Synced ${stats.eventsProcessed} event${stats.eventsProcessed === 1 ? "" : "s"} — ${stats.attendeesFetched} fetched from Eventbrite, ${stats.attendeesMatched} matched, ${stats.attendeesQueuedForReview} new to review${skippedNote}${
+                mismatch !== 0
+                  ? ` — ${mismatch} unaccounted for, something's wrong, please flag this`
+                  : ""
+              }`,
             );
             router.refresh();
           });

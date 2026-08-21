@@ -280,8 +280,11 @@ async function applyMappedFieldsToMatchedProfile(
 
 export type EventbriteSyncStats = {
   eventsProcessed: number;
+  attendeesFetched: number;
+  attendeesSkippedNoEmail: number;
   attendeesMatched: number;
   attendeesQueuedForReview: number;
+  attendeesAlreadyHandled: number;
   errors: string[];
 };
 
@@ -313,14 +316,28 @@ async function syncAttendeesForEvent(
   event: MappedEvent,
   token: string,
   systemUserId: string,
-): Promise<{ matched: number; queued: number }> {
+): Promise<{
+  matched: number;
+  queued: number;
+  fetched: number;
+  skippedNoEmail: number;
+  alreadyHandled: number;
+}> {
   const attendees = await listEventAttendees(token, event.eventbrite_event_id);
   const attendeesWithEmail = attendees.filter(
     (attendee): attendee is EventbriteAttendee & { email: string } => Boolean(attendee.email),
   );
+  // Kept so "matched + queued" can be checked against what Eventbrite
+  // actually reported for this event — attendees with no usable email
+  // (cancelled/declined tickets already excluded by listEventAttendees;
+  // this is specifically people with a blank or "Info Requested"
+  // placeholder email) are the one category that's silently skipped rather
+  // than matched, queued, or logged anywhere else.
+  const fetched = attendees.length;
+  const skippedNoEmail = attendees.length - attendeesWithEmail.length;
 
   if (attendeesWithEmail.length === 0) {
-    return { matched: 0, queued: 0 };
+    return { matched: 0, queued: 0, fetched, skippedNoEmail, alreadyHandled: 0 };
   }
 
   const fieldMap = await loadQuestionFieldMapForSync(supabase, orgId, event.id);
@@ -448,6 +465,7 @@ async function syncAttendeesForEvent(
 
   let matched = 0;
   let queued = 0;
+  let alreadyHandled = 0;
 
   for (const attendee of attendeesWithEmail) {
     const profile = profileByEmail.get(attendee.email.trim().toLowerCase());
@@ -523,12 +541,22 @@ async function syncAttendeesForEvent(
         mapped_fields: mappedFields ?? {},
       });
       queued += 1;
-    } else if (existingStatus === "pending" && mappedFields && Object.keys(mappedFields).length > 0) {
-      // Already queued from an earlier sync and still sitting there
-      // unresolved — refresh its mapped answers so a question-mapping
-      // change made after the first sync shows up as a suggestion. Never
-      // touch one that's already been resolved into a profile.
-      reviewsNeedingRefresh.push({ eventbriteAttendeeId: attendee.id, mappedFields });
+    } else {
+      // Already queued from an earlier sync — whether it's still sitting
+      // there unresolved, or you've since created/linked/ignored it,
+      // there's nothing new to add or count here. Kept in its own bucket
+      // (rather than just doing nothing) so "fetched" always reconciles
+      // against matched + queued + skipped + alreadyHandled — a mismatch
+      // there is a real signal something's actually being dropped, not
+      // just normal steady-state re-syncing.
+      alreadyHandled += 1;
+      if (existingStatus === "pending" && mappedFields && Object.keys(mappedFields).length > 0) {
+        // Still sitting there unresolved — refresh its mapped answers so a
+        // question-mapping change made after the first sync shows up as a
+        // suggestion. Never touch one that's already been resolved into a
+        // profile.
+        reviewsNeedingRefresh.push({ eventbriteAttendeeId: attendee.id, mappedFields });
+      }
     }
   }
 
@@ -612,7 +640,7 @@ async function syncAttendeesForEvent(
     );
   }
 
-  return { matched, queued };
+  return { matched, queued, fetched, skippedNoEmail, alreadyHandled };
 }
 
 const NEAR_TERM_WINDOW_DAYS = 14;
@@ -640,8 +668,11 @@ export async function syncEventbriteAttendeesForOrg(
 ): Promise<EventbriteSyncStats> {
   const stats: EventbriteSyncStats = {
     eventsProcessed: 0,
+    attendeesFetched: 0,
+    attendeesSkippedNoEmail: 0,
     attendeesMatched: 0,
     attendeesQueuedForReview: 0,
+    attendeesAlreadyHandled: 0,
     errors: [],
   };
 
@@ -699,8 +730,11 @@ export async function syncEventbriteAttendeesForOrg(
         systemUserId,
       );
       stats.eventsProcessed += 1;
+      stats.attendeesFetched += result.fetched;
+      stats.attendeesSkippedNoEmail += result.skippedNoEmail;
       stats.attendeesMatched += result.matched;
       stats.attendeesQueuedForReview += result.queued;
+      stats.attendeesAlreadyHandled += result.alreadyHandled;
     } catch (syncError) {
       if (syncError instanceof EventbriteAuthError) {
         // The token itself has stopped working — every remaining event
@@ -738,7 +772,13 @@ export async function syncEventbriteAttendeesForOrg(
 export async function syncEventbriteAttendeesForEvent(
   orgId: string,
   caffeineEventId: string,
-): Promise<{ matched: number; queued: number } | null> {
+): Promise<{
+  matched: number;
+  queued: number;
+  fetched: number;
+  skippedNoEmail: number;
+  alreadyHandled: number;
+} | null> {
   const token = await getDecryptedEventbriteTokenForSync(orgId);
   if (!token) {
     return null;
@@ -778,7 +818,13 @@ export async function syncEventbriteAttendeesForEvent(
     eventbrite_event_id: row.eventbrite_event_id,
   };
 
-  let result: { matched: number; queued: number };
+  let result: {
+    matched: number;
+    queued: number;
+    fetched: number;
+    skippedNoEmail: number;
+    alreadyHandled: number;
+  };
   try {
     result = await syncAttendeesForEvent(supabase, orgId, event, token, systemUserId);
   } catch (syncError) {

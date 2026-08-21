@@ -89,11 +89,17 @@ export function EventbriteEventMappingRow({
                   setError("Couldn't sync — check the Eventbrite connection.");
                   return;
                 }
-                const { matched, queued } = result.result;
-                const parts: string[] = [];
-                if (matched > 0) parts.push(`${matched} attendee${matched === 1 ? "" : "s"} added`);
-                if (queued > 0) parts.push(`${queued} queued for review`);
-                toastSuccess(parts.length > 0 ? parts.join(", ") : "No changes");
+                const { matched, queued, fetched, skippedNoEmail, alreadyHandled } = result.result;
+                const parts: string[] = [`${fetched} fetched from Eventbrite`];
+                if (matched > 0) parts.push(`${matched} matched`);
+                if (queued > 0) parts.push(`${queued} new to review`);
+                if (skippedNoEmail > 0) parts.push(`${skippedNoEmail} skipped (no usable email)`);
+                const accountedFor = matched + queued + skippedNoEmail + alreadyHandled;
+                const mismatch = fetched - accountedFor;
+                toastSuccess(
+                  parts.join(", ") +
+                    (mismatch !== 0 ? ` — ${mismatch} unaccounted for, something's wrong` : ""),
+                );
                 router.refresh();
               });
             }}
@@ -142,14 +148,22 @@ export function EventbriteEventMappingRow({
                   return;
                 }
                 if (result.syncResult) {
-                  const { matched, queued } = result.syncResult;
+                  const { matched, queued, fetched, skippedNoEmail, alreadyHandled } =
+                    result.syncResult;
                   const parts: string[] = [];
                   if (matched > 0) parts.push(`${matched} attendee${matched === 1 ? "" : "s"} added`);
                   if (queued > 0) parts.push(`${queued} queued for review`);
+                  if (skippedNoEmail > 0) {
+                    parts.push(`${skippedNoEmail} skipped (no usable email)`);
+                  }
+                  const mismatch = fetched - (matched + queued + skippedNoEmail + alreadyHandled);
                   toastSuccess(
-                    parts.length > 0
+                    (parts.length > 0
                       ? `Event linked — ${parts.join(", ")}`
-                      : "Event linked — no attendees yet",
+                      : "Event linked — no attendees yet") +
+                      (mismatch !== 0
+                        ? ` — ${mismatch} unaccounted for, something's wrong`
+                        : ""),
                   );
                 } else {
                   toastSuccess("Event linked");

@@ -78,7 +78,13 @@ export async function linkEventbriteEventAction(formData: FormData) {
   // itself already succeeded above, so a sync hiccup here shouldn't be
   // reported as a failure to link, just skipped silently (the cron will
   // pick it up within 30 minutes regardless).
-  let syncResult: { matched: number; queued: number } | null = null;
+  let syncResult: {
+    matched: number;
+    queued: number;
+    fetched: number;
+    skippedNoEmail: number;
+    alreadyHandled: number;
+  } | null = null;
   try {
     syncResult = await syncEventbriteAttendeesForEvent(orgId, caffeineEventId);
   } catch {
