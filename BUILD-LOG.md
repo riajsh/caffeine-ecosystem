@@ -4,6 +4,18 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-21 (39)
+
+**Found and fixed: the same underlying bug was also breaking Calendar sync, silently, for a while**
+
+- **What I was doing:** Ria asked for a deep dive to check for other background problems, off the back of the Eventbrite note bugs. I went through every place in the app that writes to the database using the same "insert, or skip quietly if it's already there" pattern, checking each one against the actual database rules underneath.
+- **What I found:** Calendar sync (logging a meeting as an activity on someone's profile, and recording that it came from that meeting) had the exact same class of bug as the Eventbrite notes issue — just never diagnosed, because it's been there since a performance change made back in June. Any calendar event where at least one attendee already had a profile was failing partway through — meaning no meeting logged, no "this came from a meeting" record, and (because of where the failure happened) any *other* unrecognised attendees on that same meeting never even got queued for review either. This has likely been happening quietly since June, and Ria may have seen a cryptic "Finished with some errors" popup after running calendar sync without knowing what it meant.
+- **What changed:** switched those two spots to the same "try it, and if it's already there just move on" approach used everywhere else in the app that handles this correctly.
+- **What this doesn't fix on its own:** meetings that already silently failed before today won't automatically get logged just because the bug is fixed — Google Calendar's own sync only tells us about *new or changed* events going forward, not ones that already exist unchanged. Backfilling the missing history from before today is a separate job I haven't started — flagging it as a next step to discuss rather than guessing at it.
+- **Checked every other place in the app that uses this same "insert or skip if duplicate" pattern** against the actual database rules — these were the only two affected; everything else already matches correctly.
+- **Nothing to run in Supabase for this one** — pure app-side fix.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
 ## 2026-08-21 (38)
 
 **Added: sync now tells you exactly what happened to every attendee, so "are we missing people" has a real answer**

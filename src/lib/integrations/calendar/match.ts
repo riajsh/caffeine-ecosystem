@@ -203,20 +203,24 @@ export async function processCalendarParticipants(
       source_ref: activitySourceRef,
     }));
 
-    const { data: insertedActivities, error: activityError } = await supabase
-      .from("activities")
-      .upsert(activityRows, {
-        onConflict: "org_id,profile_id,source,source_ref",
-        ignoreDuplicates: true,
-      })
-      .select("id");
-
-    if (activityError) {
-      if (!isPostgresUniqueViolation(activityError)) {
+    // Plain inserts, one row at a time, not a batched upsert: the
+    // activities table's dedup index (org_id, profile_id, source,
+    // source_ref) is a *partial* index (only applies where source_ref
+    // isn't null), and Postgres won't match a partial unique index against
+    // a plain ON CONFLICT column list — every call here was failing with
+    // "no unique or exclusion constraint matching the ON CONFLICT
+    // specification" (not a 23505, so isPostgresUniqueViolation below never
+    // caught it), meaning no meeting activity — or anything after it in
+    // this function, including queuing unmatched participants for review —
+    // ever got created for any event with at least one matched attendee.
+    // A handful of attendees per meeting, so per-row is fine here.
+    for (const row of activityRows) {
+      const { error: activityError } = await supabase.from("activities").insert(row);
+      if (!activityError) {
+        activitiesCreated += 1;
+      } else if (!isPostgresUniqueViolation(activityError)) {
         throw new Error(`Failed to create activities: ${activityError.message}`);
       }
-    } else {
-      activitiesCreated = insertedActivities?.length ?? 0;
     }
 
     const sourceRows = profileIds.flatMap((profileId) => {
@@ -236,13 +240,16 @@ export async function processCalendarParticipants(
       ];
     });
 
-    if (sourceRows.length > 0) {
+    // Same issue as the activities insert above: this table's dedup index
+    // (relationship_id, source_type, source_id) is also partial (only
+    // applies where source_id isn't null), so upsert's ON CONFLICT can't
+    // match it either — every call here was throwing the same "no unique
+    // or exclusion constraint" error. Plain inserts, one at a time, same
+    // fix.
+    for (const sourceRow of sourceRows) {
       const { error: sourceError } = await supabase
         .from("relationship_sources")
-        .upsert(sourceRows, {
-          onConflict: "relationship_id,source_type,source_id",
-          ignoreDuplicates: true,
-        });
+        .insert(sourceRow);
 
       if (sourceError && !isPostgresUniqueViolation(sourceError)) {
         throw new Error(
