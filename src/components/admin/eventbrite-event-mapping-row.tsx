@@ -89,16 +89,37 @@ export function EventbriteEventMappingRow({
                   setError("Couldn't sync — check the Eventbrite connection.");
                   return;
                 }
-                const { matched, queued, fetched, skippedNoEmail, alreadyHandled } = result.result;
+                const { matched, queued, fetched, skippedNoEmail, alreadyHandled, fetchDiagnostics } =
+                  result.result;
                 const parts: string[] = [`${fetched} fetched from Eventbrite`];
                 if (matched > 0) parts.push(`${matched} matched`);
                 if (queued > 0) parts.push(`${queued} new to review`);
                 if (skippedNoEmail > 0) parts.push(`${skippedNoEmail} skipped (no usable email)`);
                 const accountedFor = matched + queued + skippedNoEmail + alreadyHandled;
                 const mismatch = fetched - accountedFor;
+                // Temporary — while chasing the "Eventbrite says more
+                // attendees exist than we ever see" bug: shows what
+                // Eventbrite's own pagination metadata says versus what we
+                // actually walked, so a mismatch there points at the fetch
+                // itself rather than anything downstream.
+                const diagParts: string[] = [
+                  `${fetchDiagnostics.pagesFetched} page${fetchDiagnostics.pagesFetched === 1 ? "" : "s"}`,
+                  `${fetchDiagnostics.rawAttendeesSeen} raw from Eventbrite`,
+                ];
+                if (fetchDiagnostics.reportedObjectCount !== null) {
+                  diagParts.push(`Eventbrite reports ${fetchDiagnostics.reportedObjectCount} total`);
+                }
+                if (Object.keys(fetchDiagnostics.statusFilteredOut).length > 0) {
+                  diagParts.push(
+                    `filtered out: ${Object.entries(fetchDiagnostics.statusFilteredOut)
+                      .map(([status, count]) => `${count} ${status}`)
+                      .join(", ")}`,
+                  );
+                }
                 toastSuccess(
                   parts.join(", ") +
-                    (mismatch !== 0 ? ` — ${mismatch} unaccounted for, something's wrong` : ""),
+                    (mismatch !== 0 ? ` — ${mismatch} unaccounted for, something's wrong` : "") +
+                    ` [debug: ${diagParts.join(", ")}]`,
                 );
                 router.refresh();
               });

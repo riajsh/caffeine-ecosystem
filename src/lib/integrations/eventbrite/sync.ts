@@ -17,6 +17,7 @@ import { formatInteractionDate } from "@/lib/format/date";
 import type {
   EventbriteAttendee,
   EventbriteAttendeeAnswer,
+  EventbriteAttendeesFetchDiagnostics,
 } from "@/lib/integrations/eventbrite/client";
 import { EventbriteAuthError, listEventAttendees } from "@/lib/integrations/eventbrite/client";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
@@ -322,8 +323,12 @@ async function syncAttendeesForEvent(
   fetched: number;
   skippedNoEmail: number;
   alreadyHandled: number;
+  fetchDiagnostics: EventbriteAttendeesFetchDiagnostics;
 }> {
-  const attendees = await listEventAttendees(token, event.eventbrite_event_id);
+  const { attendees, diagnostics: fetchDiagnostics } = await listEventAttendees(
+    token,
+    event.eventbrite_event_id,
+  );
   const attendeesWithEmail = attendees.filter(
     (attendee): attendee is EventbriteAttendee & { email: string } => Boolean(attendee.email),
   );
@@ -337,7 +342,7 @@ async function syncAttendeesForEvent(
   const skippedNoEmail = attendees.length - attendeesWithEmail.length;
 
   if (attendeesWithEmail.length === 0) {
-    return { matched: 0, queued: 0, fetched, skippedNoEmail, alreadyHandled: 0 };
+    return { matched: 0, queued: 0, fetched, skippedNoEmail, alreadyHandled: 0, fetchDiagnostics };
   }
 
   const fieldMap = await loadQuestionFieldMapForSync(supabase, orgId, event.id);
@@ -640,7 +645,7 @@ async function syncAttendeesForEvent(
     );
   }
 
-  return { matched, queued, fetched, skippedNoEmail, alreadyHandled };
+  return { matched, queued, fetched, skippedNoEmail, alreadyHandled, fetchDiagnostics };
 }
 
 const NEAR_TERM_WINDOW_DAYS = 14;
@@ -778,6 +783,7 @@ export async function syncEventbriteAttendeesForEvent(
   fetched: number;
   skippedNoEmail: number;
   alreadyHandled: number;
+  fetchDiagnostics: EventbriteAttendeesFetchDiagnostics;
 } | null> {
   const token = await getDecryptedEventbriteTokenForSync(orgId);
   if (!token) {
@@ -824,6 +830,7 @@ export async function syncEventbriteAttendeesForEvent(
     fetched: number;
     skippedNoEmail: number;
     alreadyHandled: number;
+    fetchDiagnostics: EventbriteAttendeesFetchDiagnostics;
   };
   try {
     result = await syncAttendeesForEvent(supabase, orgId, event, token, systemUserId);

@@ -4,6 +4,16 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-21 (40)
+
+**Added (temporary): raw Eventbrite fetch diagnostics on "Sync this event"**
+
+- **Why:** confirmed with Eventbrite's own live Attendees dashboard that "The Founder-Operator Welcome Back Party" really does have 65 attendees, but a fresh sync only pulled in 36 — a real, current bug in how we're fetching from Eventbrite, not old history or filtered placeholders.
+- **What it does:** the "Sync this event" toast now also shows a `[debug: ...]` section — how many pages we fetched, how many raw attendee records Eventbrite actually sent back before any filtering, what Eventbrite itself reports as its own total count, and a breakdown of anyone filtered out by ticket status (cancelled/refunded/etc). This will tell us directly whether the pagination loop is stopping early or something else is dropping people.
+- **This is temporary** — once we've pinned down the cause, I'll remove the debug text from the toast.
+- **Nothing to run in Supabase for this one.**
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
 ## 2026-08-21 (39)
 
 **Found and fixed: the same underlying bug was also breaking Calendar sync, silently, for a while**
