@@ -4,6 +4,25 @@ A plain-language, dated history of what Ria and Claude have built, fixed, or cha
 
 ---
 
+## 2026-08-21 (42)
+
+**Removed the temporary debug text from the "Sync this event" toast**
+
+- **Why:** that debug section (entry 40) was only ever meant to last long enough to find the real bug. It did its job — see entry (41) — so now it's gone and the toast is back to just the plain, useful numbers (fetched, matched, new to review, skipped).
+- **Nothing to run in Supabase for this one.**
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
+## 2026-08-21 (41)
+
+**Found and fixed the real reason attendees were going missing from Eventbrite syncs**
+
+- **What was wrong:** the sync only ever let through attendees whose Eventbrite status was exactly "Attending." But Eventbrite also marks someone "Checked In" once they've actually arrived and checked in at the door — a good status, not a cancellation — and the sync was treating "Checked In" the same as "cancelled" and quietly dropping those people. On "The Founder-Operator Welcome Back Party," that was 29 real attendees, plus 2 who'd genuinely marked themselves not attending, out of 67 total — which is exactly why only 36 were ever coming through.
+- **What we changed:** flipped the logic around. Instead of only allowing in the one status "Attending," it now only excludes people who genuinely aren't coming (Not Attending, Cancelled, Declined, Refunded) and lets everyone else — including Checked In — through as a real signup.
+- **Also confirmed with Ria:** the goal is to bring in every genuine signup as a profile to create/review/update, and to keep tracking who actually showed up separately, using the existing "mark attended" tick on the event page — not to have the sync itself decide who counts as attended.
+- **Good news — this heals itself automatically:** unlike the calendar-sync gap (entry 39), Eventbrite always sends back the full current attendee list on every sync, so simply re-running "Sync this event" (or waiting for the next automatic sync) picks up everyone who was missed before. No backfill job needed.
+- **Nothing to run in Supabase for this one** — pure app-side fix.
+- **Checked:** `npx tsc --noEmit` and `npx eslint src` both clean.
+
 ## 2026-08-21 (40)
 
 **Added (temporary): raw Eventbrite fetch diagnostics on "Sync this event"**

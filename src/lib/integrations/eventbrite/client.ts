@@ -94,12 +94,6 @@ export async function validateEventbriteToken(
 type EventbritePagination = {
   continuation?: string;
   has_more_items?: boolean;
-  // Not used for the pagination loop itself — only read for the temporary
-  // diagnostics below, to see what Eventbrite itself thinks the true totals
-  // are versus what we actually end up counting.
-  object_count?: number;
-  page_count?: number;
-  page_number?: number;
 };
 
 async function eventbriteGet<T>(
@@ -359,6 +353,15 @@ function normaliseAttendeeEmail(value: string | null | undefined): string | null
   return trimmed;
 }
 
+/**
+ * Statuses that genuinely mean "not coming" — everything else (including
+ * "Attending" and "Checked In") is treated as a real attendee. Denylisting
+ * these specific statuses, rather than only allowing "Attending" through,
+ * means someone who's actually checked in at the door doesn't get treated
+ * the same as someone who cancelled.
+ */
+const NOT_ATTENDING_STATUSES = new Set(["Not Attending", "Cancelled", "Declined", "Refunded"]);
+
 type EventbriteAttendeesResponse = {
   attendees?: Array<{
     id: string;
@@ -375,44 +378,25 @@ type EventbriteAttendeesResponse = {
   pagination?: EventbritePagination;
 };
 
-export type EventbriteAttendeesFetchDiagnostics = {
-  pagesFetched: number;
-  rawAttendeesSeen: number;
-  statusFilteredOut: Record<string, number>;
-  reportedObjectCount: number | null;
-  reportedPageCount: number | null;
-  finalHasMoreItems: boolean | null;
-};
-
 /**
  * Lists every attendee for one Eventbrite event, across all pages,
  * including their answers to the event's custom registration questions
- * (used to fill in role, phone, company size once mapped). Cancelled/
- * refunded tickets are skipped — only active attendees count.
+ * (used to fill in role, phone, company size once mapped).
  *
- * Also returns diagnostics (temporary, added while chasing a real
- * discrepancy between Eventbrite's own reported attendee count for an
- * event and what ends up in Caffeine) — how many pages we actually walked,
- * how many raw attendee records Eventbrite sent us before any filtering,
- * what statuses we filtered out and how many of each, and what Eventbrite
- * itself reports as the total object/page count on the last page we saw.
- * If reportedObjectCount doesn't match rawAttendeesSeen, our pagination
- * loop is stopping early. If it matches but rawAttendeesSeen is still
- * higher than the final returned list, the status filter is the culprit.
+ * This deliberately brings through EVERY genuine signup — including
+ * people who haven't checked in yet — and only leaves out people who
+ * withdrew their registration (see NOT_ATTENDING_STATUSES below).
+ * Whether someone actually showed up on the day is tracked separately
+ * in Caffeine, by manually marking them attended on the event page —
+ * this sync is just about getting every signup in as a profile to
+ * review.
  */
 export async function listEventAttendees(
   token: string,
   eventbriteEventId: string,
-): Promise<{
-  attendees: EventbriteAttendee[];
-  diagnostics: EventbriteAttendeesFetchDiagnostics;
-}> {
+): Promise<EventbriteAttendee[]> {
   const attendees: EventbriteAttendee[] = [];
   let continuation: string | undefined;
-  let pagesFetched = 0;
-  let rawAttendeesSeen = 0;
-  const statusFilteredOut: Record<string, number> = {};
-  let lastPagination: EventbritePagination | undefined;
 
   do {
     const params: Record<string, string> = { expand: "answers" };
@@ -425,15 +409,14 @@ export async function listEventAttendees(
       `/events/${encodeURIComponent(eventbriteEventId)}/attendees/`,
       params,
     );
-    pagesFetched += 1;
-    lastPagination = page.pagination;
 
     for (const attendee of page.attendees ?? []) {
-      rawAttendeesSeen += 1;
-
-      if (attendee.status && attendee.status !== "Attending") {
-        // Cancelled, refunded, or not-attending tickets — skip.
-        statusFilteredOut[attendee.status] = (statusFilteredOut[attendee.status] ?? 0) + 1;
+      if (attendee.status && NOT_ATTENDING_STATUSES.has(attendee.status)) {
+        // Genuinely withdrew their registration — skip. Everyone else
+        // (including "Checked In", which just means they'd arrived —
+        // still a real signup) comes through as a signup to review.
+        // Whether someone actually attended on the day is tracked
+        // separately in Caffeine via the manual "mark attended" tick.
         continue;
       }
 
@@ -458,15 +441,5 @@ export async function listEventAttendees(
       : undefined;
   } while (continuation);
 
-  return {
-    attendees,
-    diagnostics: {
-      pagesFetched,
-      rawAttendeesSeen,
-      statusFilteredOut,
-      reportedObjectCount: lastPagination?.object_count ?? null,
-      reportedPageCount: lastPagination?.page_count ?? null,
-      finalHasMoreItems: lastPagination?.has_more_items ?? null,
-    },
-  };
+  return attendees;
 }

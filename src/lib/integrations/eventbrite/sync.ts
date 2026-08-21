@@ -17,7 +17,6 @@ import { formatInteractionDate } from "@/lib/format/date";
 import type {
   EventbriteAttendee,
   EventbriteAttendeeAnswer,
-  EventbriteAttendeesFetchDiagnostics,
 } from "@/lib/integrations/eventbrite/client";
 import { EventbriteAuthError, listEventAttendees } from "@/lib/integrations/eventbrite/client";
 import { normaliseOrganisationName } from "@/lib/normalise/organisation";
@@ -323,26 +322,22 @@ async function syncAttendeesForEvent(
   fetched: number;
   skippedNoEmail: number;
   alreadyHandled: number;
-  fetchDiagnostics: EventbriteAttendeesFetchDiagnostics;
 }> {
-  const { attendees, diagnostics: fetchDiagnostics } = await listEventAttendees(
-    token,
-    event.eventbrite_event_id,
-  );
+  const attendees = await listEventAttendees(token, event.eventbrite_event_id);
   const attendeesWithEmail = attendees.filter(
     (attendee): attendee is EventbriteAttendee & { email: string } => Boolean(attendee.email),
   );
   // Kept so "matched + queued" can be checked against what Eventbrite
   // actually reported for this event — attendees with no usable email
-  // (cancelled/declined tickets already excluded by listEventAttendees;
-  // this is specifically people with a blank or "Info Requested"
-  // placeholder email) are the one category that's silently skipped rather
-  // than matched, queued, or logged anywhere else.
+  // (people who withdrew their registration are already excluded by
+  // listEventAttendees; this is specifically people with a blank or
+  // "Info Requested" placeholder email) are the one category that's
+  // silently skipped rather than matched, queued, or logged anywhere else.
   const fetched = attendees.length;
   const skippedNoEmail = attendees.length - attendeesWithEmail.length;
 
   if (attendeesWithEmail.length === 0) {
-    return { matched: 0, queued: 0, fetched, skippedNoEmail, alreadyHandled: 0, fetchDiagnostics };
+    return { matched: 0, queued: 0, fetched, skippedNoEmail, alreadyHandled: 0 };
   }
 
   const fieldMap = await loadQuestionFieldMapForSync(supabase, orgId, event.id);
@@ -645,7 +640,7 @@ async function syncAttendeesForEvent(
     );
   }
 
-  return { matched, queued, fetched, skippedNoEmail, alreadyHandled, fetchDiagnostics };
+  return { matched, queued, fetched, skippedNoEmail, alreadyHandled };
 }
 
 const NEAR_TERM_WINDOW_DAYS = 14;
@@ -783,7 +778,6 @@ export async function syncEventbriteAttendeesForEvent(
   fetched: number;
   skippedNoEmail: number;
   alreadyHandled: number;
-  fetchDiagnostics: EventbriteAttendeesFetchDiagnostics;
 } | null> {
   const token = await getDecryptedEventbriteTokenForSync(orgId);
   if (!token) {
@@ -830,7 +824,6 @@ export async function syncEventbriteAttendeesForEvent(
     fetched: number;
     skippedNoEmail: number;
     alreadyHandled: number;
-    fetchDiagnostics: EventbriteAttendeesFetchDiagnostics;
   };
   try {
     result = await syncAttendeesForEvent(supabase, orgId, event, token, systemUserId);
